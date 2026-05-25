@@ -1,0 +1,603 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // <-- AGREGA ESTA LÍNEA
+}
+
+// ─── ENUMS TRIBUTARIOS ECUATORIANOS (BLINDADOS 2026) ──────────────────────────
+enum Rol {
+  ADMIN
+  CONTADOR
+}
+
+enum TipoContribuyente {
+  PERSONA_NATURAL
+  SOCIEDAD
+}
+
+enum EstadoContribuyente {
+  ACTIVO
+  SUSPENDIDO
+  CANCELADO
+}
+
+enum TipoIdentificacion {
+  RUC
+  CEDULA
+  PASAPORTE
+  EXTERIOR
+}
+
+enum TipoComprobante {
+  FACTURA
+  NOTA_CREDITO
+  NOTA_DEBITO
+  LIQUIDACION_COMPRA
+  COMPROBANTE_RETENCION
+  GUIA_REMISION
+}
+
+enum EstadoComprobante {
+  VIGENTE
+  ANULADO
+}
+
+enum PorcentajeRetencionIva {
+  IVA_0
+  IVA_10
+  IVA_20
+  IVA_30
+  IVA_50
+  IVA_70
+  IVA_100
+}
+
+// Tarifas de IVA oficiales en Ecuador (Estructura interna del SRI y equivalencias en Excel)
+enum TarifaIva {
+  TARIFA_0 // 0% - Servicios y bienes del Art. 55 LORTI
+  TARIFA_5 // 5% - Materiales de construcción (Ley de Competitividad Energética)
+  TARIFA_12 // 12% - Tarifa histórica general
+  TARIFA_15 // 15% - Tarifa general vigente desde abril 2024
+  EXENTO // Compras o ventas exentas de IVA
+  NO_OBJETO // Operaciones que no son objeto del Impuesto al Valor Agregado
+}
+
+// 1. Modelo Principal de Usuarios / Contribuyentes
+model Contribuyente {
+  id                String            @id @default(uuid())
+  ruc               String            @unique
+  ciAdicional       String?
+  clave             String
+  razonSocial       String
+  tipoContribuyente TipoContribuyente @default(PERSONA_NATURAL)
+  estadoTributario  String            @default("AL DÍA")
+  rol               Rol               @default(CONTADOR)
+
+  // --- Datos del Certificado RUC (Agregados para PDF y Dashboard) ---
+  estadoRuc                String    @default("ACTIVO")
+  regimen                  String    @default("GENERAL")
+  obligaciones             String    @default("NINGUNA")
+  actividadesEconomicas    String    @default("NO REGISTRA")
+  establecimientosAbiertos Int       @default(1)
+  establecimientosCerrados Int       @default(0)
+  fechaRegistro            DateTime?
+  fechaInicioActividades   DateTime?
+  fechaCeseActividades     DateTime?
+  fechaReinicioActividades DateTime?
+  fechaActualizacion       DateTime?
+
+  provincia    String?
+  canton       String?
+  parroquia    String?
+  barrio       String?
+  calle        String?
+  numero       String?
+  interseccion String?
+  referencia   String?
+  jurisdiccion String?
+
+  email             String?
+  telefonoDomicilio String?
+  celular           String?
+
+  artesano              String? @default("No registra")
+  obligadoContabilidad  String? @default("NO")
+  tipoAgenteRetencion   String? @default("PERSONAS NATURALES")
+  agenteRetencion       String? @default("NO")
+  contribuyenteEspecial String? @default("NO")
+
+  numerosRucAnteriores String? @default("No registra")
+  codigoVerificacion   String?
+  direccionIpEmision   String?
+
+  declaraciones        Declaracion[]
+  ventas               Venta[]
+  compras              Compra[]
+  anulados             ComprobanteAnulado[]
+  guias                GuiaRemision[]
+  atsLotes             AtsLote[]
+  proveedores          Proveedor[]
+  anexosTributarios    AnexoTributario[]
+  gastosPersonales     GastoPersonal[]
+  cargasFamiliares     CargaFamiliar[]
+  beneficiariosPension BeneficiarioPension[]
+  createdAt            DateTime              @default(now())
+}
+
+model AnexoTributario {
+  id            String   @id @default(uuid())
+  tipoAnexo     String
+  periodoFiscal String
+  anio          Int
+  mes           String?
+  estado        String   @default("RECIBIDO")
+  archivoNombre String?
+  datosJSON     Json     @default("{}")
+  fechaEnvio    DateTime @default(now())
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+}
+
+model GastoPersonal {
+  id            String   @id @default(uuid())
+  anio          Int
+  tipoGasto     String
+  proveedor     String
+  rucProveedor  String
+  valor         Decimal  @default(0.0) @db.Decimal(12, 2)
+  fechaRegistro DateTime @default(now())
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+}
+
+model CargaFamiliar {
+  id                     String   @id @default(uuid())
+  periodoFiscal          Int
+  tipoIdentificacion     String
+  identificacion         String
+  nombres                String
+  parentesco             String
+  condicionDiscapacidad  String   @default("NO")
+  enfermedadCatastrofica Boolean  @default(false)
+  estado                 String   @default("PENDIENTE")
+  tipoPeriodo            String
+  fechaRegistro          DateTime @default(now())
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+}
+
+model BeneficiarioPension {
+  id                 String   @id @default(uuid())
+  tipoIdentificacion String
+  identificacion     String
+  nombres            String
+  montoAnual         Decimal  @default(0.0) @db.Decimal(12, 2)
+  fechaRegistro      DateTime @default(now())
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+}
+
+// 2. Tabla de Declaraciones de Impuestos
+model Declaracion {
+  id String @id @default(uuid())
+
+  formulario    String
+  tipoImpuesto  String
+  periodoFiscal String
+  anio          Int
+  mes           String?
+  semestre      String?
+
+  ventasPeriodo     Boolean @default(false)
+  emitioRetenciones Boolean @default(false)
+  tieneEmpleados    Boolean @default(false)
+
+  baseImponible    Decimal @default(0.0) @db.Decimal(12, 2)
+  impuestoGenerado Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetenido    Decimal @default(0.0) @db.Decimal(12, 2)
+  valorCancelado   Decimal @default(0.0) @db.Decimal(12, 2)
+
+  tipoPago     String?
+  banco        String?
+  tipoCuenta   String?
+  numeroCuenta String?
+
+  numeroAdhesion  String @unique
+  tipoDeclaracion String @default("Original")
+  estado          String @default("Procesada")
+
+  linkFormulario   String?
+  linkTalonResumen String?
+
+  datosJSON  Json     @default("{}")
+  fechaEnvio DateTime @default(now())
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+}
+
+// 3. Tabla Complementaria de Proveedores (Corregida la unicidad para evitar bloqueos)
+model Proveedor {
+  id            String  @id @default(uuid())
+  ruc           String
+  razonSocial   String
+  tipoProveedor String?
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+
+  // Un proveedor es único por cada contribuyente que lo registra
+  @@unique([ruc, contribuyenteId])
+}
+
+// 4. Tabla de Ventas (Diseñada para importación masiva desde Excel)
+model Venta {
+  id String @id @default(uuid())
+
+  // --- DATOS DEL COMPRADOR / CLIENTE ---
+  noIdentificacion   String
+  codigoIdentif      String
+  razonSocialCliente String
+  tipoCliente        String?
+  parteRelacionada   String  @default("NO")
+
+  // --- INFORMACIÓN DEL COMPROBANTE ---
+  cantidadComprobantes   Int      @default(1)
+  tipoEmisionComprobante String
+  tipoComprobante        String
+  fechaEmision           DateTime
+  codigoEstablecimiento  String
+  noDocumento            String?
+  conceptoVenta          String?
+
+  // --- BASES IMPONIBLES (SUBTOTALES) ---
+  baseNoObjetoIva Decimal @default(0.0) @db.Decimal(12, 2)
+  baseExenta      Decimal @default(0.0) @db.Decimal(12, 2)
+  baseTarifa0     Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- TARIFAS DE IVA DINÁMICAS ---
+  baseGravableIva1   Decimal @default(0.0) @db.Decimal(12, 2)
+  tarifaIva1Aplicada Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIva1          Decimal @default(0.0) @db.Decimal(12, 2)
+
+  baseGravableIva2   Decimal @default(0.0) @db.Decimal(12, 2)
+  tarifaIva2Aplicada Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIva2          Decimal @default(0.0) @db.Decimal(12, 2)
+
+  baseGravableIva3   Decimal @default(0.0) @db.Decimal(12, 2)
+  tarifaIva3Aplicada Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIva3          Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- OTROS VALORES Y TOTALES ---
+  montoIceNoIncluido Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIceIncluido   Decimal @default(0.0) @db.Decimal(12, 2)
+  montoPropina       Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIrbpnrOtros   Decimal @default(0.0) @db.Decimal(12, 2)
+  totalDocumento     Decimal @default(0.0) @db.Decimal(12, 2)
+  valorDescuentos    Decimal @default(0.0) @db.Decimal(12, 2)
+  totalSubsidios     Decimal @default(0.0) @db.Decimal(12, 2)
+  sumaDevoluciones   Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- CONTABILIZACIÓN DE LA VENTA ---
+  autocodigoVentas      String?
+  conceptoContableVenta String?
+  numeroAsientoVenta    String?
+  estadoContableVenta   String?
+  tipoActividad         String?
+
+  // --- MAPEOS FORMULARIO 104 ---
+  codigoForm104_1            Decimal @default(0.0) @db.Decimal(12, 2)
+  codigoForm104_2            Decimal @default(0.0) @db.Decimal(12, 2)
+  codigoForm104_3            Decimal @default(0.0) @db.Decimal(12, 2)
+  mesDeclarado               String?
+  periodoDeclaradoForm104    String?
+  form104_a                  String?
+  form104_b                  String?
+  form104_c                  String?
+  baseForm104_NoGravExenta   Decimal @default(0.0) @db.Decimal(12, 2)
+  ivaForm104_Base444         Decimal @default(0.0) @db.Decimal(12, 2)
+  ivaForm104_411_412_420_435 Decimal @default(0.0) @db.Decimal(12, 2)
+  ivaForm104_413_414         Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- RETENCIONES RECIBIDAS ---
+  tipoEmisionRetencion    String?
+  valorRetenidoIva        Decimal   @default(0.0) @db.Decimal(12, 2)
+  valorRetenidoFuente     Decimal   @default(0.0) @db.Decimal(12, 2)
+  valorRetenidoIsd        Decimal   @default(0.0) @db.Decimal(12, 2)
+  noDocumentoRetencion    String?
+  fechaRetencion          DateTime?
+  noAutorizacionRetencion String?
+
+  // --- DESGLOSE AVANZADO DE RETENCIONES EN LA FUENTE ---
+  retFuenteBaseImponible1 Decimal @default(0.0) @db.Decimal(12, 2)
+  retFuenteValorRetenido1 Decimal @default(0.0) @db.Decimal(12, 2)
+  retFuenteBaseImponible2 Decimal @default(0.0) @db.Decimal(12, 2)
+  retFuenteValorRetenido2 Decimal @default(0.0) @db.Decimal(12, 2)
+  retFuenteBaseImponible3 Decimal @default(0.0) @db.Decimal(12, 2)
+  retFuenteValorRetenido3 Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- DESGLOSE AVANZADO DE RETENCIONES DE IVA ---
+  retIvaBase10   Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaValor10  Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaBase20   Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaValor20  Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaBase30   Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaValor30  Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaBase50   Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaValor50  Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaBase70   Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaValor70  Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaBase100  Decimal @default(0.0) @db.Decimal(12, 2)
+  retIvaValor100 Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- CONTABILIZACIÓN DE LA RETENCIÓN ---
+  conceptoContableRetencion String?
+  numeroAsientoRetencion    String?
+  estadoContableRetencion   String?
+
+  // --- DATOS COMPLEMENTARIOS ---
+  codigoDocto            String?
+  claseDoctoElectronico  String?
+  estadoDoctoElectronico String?
+  campoBusqueda          String?
+  observaciones          String?
+
+  // --- FORMAS DE COBRO ---
+  formaPago1 String?
+  formaPago2 String?
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  atsLoteId       String?
+  atsLote         AtsLote?      @relation(fields: [atsLoteId], references: [id], onDelete: Cascade)
+}
+
+// 5. Tabla de Compras
+model Compra {
+  id String @id @default(uuid())
+
+  // --- DATOS DEL PROVEEDOR ---
+  noIdentificacion         String
+  razonSocialProveedor     String
+  tipoProveedor            String?
+  parteRelacionada         String  @default("NO")
+  validacionIdentificacion String?
+
+  // --- INFORMACIÓN DEL COMPROBANTE DE COMPRA ---
+  tipoEmisionComprobante String?
+  comprobante            String
+  establecimiento        String
+  puntoEmision           String
+  numeroSecuencial       String
+  numeroAutorizacionSri  String
+  fechaEmision           DateTime
+  fechaRegistro          DateTime
+  codigoSustento         String?
+  conceptoCompra         String?
+
+  // --- INFORMACIÓN DE COMPROBANTES MODIFICADOS ---
+  comprobanteModificado           String?
+  establecimientoModificado       String?
+  puntoEmisionModificado          String?
+  numeroSecuencialModificado      String?
+  numeroAutorizacionSriModificado String?
+
+  // --- BASES IMPONIBLES (SUBTOTALES) ---
+  baseNoObjetoIva Decimal @default(0.0) @db.Decimal(12, 2)
+  baseExenta      Decimal @default(0.0) @db.Decimal(12, 2)
+  baseTarifa0     Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- TARIFAS DE IVA DINÁMICAS ---
+  baseGravableIva1   Decimal @default(0.0) @db.Decimal(12, 2)
+  tarifaIva1Aplicada Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIva1          Decimal @default(0.0) @db.Decimal(12, 2)
+
+  baseGravableIva2   Decimal @default(0.0) @db.Decimal(12, 2)
+  tarifaIva2Aplicada Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIva2          Decimal @default(0.0) @db.Decimal(12, 2)
+
+  baseGravableIva3   Decimal @default(0.0) @db.Decimal(12, 2)
+  tarifaIva3Aplicada Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIva3          Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- OTROS VALORES Y TOTALES ---
+  montoIceNoIncluido Decimal @default(0.0) @db.Decimal(12, 2)
+  montoPropina       Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIrbpnr        Decimal @default(0.0) @db.Decimal(12, 2)
+  montoOtros         Decimal @default(0.0) @db.Decimal(12, 2)
+  totalDocumento     Decimal @default(0.0) @db.Decimal(12, 2)
+  montoIceIncluido   Decimal @default(0.0) @db.Decimal(12, 2)
+  valorDescuentos2   Decimal @default(0.0) @db.Decimal(12, 2)
+  otrosValores       Decimal @default(0.0) @db.Decimal(12, 2)
+  sumaDevoluciones   Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- CONTABILIZACIÓN DE LA COMPRA ---
+  autocodigoCompras      String?
+  conceptoContableCompra String?
+  numeroAsientoCompra    String?
+  estadoContableCompra   String?
+  tipoActividad          String?
+
+  // --- MAPEOS FORMULARIO 104 ---
+  codigoForm104_1         Decimal @default(0.0) @db.Decimal(12, 2)
+  codigoForm104_2         Decimal @default(0.0) @db.Decimal(12, 2)
+  codigoForm104_3         Decimal @default(0.0) @db.Decimal(12, 2)
+  mesDeclarado            String?
+  periodoDeclaradoForm104 String?
+  periodoDeclaradoEn103   String?
+  form104_a               String?
+  form104_b               String?
+  form104_c               String?
+
+  // --- LIQUIDACIÓN DE IMPUESTOS Y REEMBOLSOS ---
+  liqImpBaseNoGravExenta       Decimal @default(0.0) @db.Decimal(12, 2)
+  liqImpIvaReembolso545        Decimal @default(0.0) @db.Decimal(12, 2)
+  liqImpIvaGastos512           Decimal @default(0.0) @db.Decimal(12, 2)
+  liqImpIvaCreditoTributario   Decimal @default(0.0) @db.Decimal(12, 2)
+  liqImpSumatoriaRetIva        Decimal @default(0.0) @db.Decimal(12, 2)
+  liqImpRetIva100SectorPublico Decimal @default(0.0) @db.Decimal(12, 2)
+  liqImpRetFte                 Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- COMPROBANTE DE RETENCIÓN EMITIDO POR TI ---
+  tipoEmisionRetencion     String?
+  establecimientoRet       String?
+  puntoEmisionRet          String?
+  numeroSecuencialRet      String?
+  numeroAutorizacionSriRet String?
+  fechaEmisionRet1         DateTime?
+
+  // --- DESGLOSE DE RETENCIONES EN LA FUENTE EMITIDAS ---
+  codigoRetencion1     String?
+  baseImponibleRet1    Decimal @default(0.0) @db.Decimal(12, 2)
+  porcentajeRetencion1 Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetenido1       Decimal @default(0.0) @db.Decimal(12, 2)
+
+  codigoRetencion2     String?
+  baseImponibleRet2    Decimal @default(0.0) @db.Decimal(12, 2)
+  porcentajeRetencion2 Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetenido2       Decimal @default(0.0) @db.Decimal(12, 2)
+
+  codigoRetencion3     String?
+  baseImponibleRet3    Decimal @default(0.0) @db.Decimal(12, 2)
+  porcentajeRetencion3 Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetenido3       Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- DESGLOSE DE RETENCIONES DE IVA EMITIDAS ---
+  valorRetencionIva30               Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetencionIva50               Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetencionIva70               Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetencionIva100              Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetencionIva100SectorPublico Decimal @default(0.0) @db.Decimal(12, 2)
+  valorRetencionIvaEnNc             Decimal @default(0.0) @db.Decimal(12, 2)
+  totalRetencionIvaFte              Decimal @default(0.0) @db.Decimal(12, 2)
+
+  // --- CONTABILIZACIÓN DE LA RETENCIÓN EMITIDA ---
+  conceptoContableRetencion String?
+  numeroAsientoRetencion    String?
+  estadoContableRetencion   String?
+
+  // --- PAGO AL EXTERIOR ---
+  tipoPago                           String?
+  formaPago1                         String?
+  formaPago2                         String?
+  tipoRegimenFiscalExterior          String?
+  paisesResidenciaPago01             String?
+  paisesResidenciaPagoParaiso02      String?
+  denominacionRegimenPreferente03    String?
+  paisResidenciaExterior             String?
+  aplicaConvenioDobleTributacion     String  @default("NO")
+  pagoExteriorSujetoRetencion        String  @default("NO")
+  pagoExteriorRegimenMenorImposicion String  @default("NO")
+
+  // --- METADATOS TÉCNICOS ---
+  codigoDocto1                String?
+  estadoDocumentoElectronico1 String?
+  codigoDocumento2            String?
+  claseDocumento2             String?
+  estadoDocumentoElectronico2 String?
+  campoBusqueda               String?
+  observaciones               String?
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  atsLoteId       String?
+  atsLote         AtsLote?      @relation(fields: [atsLoteId], references: [id], onDelete: Cascade)
+}
+
+// 6. Tabla de Comprobantes Anulados
+model ComprobanteAnulado {
+  id                      String   @id @default(uuid())
+  tipoComprobante         String
+  establecimiento         String
+  puntoEmision            String
+  secuencialDesde         String
+  secuencialHasta         String
+  numeroAutorizacionSri   String
+  tipoEmisionComprobante  String
+  fechaRegistroAnulacion  DateTime
+  periodoDeclaradoForm104 String?
+  observaciones           String?
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  atsLoteId       String?
+  atsLote         AtsLote?      @relation(fields: [atsLoteId], references: [id], onDelete: Cascade)
+}
+
+// 7. Tabla de Guías de Remisión
+model GuiaRemision {
+  id String @id @default(uuid())
+
+  // --- DATOS DEL EMISOR ---
+  noIdentificacionEmisor String
+  razonSocialEmisor      String
+  tipoDocumento          String
+  comprobante            String
+  establecimiento        String
+  puntoEmision           String
+  numeroSecuencial       String
+  numeroAutorizacionSri  String
+
+  // --- DATOS DEL TRANSPORTISTA Y VEHÍCULO ---
+  noIdentificacionTransportista String
+  razonSocialTransportista      String
+  noPlaca                       String
+  fechaInicioTransporte         DateTime
+  fechaFinTransporte            DateTime
+  direccionPartida              String
+
+  // --- DATOS DEL DESTINATARIO Y TRASLADO ---
+  noIdentificacionDestinatario String
+  razonSocialDestinatario      String
+  noDocumentoAduaneroUnico     String?
+  direccionDestinatario        String
+  ruta                         String
+  motivoTraslado               String
+
+  // --- DOCUMENTO DE SUSTENTO ---
+  comprobanteSustento           String?
+  numeroDocumentoSustento       String?
+  fechaEmisionDocumentoSustento DateTime?
+  numeroAutorizacionSriSustento String?
+
+  // --- METADATOS Y OBSERVACIONES ---
+  observaciones    String?
+  codigoAutomatico String?
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  atsLoteId       String?
+  atsLote         AtsLote?      @relation(fields: [atsLoteId], references: [id], onDelete: Cascade)
+}
+
+model AtsLote {
+  id String @id @default(uuid())
+
+  nombreArchivo String
+  rucInformante String
+  razonSocial   String
+  anio          Int
+  mes           String
+
+  estado      String  @default("PROCESADO")
+  erroresJSON Json    @default("[]")
+  resumenJSON Json    @default("{}")
+  xmlGenerado String?
+
+  createdAt DateTime @default(now())
+
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+
+  ventas   Venta[]
+  compras  Compra[]
+  anulados ComprobanteAnulado[]
+  guias    GuiaRemision[]
+}
