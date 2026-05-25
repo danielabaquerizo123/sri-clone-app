@@ -16,7 +16,7 @@ interface LoginViewProps {
 }
 
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
-  const [ruc, setRuc] = useState("1723456789001");
+  const [ruc, setRuc] = useState("0602539041001");
   const [ciAdicional, setCiAdicional] = useState("");
   const [clave, setClave] = useState("sripassword2026");
   const [showPassword, setShowPassword] = useState(false);
@@ -24,7 +24,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [error, setError] = useState("");
 
   const cargarDemo = () => {
-    setRuc("1723456789001");
+    setRuc("0602539041001");
     setCiAdicional("");
     setClave("sripassword2026");
     setError("");
