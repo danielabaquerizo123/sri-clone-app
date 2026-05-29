@@ -1,10 +1,12 @@
 import { XMLBuilder } from "fast-xml-parser";
+import { cleanTributaryName } from "./normalizer";
 
 type AtsXmlInput = {
   rucInformante: string;
   razonSocial: string;
   anio: number;
   mes: string;
+  numEstabRuc?: string;
   compras: any[];
   ventas: any[];
   anulados: any[];
@@ -210,7 +212,7 @@ function buildCompra(c: any) {
     idProv: clean(c.noIdentificacion),
     tipoComprobante: clean(c.comprobante),
     tipoProv: clean(c.tipoProveedor) || undefined,
-    denoProv: clean(c.razonSocialProveedor) || undefined,
+    denoProv: cleanTributaryName(c.razonSocialProveedor) || undefined,
     parteRel: siNo(c.parteRelacionada),
 
     fechaRegistro: dateDDMMYYYY(c.fechaRegistro),
@@ -279,7 +281,7 @@ function buildVenta(v: any) {
     idCliente: clean(v.noIdentificacion),
     parteRelVtas: siNo(v.parteRelacionada),
     tipoCliente: clean(v.tipoCliente) || undefined,
-    denoCli: clean(v.razonSocialCliente) || undefined,
+    denoCli: cleanTributaryName(v.razonSocialCliente, "CONSUMIDOR FINAL") || undefined,
 
     tipoComprobante: clean(v.tipoComprobante),
     tipoEmision: tipoEmision(v.tipoEmisionComprobante),
@@ -336,10 +338,10 @@ export function buildAtsXml(data: AtsXmlInput): string {
   const iva = removeUndefinedDeep({
     TipoIDInformante: "R",
     IdInformante: clean(data.rucInformante),
-    razonSocial: clean(data.razonSocial),
+    razonSocial: cleanTributaryName(data.razonSocial),
     Anio: String(data.anio),
     Mes: mes,
-    numEstabRuc: "001",
+    numEstabRuc: pad(data.numEstabRuc || "001", 3),
     totalVentas: money(totalVentas),
     codigoOperativo: "IVA",
 
@@ -362,7 +364,7 @@ export function buildAtsXml(data: AtsXmlInput): string {
         ? {
             ventaEst: [
               {
-                codEstab: "001",
+                codEstab: pad(data.numEstabRuc || "001", 3),
                 ventasEstab: money(totalVentas),
                 ivaComp: "0.00",
               },

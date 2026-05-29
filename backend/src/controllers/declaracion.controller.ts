@@ -70,6 +70,42 @@ function getJsonCasilleros(value: unknown): Record<string, number> {
   return {};
 }
 
+function asObject(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, any>) : {};
+}
+
+function atsImportadoPorRuc(lote: { resumenJSON: unknown }, ruc: string) {
+  const resumen = asObject(lote.resumenJSON);
+  return asObject(resumen.contribuyenteAcceso).ruc === ruc;
+}
+
+async function contribuyenteOperativoPorAts(rucAcceso: string, anio?: number, mes?: string) {
+  const lotes = await prisma.atsLote.findMany({
+    where: {
+      ...(anio ? { anio } : {}),
+      ...(mes ? { mes } : {}),
+    },
+    include: {
+      contribuyente: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 30,
+  });
+
+  return lotes.find((lote) => atsImportadoPorRuc(lote, rucAcceso))?.contribuyente || null;
+}
+
+async function contribuyenteParaConsulta(ruc: string, anio?: number, mes?: string) {
+  const contribuyenteImportado = await contribuyenteOperativoPorAts(ruc, anio, mes);
+  if (contribuyenteImportado) return contribuyenteImportado;
+
+  return prisma.contribuyente.findUnique({
+    where: { ruc },
+  });
+}
+
 function previousMonth(anio: number, mesCodigo: string) {
   const mes = Number(mesCodigo);
   if (mes <= 1) {
@@ -148,11 +184,32 @@ export const consultarDeclaraciones = async (req: Request, res: Response) => {
     const { ruc } = req.params;
     const { tipoImpuesto, anioDesde, anioHasta, estado } = req.query;
 
+    const lotesImportados = await prisma.atsLote.findMany({
+      include: {
+        contribuyente: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 50,
+    });
+
+    const contribuyentesImportadosIds = lotesImportados
+      .filter((lote) => atsImportadoPorRuc(lote, ruc))
+      .map((lote) => lote.contribuyenteId);
+
     const declaraciones = await prisma.declaracion.findMany({
       where: {
-        contribuyente: {
-          ruc,
-        },
+        OR: [
+          {
+            contribuyente: {
+              ruc,
+            },
+          },
+          ...(contribuyentesImportadosIds.length
+            ? [{ contribuyenteId: { in: contribuyentesImportadosIds } }]
+            : []),
+        ],
         ...(tipoImpuesto && tipoImpuesto !== "Todos"
           ? { tipoImpuesto: String(tipoImpuesto) }
           : {}),
@@ -415,9 +472,7 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
     const mesTexto = mesCodigo ? mesesMap[mesCodigo] || String(mes) : null;
     const semestreTexto = semestre ? String(semestre) : null;
 
-    const contribuyente = await prisma.contribuyente.findUnique({
-      where: { ruc },
-    });
+    const contribuyente = await contribuyenteParaConsulta(ruc, Number(anio), mesCodigo);
 
     if (!contribuyente) {
       return res.status(404).json({

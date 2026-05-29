@@ -29,6 +29,11 @@ type AtsLote = {
 type ImportResponse = {
   message: string;
   lote: AtsLote;
+  contribuyenteDetectado?: {
+    ruc: string;
+    razonSocial: string;
+    id: string;
+  };
   issues?: AtsIssue[];
   resumen?: {
     ventas: number;
@@ -63,6 +68,7 @@ export default function AtsMasivoPanel({ ruc }: Props) {
   const [error, setError] = useState("");
 
   const lote = response?.lote;
+  const contribuyenteDetectado = response?.contribuyenteDetectado;
   const resumen = response?.resumen;
   const issues = response?.issues || [];
 
@@ -199,6 +205,12 @@ export default function AtsMasivoPanel({ ruc }: Props) {
 
       {lote && (
         <>
+          {contribuyenteDetectado && (
+            <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
+              Contribuyente detectado: {contribuyenteDetectado.ruc} - {contribuyenteDetectado.razonSocial}
+            </div>
+          )}
+
           <div className="mb-6 flex flex-wrap items-center gap-2">
             {steps.map((step, index) => (
               <button

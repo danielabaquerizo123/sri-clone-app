@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { readAtsWorkbook } from "../services/ats/excel-reader";
 import { normalizeAtsWorkbook, type AtsIssue } from "../services/ats/normalizer";
@@ -118,20 +119,8 @@ function getPeriodoFromWorkbookOrFile(
     }
   }
 
-  const rows = workbookData.contribuyentes?.rows || [];
-  const joined = rows
-    .map((row) => Object.values(row).join(" "))
-    .join(" ")
-    .toUpperCase();
-
-  const yearMatch = joined.match(/\b(20\d{2})\b/);
-  if (yearMatch) anio = Number(yearMatch[1]);
-
-  for (const [nombreMes, numeroMes] of Object.entries(MESES)) {
-    if (joined.includes(nombreMes)) {
-      mes = numeroMes;
-      break;
-    }
+  if (workbookData.informante?.anio) {
+    anio = workbookData.informante.anio;
   }
 
   return { anio, mes };
@@ -150,6 +139,14 @@ function safeNullableString(value: any) {
 function safeNumber(value: any, fallback = 0) {
   const num = Number(value ?? fallback);
   return Number.isFinite(num) ? Number(num.toFixed(2)) : fallback;
+}
+
+function round2(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function jsonObject(value: any): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
 function getIssuesFromLote(value: any): AtsIssue[] {
@@ -404,6 +401,198 @@ function sanitizeGuia(g: any, contribuyenteId: string, atsLoteId: string) {
   };
 }
 
+async function findOrCreateInformante(rucInformante: string, razonSocialInformante: string) {
+  const temporalHash = await bcrypt.hash(`ats-${rucInformante}-${Date.now()}`, 10);
+
+  return prisma.contribuyente.upsert({
+    where: { ruc: rucInformante },
+    update: {
+      razonSocial: razonSocialInformante,
+      estadoRuc: "ACTIVO",
+      regimen: "GENERAL",
+      estadoTributario: "AL DÍA",
+    },
+    create: {
+      ruc: rucInformante,
+      clave: temporalHash,
+      razonSocial: razonSocialInformante,
+      estadoRuc: "ACTIVO",
+      regimen: "GENERAL",
+      estadoTributario: "AL DÍA",
+      tipoContribuyente: "PERSONA_NATURAL",
+      rol: "CONTADOR",
+    },
+  });
+}
+
+function buildFormulario103Data(params: {
+  contribuyente: { ruc: string; razonSocial: string };
+  anio: number;
+  mes: string;
+  periodicidad?: string;
+  resumen: Record<string, any>;
+  compras: any[];
+}) {
+  const casilleros: Record<string, number> = {};
+  const add = (key: string, value: number) => {
+    casilleros[key] = round2((casilleros[key] || 0) + value);
+  };
+
+  for (const compra of params.compras) {
+    add("349", safeNumber(compra.baseImponibleRet1) + safeNumber(compra.baseImponibleRet2) + safeNumber(compra.baseImponibleRet3));
+    add("399", safeNumber(compra.valorRetenido1) + safeNumber(compra.valorRetenido2) + safeNumber(compra.valorRetenido3));
+  }
+
+  casilleros["499"] = round2(casilleros["399"] || 0);
+  casilleros["902"] = casilleros["499"];
+  casilleros["999"] = casilleros["902"];
+
+  return {
+    identificacion: {
+      ruc: params.contribuyente.ruc,
+      razonSocial: params.contribuyente.razonSocial,
+      anio: params.anio,
+      mes: params.mes,
+      periodicidad: params.periodicidad || "MENSUAL",
+    },
+    resumen: params.resumen,
+    casilleros,
+  };
+}
+
+function buildFormulario104Data(params: {
+  contribuyente: { ruc: string; razonSocial: string };
+  anio: number;
+  mes: string;
+  periodicidad?: string;
+  resumen: Record<string, any>;
+  ventas: any[];
+  compras: any[];
+}) {
+  const casilleros: Record<string, number> = {
+    "401": 0,
+    "402": 0,
+    "403": 0,
+    "431": 0,
+    "500": 0,
+    "501": 0,
+    "507": 0,
+    "531": 0,
+    "532": 0,
+    "609": 0,
+    "731": 0,
+    "902": 0,
+    "999": 0,
+  };
+
+  const add = (key: string, value: number) => {
+    casilleros[key] = round2((casilleros[key] || 0) + value);
+  };
+
+  for (const venta of params.ventas) {
+    add("401", safeNumber(venta.baseGravableIva1) + safeNumber(venta.baseGravableIva2) + safeNumber(venta.baseGravableIva3));
+    add("402", safeNumber(venta.montoIva1) + safeNumber(venta.montoIva2) + safeNumber(venta.montoIva3));
+    add("403", safeNumber(venta.baseTarifa0));
+    add("431", safeNumber(venta.baseNoObjetoIva) + safeNumber(venta.baseExenta));
+    add("609", safeNumber(venta.valorRetenidoIva));
+  }
+
+  for (const compra of params.compras) {
+    add("500", safeNumber(compra.baseGravableIva1) + safeNumber(compra.baseGravableIva2) + safeNumber(compra.baseGravableIva3));
+    add("501", safeNumber(compra.montoIva1) + safeNumber(compra.montoIva2) + safeNumber(compra.montoIva3));
+    add("507", safeNumber(compra.baseTarifa0));
+    add("531", safeNumber(compra.baseNoObjetoIva));
+    add("532", safeNumber(compra.baseExenta));
+    add(
+      "731",
+      safeNumber(compra.valorRetencionIva30) +
+        safeNumber(compra.valorRetencionIva50) +
+        safeNumber(compra.valorRetencionIva70) +
+        safeNumber(compra.valorRetencionIva100) +
+        safeNumber(compra.valorRetencionIva100SectorPublico)
+    );
+  }
+
+  casilleros["902"] = Math.max(round2(casilleros["402"] - casilleros["501"] - casilleros["609"]), 0);
+  casilleros["999"] = casilleros["902"];
+
+  return {
+    identificacion: {
+      ruc: params.contribuyente.ruc,
+      razonSocial: params.contribuyente.razonSocial,
+      anio: params.anio,
+      mes: params.mes,
+      periodicidad: params.periodicidad || "MENSUAL",
+    },
+    resumen: params.resumen,
+    casilleros,
+  };
+}
+
+async function upsertDeclaracionDesdeAts(params: {
+  contribuyenteId: string;
+  formulario: string;
+  tipoImpuesto: string;
+  periodoFiscal: string;
+  anio: number;
+  mes: string;
+  datosJSON: Record<string, any>;
+  baseImponible: number;
+  impuestoGenerado: number;
+  valorRetenido: number;
+  valorCancelado: number;
+}) {
+  const existing = await prisma.declaracion.findFirst({
+    where: {
+      contribuyenteId: params.contribuyenteId,
+      formulario: params.formulario,
+      anio: params.anio,
+      mes: params.mes,
+      tipoDeclaracion: "Original",
+    },
+  });
+
+  const data = {
+    formulario: params.formulario,
+    tipoImpuesto: params.tipoImpuesto,
+    periodoFiscal: params.periodoFiscal,
+    anio: params.anio,
+    mes: params.mes,
+    semestre: null,
+    ventasPeriodo: Boolean(params.datosJSON.resumen?.ventasLeidas),
+    emitioRetenciones: params.valorRetenido > 0,
+    tieneEmpleados: false,
+    baseImponible: params.baseImponible,
+    impuestoGenerado: params.impuestoGenerado,
+    valorRetenido: params.valorRetenido,
+    valorCancelado: params.valorCancelado,
+    tipoDeclaracion: "Original",
+    estado: "Borrador",
+    linkFormulario: null,
+    linkTalonResumen: null,
+    datosJSON: params.datosJSON as any,
+    contribuyenteId: params.contribuyenteId,
+  };
+
+  if (existing) {
+    return prisma.declaracion.update({
+      where: { id: existing.id },
+      data,
+    });
+  }
+
+  return prisma.declaracion.create({
+    data: {
+      ...data,
+      numeroAdhesion: generarNumeroAdhesion(),
+    },
+  });
+}
+
+function generarNumeroAdhesion() {
+  return `ATS-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+}
+
 async function insertOneByOne<T>(
   items: T[],
   hoja: string,
@@ -434,11 +623,11 @@ export const importarAtsExcel = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Debe subir un archivo Excel." });
     }
 
-    const contribuyente = await prisma.contribuyente.findUnique({
+    const contribuyenteAcceso = await prisma.contribuyente.findUnique({
       where: { ruc },
     });
 
-    if (!contribuyente) {
+    if (!contribuyenteAcceso) {
       return res.status(404).json({ message: "Contribuyente no encontrado." });
     }
 
@@ -447,12 +636,24 @@ export const importarAtsExcel = async (req: Request, res: Response) => {
     const periodo = getPeriodoFromWorkbookOrFile(workbookData, req.file.originalname);
 
     const issues: AtsIssue[] = [...normalized.issues];
+    const informante = normalized.informante;
+
+    if (!informante.rucInformante || !informante.razonSocialInformante) {
+      return res.status(400).json({
+        message: "No se pudo identificar el contribuyente informante en la hoja de parámetros.",
+      });
+    }
+
+    const contribuyente = await findOrCreateInformante(
+      informante.rucInformante,
+      informante.razonSocialInformante
+    );
 
     const lote = await prisma.atsLote.create({
       data: {
         nombreArchivo: req.file.originalname,
-        rucInformante: contribuyente.ruc,
-        razonSocial: contribuyente.razonSocial,
+        rucInformante: informante.rucInformante,
+        razonSocial: informante.razonSocialInformante,
         anio: periodo.anio,
         mes: periodo.mes,
         estado: "PROCESANDO",
@@ -460,6 +661,11 @@ export const importarAtsExcel = async (req: Request, res: Response) => {
         resumenJSON: {
           ...normalized.resumen,
           periodo,
+          informante,
+          contribuyenteAcceso: {
+            ruc: contribuyenteAcceso.ruc,
+            razonSocial: contribuyenteAcceso.razonSocial,
+          },
         } as any,
         contribuyenteId: contribuyente.id,
       },
@@ -510,6 +716,20 @@ export const importarAtsExcel = async (req: Request, res: Response) => {
     const resumenFinal = {
       ...normalized.resumen,
       periodo,
+      informante,
+      contribuyenteDetectado: {
+        ruc: informante.rucInformante,
+        razonSocial: informante.razonSocialInformante,
+        id: contribuyente.id,
+      },
+      contribuyenteAcceso: {
+        ruc: contribuyenteAcceso.ruc,
+        razonSocial: contribuyenteAcceso.razonSocial,
+      },
+      ventasLeidas: normalized.ventas.length,
+      comprasLeidas: normalized.compras.length,
+      anuladosLeidos: normalized.anulados.length,
+      guiasLeidas: normalized.guias.length,
       ventasInsertadas,
       comprasInsertadas,
       anuladosInsertados,
@@ -517,6 +737,54 @@ export const importarAtsExcel = async (req: Request, res: Response) => {
       errores: erroresFinales,
       advertencias: issues.filter((x) => x.tipo === "WARNING").length,
     };
+
+    const declaracion103JSON = buildFormulario103Data({
+      contribuyente,
+      anio: periodo.anio,
+      mes: periodo.mes,
+      periodicidad: informante.periodicidad,
+      resumen: resumenFinal,
+      compras: normalized.compras,
+    });
+
+    const declaracion104JSON = buildFormulario104Data({
+      contribuyente,
+      anio: periodo.anio,
+      mes: periodo.mes,
+      periodicidad: informante.periodicidad,
+      resumen: resumenFinal,
+      ventas: normalized.ventas,
+      compras: normalized.compras,
+    });
+
+    await Promise.all([
+      upsertDeclaracionDesdeAts({
+        contribuyenteId: contribuyente.id,
+        formulario: "Formulario 103 - Retenciones en la Fuente",
+        tipoImpuesto: "Retenciones en la Fuente",
+        periodoFiscal: informante.periodicidad || "MENSUAL",
+        anio: periodo.anio,
+        mes: periodo.mes,
+        datosJSON: declaracion103JSON,
+        baseImponible: safeNumber(declaracion103JSON.casilleros["349"]),
+        impuestoGenerado: 0,
+        valorRetenido: safeNumber(declaracion103JSON.casilleros["399"]),
+        valorCancelado: safeNumber(declaracion103JSON.casilleros["999"]),
+      }),
+      upsertDeclaracionDesdeAts({
+        contribuyenteId: contribuyente.id,
+        formulario: "Formulario 104 - IVA",
+        tipoImpuesto: "Impuesto al Valor Agregado (IVA)",
+        periodoFiscal: informante.periodicidad || "MENSUAL",
+        anio: periodo.anio,
+        mes: periodo.mes,
+        datosJSON: declaracion104JSON,
+        baseImponible: safeNumber(declaracion104JSON.casilleros["401"]) + safeNumber(declaracion104JSON.casilleros["403"]),
+        impuestoGenerado: safeNumber(declaracion104JSON.casilleros["402"]),
+        valorRetenido: safeNumber(declaracion104JSON.casilleros["609"]) + safeNumber(declaracion104JSON.casilleros["731"]),
+        valorCancelado: safeNumber(declaracion104JSON.casilleros["999"]),
+      }),
+    ]);
 
     await prisma.atsLote.update({
       where: { id: lote.id },
@@ -540,6 +808,7 @@ export const importarAtsExcel = async (req: Request, res: Response) => {
     return res.status(201).json({
       message: "Archivo ATS procesado correctamente.",
       lote: loteCompleto,
+      contribuyenteDetectado: resumenFinal.contribuyenteDetectado,
       issues,
       resumen: resumenFinal,
     });
@@ -636,6 +905,7 @@ export const descargarXmlAts = async (req: Request, res: Response) => {
       razonSocial: lote.razonSocial,
       anio: lote.anio,
       mes: lote.mes,
+      numEstabRuc: jsonObject(lote.resumenJSON).informante?.numEstabRuc,
       compras: lote.compras,
       ventas: lote.ventas,
       anulados: lote.anulados,

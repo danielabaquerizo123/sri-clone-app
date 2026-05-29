@@ -1,9 +1,12 @@
+import type { AtsInformanteExcel } from "./excel-reader";
+
 type ParsedSheet = {
   headers: string[];
   rows: Record<string, any>[];
 };
 
 type AtsWorkbookData = {
+  informante: AtsInformanteExcel;
   contribuyentes: ParsedSheet;
   compras: ParsedSheet;
   ventas: ParsedSheet;
@@ -20,6 +23,7 @@ export type AtsIssue = {
 };
 
 export type AtsNormalizedData = {
+  informante: AtsInformanteExcel;
   issues: AtsIssue[];
   ventas: any[];
   compras: any[];
@@ -38,6 +42,20 @@ export type AtsNormalizedData = {
 function clean(value: any): string {
   if (value === null || value === undefined) return "";
   return String(value).replace(/\r?\n|\r/g, " ").trim().replace(/\s+/g, " ");
+}
+
+export function cleanTributaryName(value: any, fallback = "NO IDENTIFICADO"): string {
+  const text = clean(value)
+    .replace(/Ñ/g, "N")
+    .replace(/ñ/g, "n")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[+.,;:()[\]{}\/\\\-_'"*]/g, " ")
+    .replace(/[^A-Za-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text || fallback;
 }
 
 function normalizeKey(value: string): string {
@@ -304,7 +322,7 @@ function normalizeVentas(rows: Record<string, any>[], issues: AtsIssue[]) {
           : noIdentificacion.length === 13
             ? "04"
             : "05"),
-      razonSocialCliente: razonSocialCliente || "CONSUMIDOR FINAL",
+      razonSocialCliente: cleanTributaryName(razonSocialCliente, "CONSUMIDOR FINAL"),
       tipoCliente: firstCode(getByAny(row, ["Tipo Cliente"]), 2),
       parteRelacionada: normalizeParteRelacionada(getByAny(row, ["Parte Relacionada"])),
       cantidadComprobantes: Number(onlyDigits(getByAny(row, ["Cantidad de Comprobantes", "Cantidad"])) || 1),
@@ -506,7 +524,7 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
     const compra = {
       filaExcel: fila,
       noIdentificacion,
-      razonSocialProveedor,
+      razonSocialProveedor: cleanTributaryName(razonSocialProveedor),
       comprobante,
       establecimiento,
       puntoEmision,
@@ -585,7 +603,13 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
 function normalizeAnulados(rows: Record<string, any>[]) {
   return rows
     .filter((row) =>
-      hasAnyValue(row, ["Tipo de Comprobante", "No. Serie Establecimiento"])
+      hasAnyValue(row, [
+        "Tipo de Comprobante",
+        "No. Serie Secuencial Desde",
+        "No. Serie Secuencial Hasta",
+        "Numero Autorización S.R.I.",
+        "Numero Autorizacion S.R.I.",
+      ])
     )
     .map((row, index) => ({
       filaExcel: getExcelRow(row, index + 7),
@@ -613,6 +637,10 @@ export function normalizeAtsWorkbook(data: AtsWorkbookData): AtsNormalizedData {
   const guias = normalizeGuias(data.guias.rows);
 
   return {
+    informante: {
+      ...data.informante,
+      razonSocialInformante: cleanTributaryName(data.informante.razonSocialInformante),
+    },
     issues,
     ventas,
     compras,
