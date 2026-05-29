@@ -79,6 +79,13 @@ function firstCode(value: any, length = 2): string {
   return match[0].padStart(length, "0").slice(0, length);
 }
 
+function paymentCode(value: any): string {
+  const code = firstCode(value, 2);
+  const validCodes = new Set(["01", "15", "16", "17", "18", "19", "20", "21"]);
+
+  return validCodes.has(code) ? code : "";
+}
+
 function money(value: any): number {
   const raw = clean(value);
   if (!raw || raw === "-" || raw === "–" || raw === "—") return 0;
@@ -322,7 +329,10 @@ function normalizeVentas(rows: Record<string, any>[], issues: AtsIssue[]) {
           : noIdentificacion.length === 13
             ? "04"
             : "05"),
-      razonSocialCliente: cleanTributaryName(razonSocialCliente, "CONSUMIDOR FINAL"),
+      razonSocialCliente:
+        noIdentificacion === "9999999999999"
+          ? "CONSUMIDOR FINAL"
+          : cleanTributaryName(razonSocialCliente, "CONSUMIDOR FINAL"),
       tipoCliente: firstCode(getByAny(row, ["Tipo Cliente"]), 2),
       parteRelacionada: normalizeParteRelacionada(getByAny(row, ["Parte Relacionada"])),
       cantidadComprobantes: Number(onlyDigits(getByAny(row, ["Cantidad de Comprobantes", "Cantidad"])) || 1),
@@ -398,8 +408,8 @@ function normalizeVentas(rows: Record<string, any>[], issues: AtsIssue[]) {
       retIvaBase100: money(getByAny(row, ["Ret. IVA Base Imponible 100%"])),
       retIvaValor100: money(getByAny(row, ["Ret. IVA Valor Retenido 100%"])),
 
-      formaPago1: firstCode(getByAny(row, ["Forma de COBRO 1"]), 2),
-      formaPago2: firstCode(getByAny(row, ["Forma de COBRO 2"]), 2),
+      formaPago1: paymentCode(getByAny(row, ["Forma de COBRO 1"])),
+      formaPago2: paymentCode(getByAny(row, ["Forma de COBRO 2"])),
 
       mesDeclarado: getByAny(row, ["Mes declarado"]),
       periodoDeclaradoForm104: getByAny(row, ["Periodo Declarado Form. 104", "Periodo Declarado Form104"]),
@@ -428,34 +438,60 @@ function normalizeVentas(rows: Record<string, any>[], issues: AtsIssue[]) {
 function consolidateVentas(ventas: any[], issues: AtsIssue[]) {
   const map = new Map<string, any>();
 
+  const addMoney = (left: any, right: any) =>
+    Number((Number(left || 0) + Number(right || 0)).toFixed(2));
+
+  const mergeFormaPago = (target: any, source: any) => {
+    const current = [target.formaPago1, target.formaPago2].filter(Boolean);
+    const incoming = [source.formaPago1, source.formaPago2].filter(Boolean);
+    const merged = Array.from(new Set([...current, ...incoming]));
+
+    target.formaPago1 = merged[0] || "";
+    target.formaPago2 = merged[1] || "";
+  };
+
   ventas.forEach((venta) => {
-    const key = [
-      venta.noIdentificacion,
-      venta.tipoComprobante,
-      venta.codigoEstablecimiento,
-      venta.noDocumento || venta.razonSocialCliente,
-    ].join("|");
+    const isFinalConsumer =
+      venta.codigoIdentif === "07" || venta.noIdentificacion === "9999999999999";
+
+    const key = isFinalConsumer
+      ? [
+          venta.codigoIdentif,
+          venta.noIdentificacion,
+          venta.tipoComprobante,
+          venta.codigoEstablecimiento,
+        ].join("|")
+      : [
+          venta.noIdentificacion,
+          venta.tipoComprobante,
+          venta.codigoEstablecimiento,
+          venta.noDocumento || venta.razonSocialCliente,
+        ].join("|");
 
     const existing = map.get(key);
 
     if (!existing) {
-      map.set(key, { ...venta });
+      map.set(key, {
+        ...venta,
+        razonSocialCliente: isFinalConsumer ? "CONSUMIDOR FINAL" : venta.razonSocialCliente,
+      });
       return;
     }
 
     existing.cantidadComprobantes += venta.cantidadComprobantes || 1;
-    existing.baseNoObjetoIva += venta.baseNoObjetoIva;
-    existing.baseExenta += venta.baseExenta;
-    existing.baseTarifa0 += venta.baseTarifa0;
-    existing.baseGravableIva1 += venta.baseGravableIva1;
-    existing.montoIva1 += venta.montoIva1;
-    existing.baseGravableIva2 += venta.baseGravableIva2;
-    existing.montoIva2 += venta.montoIva2;
-    existing.baseGravableIva3 += venta.baseGravableIva3;
-    existing.montoIva3 += venta.montoIva3;
-    existing.totalDocumento += venta.totalDocumento;
-    existing.valorRetenidoIva += venta.valorRetenidoIva;
-    existing.valorRetenidoFuente += venta.valorRetenidoFuente;
+    existing.baseNoObjetoIva = addMoney(existing.baseNoObjetoIva, venta.baseNoObjetoIva);
+    existing.baseExenta = addMoney(existing.baseExenta, venta.baseExenta);
+    existing.baseTarifa0 = addMoney(existing.baseTarifa0, venta.baseTarifa0);
+    existing.baseGravableIva1 = addMoney(existing.baseGravableIva1, venta.baseGravableIva1);
+    existing.montoIva1 = addMoney(existing.montoIva1, venta.montoIva1);
+    existing.baseGravableIva2 = addMoney(existing.baseGravableIva2, venta.baseGravableIva2);
+    existing.montoIva2 = addMoney(existing.montoIva2, venta.montoIva2);
+    existing.baseGravableIva3 = addMoney(existing.baseGravableIva3, venta.baseGravableIva3);
+    existing.montoIva3 = addMoney(existing.montoIva3, venta.montoIva3);
+    existing.totalDocumento = addMoney(existing.totalDocumento, venta.totalDocumento);
+    existing.valorRetenidoIva = addMoney(existing.valorRetenidoIva, venta.valorRetenidoIva);
+    existing.valorRetenidoFuente = addMoney(existing.valorRetenidoFuente, venta.valorRetenidoFuente);
+    mergeFormaPago(existing, venta);
 
     issue(
       issues,
@@ -537,6 +573,28 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
       codigoSustento: firstCode(getByAny(row, ["Codigo Sustento", "Código Sustento"]), 2) || "01",
       parteRelacionada: normalizeParteRelacionada(getByAny(row, ["Parte Relacionada"])),
 
+      comprobanteModificado: firstCode(getByAny(row, ["Comprobante Modificado"]), 2),
+      establecimientoModificado: pad(
+        getByAny(row, ["Establecimiento__2", "Establecimiento Modificado"]),
+        3
+      ),
+      puntoEmisionModificado: pad(
+        getByAny(row, ["Punto Emisión__2", "Punto Emision__2", "Punto Emisión Modificado"]),
+        3
+      ),
+      numeroSecuencialModificado: pad(
+        getByAny(row, ["Numero Secuencial Modificado", "Número Secuencial Modificado"]),
+        9
+      ),
+      numeroAutorizacionSriModificado: onlyDigits(
+        getByAny(row, [
+          "Numero Autorización S.R.I. Modificado",
+          "Numero Autorizacion S.R.I. Modificado",
+          "Numero Autorización SRI Modificado",
+          "Numero Autorizacion SRI Modificado",
+        ])
+      ),
+
       baseNoObjetoIva: money(getByAny(row, ["Base Imponible NO Objeto de IVA"])),
       baseExenta: money(getByAny(row, ["Base Imponible EXENTA"])),
       baseTarifa0: money(getByAny(row, ["Base Imponible Tarifa 0%"])),
@@ -589,8 +647,8 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
       valorRetencionIva70: money(getByAny(row, ["Ret. IVA Valor Retenido 70%"])),
       valorRetencionIva100: money(getByAny(row, ["Ret. IVA Valor Retenido 100%"])),
 
-      formaPago1: firstCode(getByAny(row, ["Forma de PAGO 1"]), 2),
-      formaPago2: firstCode(getByAny(row, ["Forma de PAGO 2"]), 2),
+      formaPago1: paymentCode(getByAny(row, ["Forma de PAGO 1"])),
+      formaPago2: paymentCode(getByAny(row, ["Forma de PAGO 2"])),
     };
 
     previousDoc = compra;

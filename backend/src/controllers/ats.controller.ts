@@ -290,6 +290,12 @@ function sanitizeCompra(c: any, contribuyenteId: string, atsLoteId: string) {
     codigoSustento: safeString(c.codigoSustento, "01"),
     conceptoCompra: safeNullableString(c.conceptoCompra),
 
+    comprobanteModificado: safeNullableString(c.comprobanteModificado),
+    establecimientoModificado: safeNullableString(c.establecimientoModificado),
+    puntoEmisionModificado: safeNullableString(c.puntoEmisionModificado),
+    numeroSecuencialModificado: safeNullableString(c.numeroSecuencialModificado),
+    numeroAutorizacionSriModificado: safeNullableString(c.numeroAutorizacionSriModificado),
+
     baseNoObjetoIva: safeNumber(c.baseNoObjetoIva),
     baseExenta: safeNumber(c.baseExenta),
     baseTarifa0: safeNumber(c.baseTarifa0),

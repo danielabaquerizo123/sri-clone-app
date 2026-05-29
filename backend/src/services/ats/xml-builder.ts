@@ -45,14 +45,51 @@ function pad(value: any, length: number): string {
 function dateDDMMYYYY(value: any): string {
   if (!value) return "";
 
-  const date = value instanceof Date ? value : new Date(value);
+  const formatParts = (day: number, month: number, year: number) => {
+    if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) {
+      return "";
+    }
+
+    const dd = String(day).padStart(2, "0");
+    const mm = String(month).padStart(2, "0");
+    const yyyy = String(year).padStart(4, "0");
+
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+
+    return formatParts(value.getUTCDate(), value.getUTCMonth() + 1, value.getUTCFullYear());
+  }
+
+  const raw = clean(value);
+
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const serial = Number(raw);
+
+    if (serial > 20000 && serial < 90000) {
+      const excelEpoch = Date.UTC(1899, 11, 30);
+      const date = new Date(excelEpoch + Math.floor(serial) * 86400000);
+
+      return formatParts(date.getUTCDate(), date.getUTCMonth() + 1, date.getUTCFullYear());
+    }
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmy) {
+    return formatParts(Number(dmy[1]), Number(dmy[2]), Number(dmy[3]));
+  }
+
+  const ymd = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymd) {
+    return formatParts(Number(ymd[3]), Number(ymd[2]), Number(ymd[1]));
+  }
+
+  const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return "";
 
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = date.getFullYear();
-
-  return `${dd}/${mm}/${yyyy}`;
+  return formatParts(date.getUTCDate(), date.getUTCMonth() + 1, date.getUTCFullYear());
 }
 
 function mesToNumber(mes: string): string {
@@ -123,6 +160,45 @@ function hasMoney(value: any): boolean {
   return Number(value ?? 0) > 0;
 }
 
+function ventaBaseAts(v: any): number {
+  const total =
+    Number(v.baseNoObjetoIva || 0) +
+    Number(v.baseExenta || 0) +
+    Number(v.baseTarifa0 || 0) +
+    Number(v.baseGravableIva1 || 0) +
+    Number(v.baseGravableIva2 || 0) +
+    Number(v.baseGravableIva3 || 0);
+
+  return Number.isFinite(total) ? Number(total.toFixed(2)) : 0;
+}
+
+function compraTotalFormaPago(c: any): number {
+  const total =
+    Number(c.baseNoObjetoIva || 0) +
+    Number(c.baseExenta || 0) +
+    Number(c.baseTarifa0 || 0) +
+    Number(c.baseGravableIva1 || 0) +
+    Number(c.baseGravableIva2 || 0) +
+    Number(c.baseGravableIva3 || 0) +
+    Number(c.montoIva1 || 0) +
+    Number(c.montoIva2 || 0) +
+    Number(c.montoIva3 || 0) +
+    Number(c.montoIceNoIncluido || 0);
+
+  return Number.isFinite(total) ? Number(total.toFixed(2)) : 0;
+}
+
+function ventaTotalFormaPago(v: any): number {
+  const total =
+    ventaBaseAts(v) +
+    Number(v.montoIva1 || 0) +
+    Number(v.montoIva2 || 0) +
+    Number(v.montoIva3 || 0) +
+    Number(v.montoIceNoIncluido || 0);
+
+  return Number.isFinite(total) ? Number(total.toFixed(2)) : 0;
+}
+
 function removeUndefinedDeep(value: any): any {
   if (Array.isArray(value)) {
     return value.map(removeUndefinedDeep).filter((item) => item !== undefined);
@@ -180,10 +256,17 @@ function buildAir(c: any) {
   return { detalleAir };
 }
 
-function buildFormasPago(formaPago1?: string | null, formaPago2?: string | null) {
+function buildFormasPago(
+  totalOperacion: number,
+  formaPago1?: string | null,
+  formaPago2?: string | null
+) {
+  if (totalOperacion <= 500) return undefined;
+
+  const validCodes = new Set(["01", "15", "16", "17", "18", "19", "20", "21"]);
   const formas = [formaPago1, formaPago2]
     .map((x) => clean(x))
-    .filter(Boolean);
+    .filter((x) => validCodes.has(x));
 
   if (formas.length === 0) return undefined;
 
@@ -247,7 +330,7 @@ function buildCompra(c: any) {
       pagExtSujRetNorLeg: "NA",
     },
 
-    formasDePago: buildFormasPago(c.formaPago1, c.formaPago2),
+    formasDePago: buildFormasPago(compraTotalFormaPago(c), c.formaPago1, c.formaPago2),
     air: buildAir(c),
 
     estabRetencion1: retencionTieneDatos ? pad(c.establecimientoRet, 3) : undefined,
@@ -296,7 +379,7 @@ function buildVenta(v: any) {
     valorRetIva: money(v.valorRetenidoIva),
     valorRetRenta: money(v.valorRetenidoFuente),
 
-    formasDePago: buildFormasPago(v.formaPago1, v.formaPago2),
+    formasDePago: buildFormasPago(ventaTotalFormaPago(v), v.formaPago1, v.formaPago2),
   });
 }
 
@@ -314,10 +397,7 @@ function buildAnulado(a: any) {
 export function buildAtsXml(data: AtsXmlInput): string {
   const mes = mesToNumber(data.mes);
 
-  const totalVentas = data.ventas.reduce(
-    (acc, venta) => acc + Number(venta.totalDocumento || 0),
-    0
-  );
+  const totalVentas = data.ventas.reduce((acc, venta) => acc + ventaBaseAts(venta), 0);
 
   const compras = data.compras.map(buildCompra).filter(Boolean);
   const ventas = data.ventas.map(buildVenta).filter(Boolean);
