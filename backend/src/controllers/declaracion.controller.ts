@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import PDFDocument from "pdfkit";
 import { prisma } from "../lib/prisma";
 
 function generarNumeroAdhesion() {
@@ -48,6 +49,94 @@ function round2(value: number) {
 
 function add(casilleros: Record<string, number>, key: string, value: number) {
   casilleros[key] = round2((casilleros[key] || 0) + value);
+}
+
+function money(value: unknown) {
+  return Number(value || 0).toFixed(2);
+}
+
+function fechaLocal(value: Date | string | null | undefined) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("es-EC");
+}
+
+function filenameSafe(value: string) {
+  return value.replace(/[^\w.-]+/g, "_");
+}
+
+function sendPdf(res: Response, filename: string, build: (doc: PDFKit.PDFDocument) => void) {
+  const doc = new PDFDocument({ size: "A4", margin: 42 });
+  const chunks: Buffer[] = [];
+
+  doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+  doc.on("end", () => {
+    const pdf = Buffer.concat(chunks);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filenameSafe(filename)}"`);
+    res.setHeader("Content-Length", pdf.length);
+    res.end(pdf);
+  });
+
+  build(doc);
+  doc.end();
+}
+
+function pdfTitle(doc: PDFKit.PDFDocument, title: string, subtitle: string) {
+  doc
+    .fontSize(10)
+    .fillColor("#003565")
+    .text("SERVICIO DE RENTAS INTERNAS", { align: "center" })
+    .moveDown(0.35)
+    .fontSize(17)
+    .text(title, { align: "center" })
+    .moveDown(0.25)
+    .fontSize(11)
+    .fillColor("#333333")
+    .text(subtitle, { align: "center" })
+    .moveDown(1);
+}
+
+function pdfKV(doc: PDFKit.PDFDocument, label: string, value: unknown) {
+  doc.fontSize(9).fillColor("#666666").text(label.toUpperCase(), { continued: true });
+  doc.fillColor("#111111").text(`  ${String(value ?? "-")}`);
+}
+
+function pdfTable(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  rows: Array<[string, string | number]>,
+  startX = 42,
+  width = 511
+) {
+  doc.moveDown(0.8).fontSize(11).fillColor("#003565").text(title, startX);
+  const labelWidth = Math.round(width * 0.68);
+  const valueWidth = width - labelWidth;
+  let y = doc.y + 6;
+
+  rows.forEach(([label, value], index) => {
+    const rowHeight = 22;
+    doc
+      .rect(startX, y, width, rowHeight)
+      .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+      .strokeColor("#d7dde6")
+      .rect(startX, y, width, rowHeight)
+      .stroke();
+
+    doc
+      .fontSize(8.5)
+      .fillColor("#334155")
+      .text(label, startX + 7, y + 7, { width: labelWidth - 14 })
+      .fontSize(8.5)
+      .fillColor("#111827")
+      .text(String(value), startX + labelWidth + 7, y + 7, {
+        width: valueWidth - 14,
+        align: "right",
+      });
+
+    y += rowHeight;
+  });
+
+  doc.y = y + 4;
 }
 
 function getJsonCasilleros(value: unknown): Record<string, number> {
@@ -252,9 +341,7 @@ export const consultarFormulario103 = async (req: Request, res: Response) => {
     const mesCodigo = String(mes).padStart(2, "0");
     const mesTexto = mesesMap[mesCodigo] || String(mes);
 
-    const contribuyente = await prisma.contribuyente.findUnique({
-      where: { ruc },
-    });
+    const contribuyente = await contribuyenteParaConsulta(ruc, Number(anio), mesCodigo);
 
     if (!contribuyente) {
       return res.status(404).json({
@@ -686,6 +773,80 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
 
     return res.status(500).json({
       message: "Error consultando Formulario 104.",
+    });
+  }
+};
+
+export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
+  try {
+    const { declaracionId } = req.params;
+
+    const declaracion = await prisma.declaracion.findUnique({
+      where: { id: declaracionId },
+      include: { contribuyente: true },
+    });
+
+    if (!declaracion) {
+      return res.status(404).json({ message: "Declaración no encontrada." });
+    }
+
+    const root = asObject(declaracion.datosJSON);
+    const nested = asObject(root.datosJSON);
+    const identificacion = asObject(root.identificacion || nested.identificacion);
+    const resumen = asObject(root.resumen || nested.resumen);
+    const casilleros = getJsonCasilleros(declaracion.datosJSON);
+    const formulario = declaracion.formulario.includes("104") ? "104" : declaracion.formulario.includes("103") ? "103" : "";
+
+    return sendPdf(
+      res,
+      `Formulario_${formulario || "Declaracion"}_${declaracion.contribuyente.ruc}_${declaracion.id}.pdf`,
+      (doc) => {
+        pdfTitle(
+          doc,
+          `FORMULARIO ${formulario || ""}`.trim(),
+          declaracion.formulario
+        );
+
+        pdfKV(doc, "RUC", identificacion.ruc || declaracion.contribuyente.ruc);
+        pdfKV(doc, "Razón social", identificacion.razonSocial || declaracion.contribuyente.razonSocial);
+        pdfKV(doc, "Período", `${declaracion.mes || declaracion.semestre || "-"} / ${declaracion.anio}`);
+        pdfKV(doc, "Número de adhesión", declaracion.numeroAdhesion);
+        pdfKV(doc, "Estado", declaracion.estado);
+        pdfKV(doc, "Fecha de generación", fechaLocal(new Date()));
+
+        const rows = Object.entries(casilleros)
+          .filter(([, value]) => Number(value || 0) !== 0)
+          .sort(([a], [b]) => Number(a) - Number(b))
+          .map(([key, value]) => [`Casillero ${key}`, money(value)] as [string, string]);
+
+        pdfTable(
+          doc,
+          "VALORES DECLARADOS",
+          rows.length ? rows : [["Sin valores calculados", "0.00"]]
+        );
+
+        pdfTable(doc, "RESUMEN", [
+          ["Base imponible", money(declaracion.baseImponible)],
+          ["Impuesto generado", money(declaracion.impuestoGenerado)],
+          ["Valor retenido", money(declaracion.valorRetenido)],
+          ["Valor cancelado", money(declaracion.valorCancelado)],
+          ["Registros leídos", String(resumen.comprasLeidas || resumen.ventasLeidas || "-")],
+        ]);
+
+        doc
+          .moveDown(1.2)
+          .fontSize(8)
+          .fillColor("#475569")
+          .text(
+            "Documento generado dinámicamente a partir de la declaración almacenada en el sistema.",
+            { align: "center" }
+          );
+      }
+    );
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Error generando PDF de declaración.",
     });
   }
 };

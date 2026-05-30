@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import PDFDocument from "pdfkit";
 import { prisma } from "../lib/prisma";
 import { readAtsWorkbook } from "../services/ats/excel-reader";
 import { normalizeAtsWorkbook, type AtsIssue } from "../services/ats/normalizer";
@@ -143,6 +144,140 @@ function safeNumber(value: any, fallback = 0) {
 
 function round2(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function pdfMoney(value: unknown) {
+  return Number(value || 0).toFixed(2);
+}
+
+function pdfInt(value: unknown) {
+  return String(Number(value || 0));
+}
+
+function filenameSafe(value: string) {
+  return value.replace(/[^\w.-]+/g, "_");
+}
+
+function fechaLocal(value: Date | string | null | undefined) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("es-EC");
+}
+
+function sendPdf(res: Response, filename: string, build: (doc: PDFKit.PDFDocument) => void) {
+  const doc = new PDFDocument({ size: "A4", margin: 36 });
+  const chunks: Buffer[] = [];
+
+  doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+  doc.on("end", () => {
+    const pdf = Buffer.concat(chunks);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filenameSafe(filename)}"`);
+    res.setHeader("Content-Length", pdf.length);
+    res.end(pdf);
+  });
+
+  build(doc);
+  doc.end();
+}
+
+function compraBaseGravada(compra: any) {
+  return (
+    safeNumber(compra.baseGravableIva1) +
+    safeNumber(compra.baseGravableIva2) +
+    safeNumber(compra.baseGravableIva3)
+  );
+}
+
+function compraIva(compra: any) {
+  return safeNumber(compra.montoIva1) + safeNumber(compra.montoIva2) + safeNumber(compra.montoIva3);
+}
+
+function ventaBaseGravada(venta: any) {
+  return (
+    safeNumber(venta.baseGravableIva1) +
+    safeNumber(venta.baseGravableIva2) +
+    safeNumber(venta.baseGravableIva3)
+  );
+}
+
+function ventaIva(venta: any) {
+  return safeNumber(venta.montoIva1) + safeNumber(venta.montoIva2) + safeNumber(venta.montoIva3);
+}
+
+function comprasResumen(compras: any[]) {
+  const facturas = compras.filter((c) => c.comprobante !== "04").length;
+  const notasCredito = compras.filter((c) => c.comprobante === "04").length;
+
+  return {
+    facturas,
+    notasCredito,
+    base0: round2(compras.reduce((acc, c) => acc + safeNumber(c.baseTarifa0), 0)),
+    baseGravada: round2(compras.reduce((acc, c) => acc + compraBaseGravada(c), 0)),
+    baseNoObjeto: round2(compras.reduce((acc, c) => acc + safeNumber(c.baseNoObjetoIva), 0)),
+    iva: round2(compras.reduce((acc, c) => acc + compraIva(c), 0)),
+    retIva: round2(
+      compras.reduce(
+        (acc, c) =>
+          acc +
+          safeNumber(c.valorRetencionIva30) +
+          safeNumber(c.valorRetencionIva50) +
+          safeNumber(c.valorRetencionIva70) +
+          safeNumber(c.valorRetencionIva100) +
+          safeNumber(c.valorRetencionIva100SectorPublico) +
+          safeNumber(c.liqImpSumatoriaRetIva),
+        0
+      )
+    ),
+  };
+}
+
+function ventasResumen(ventas: any[]) {
+  return {
+    documentos: ventas.reduce((acc, v) => acc + Number(v.cantidadComprobantes || 1), 0),
+    base0: round2(ventas.reduce((acc, v) => acc + safeNumber(v.baseTarifa0), 0)),
+    baseGravada: round2(ventas.reduce((acc, v) => acc + ventaBaseGravada(v), 0)),
+    baseNoObjeto: round2(ventas.reduce((acc, v) => acc + safeNumber(v.baseNoObjetoIva), 0)),
+    iva: round2(ventas.reduce((acc, v) => acc + ventaIva(v), 0)),
+    retIva: round2(ventas.reduce((acc, v) => acc + safeNumber(v.valorRetenidoIva), 0)),
+    retFuente: round2(ventas.reduce((acc, v) => acc + safeNumber(v.valorRetenidoFuente), 0)),
+  };
+}
+
+function pdfTable(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  rows: Array<[string, string | number]>,
+  startX = 42,
+  width = 511
+) {
+  doc.moveDown(0.55).fontSize(10).fillColor("#003565").text(title, startX);
+  const labelWidth = Math.round(width * 0.68);
+  const valueWidth = width - labelWidth;
+  let y = doc.y + 5;
+
+  rows.forEach(([label, value], index) => {
+    const rowHeight = 20;
+    doc
+      .rect(startX, y, width, rowHeight)
+      .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+      .strokeColor("#d7dde6")
+      .rect(startX, y, width, rowHeight)
+      .stroke();
+
+    doc
+      .fontSize(8)
+      .fillColor("#334155")
+      .text(label, startX + 7, y + 6, { width: labelWidth - 14 })
+      .fillColor("#111827")
+      .text(String(value), startX + labelWidth + 7, y + 6, {
+        width: valueWidth - 14,
+        align: "right",
+      });
+
+    y += rowHeight;
+  });
+
+  doc.y = y + 2;
 }
 
 function jsonObject(value: any): Record<string, any> {
@@ -936,6 +1071,119 @@ export const descargarXmlAts = async (req: Request, res: Response) => {
     console.error(error);
     return res.status(500).json({
       message: "Error generando XML ATS.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const descargarTalonResumenAts = async (req: Request, res: Response) => {
+  try {
+    const { loteId } = req.params;
+
+    const lote = await prisma.atsLote.findUnique({
+      where: { id: loteId },
+      include: {
+        ventas: true,
+        compras: true,
+        anulados: true,
+        guias: true,
+      },
+    });
+
+    if (!lote) {
+      return res.status(404).json({ message: "Lote ATS no encontrado." });
+    }
+
+    const compras = comprasResumen(lote.compras);
+    const ventas = ventasResumen(lote.ventas);
+    const periodo = `${String(lote.mes).padStart(2, "0")}/${lote.anio}`;
+    const resumen = jsonObject(lote.resumenJSON);
+    const acceso = jsonObject(resumen.contribuyenteAcceso);
+
+    return sendPdf(res, `Talon_Resumen_ATS_${lote.rucInformante}_${periodo.replace("/", "")}.pdf`, (doc) => {
+      doc
+        .roundedRect(42, 34, 64, 34, 4)
+        .fill("#003565")
+        .fillColor("#ffffff")
+        .fontSize(17)
+        .text("SRI", 42, 42, { width: 64, align: "center" });
+
+      doc
+        .fontSize(10)
+        .fillColor("#003565")
+        .text("SERVICIO DE RENTAS INTERNAS", 118, 36, { align: "center" })
+        .moveDown(0.2)
+        .fontSize(18)
+        .text("TALÓN RESUMEN", { align: "center" })
+        .fontSize(12)
+        .fillColor("#111827")
+        .text("ANEXO TRANSACCIONAL", { align: "center" });
+
+      doc.moveDown(1.2);
+      pdfTable(doc, "DATOS DEL CONTRIBUYENTE", [
+        ["Nombre contribuyente", lote.razonSocial],
+        ["RUC", lote.rucInformante],
+        ["Período", periodo],
+        ["Fecha de generación", fechaLocal(new Date())],
+        ["Lote ATS", lote.id],
+        ["Usuario de acceso", acceso.ruc ? `${acceso.ruc} - ${acceso.razonSocial || ""}` : "-"],
+      ]);
+
+      pdfTable(doc, "COMPRAS", [
+        ["Facturas", pdfInt(compras.facturas)],
+        ["Notas de crédito", pdfInt(compras.notasCredito)],
+        ["BI tarifa 0%", pdfMoney(compras.base0)],
+        ["BI tarifa diferente 0%", pdfMoney(compras.baseGravada)],
+        ["BI No Objeto IVA", pdfMoney(compras.baseNoObjeto)],
+        ["Valor IVA", pdfMoney(compras.iva)],
+      ]);
+
+      pdfTable(doc, "VENTAS", [
+        ["Documentos autorizados", pdfInt(ventas.documentos)],
+        ["BI tarifa 0%", pdfMoney(ventas.base0)],
+        ["BI tarifa diferente 0%", pdfMoney(ventas.baseGravada)],
+        ["BI No Objeto IVA", pdfMoney(ventas.baseNoObjeto)],
+        ["Valor IVA", pdfMoney(ventas.iva)],
+      ]);
+
+      pdfTable(doc, "RETENCION EN LA FUENTE DE IVA", [
+        ["Retención IVA compras", pdfMoney(compras.retIva)],
+        ["Retenciones que le efectuaron en ventas", pdfMoney(ventas.retIva)],
+      ]);
+
+      pdfTable(doc, "RESUMEN DE RETENCIONES QUE LE EFECTUARON EN EL PERIODO", [
+        ["Retenciones de IVA", pdfMoney(ventas.retIva)],
+        ["Retenciones en la fuente", pdfMoney(ventas.retFuente)],
+        ["Total retenciones efectuadas", pdfMoney(round2(ventas.retIva + ventas.retFuente))],
+      ]);
+
+      doc
+        .moveDown(0.8)
+        .fontSize(8.2)
+        .fillColor("#334155")
+        .text(
+          "Declaro que la información contenida en este anexo corresponde a los datos transaccionales registrados para el período indicado y fue generada desde el lote ATS importado en el sistema.",
+          { align: "justify" }
+        );
+
+      const y = Math.max(doc.y + 34, 700);
+      doc
+        .strokeColor("#111827")
+        .moveTo(88, y)
+        .lineTo(245, y)
+        .stroke()
+        .moveTo(350, y)
+        .lineTo(507, y)
+        .stroke()
+        .fontSize(8.5)
+        .fillColor("#111827")
+        .text("Firma del contador", 88, y + 8, { width: 157, align: "center" })
+        .text("Firma del representante legal", 350, y + 8, { width: 157, align: "center" });
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Error generando talón resumen ATS.",
       error: buildErrorMessage(error),
     });
   }

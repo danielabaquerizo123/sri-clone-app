@@ -157,6 +157,40 @@ export default function AtsMasivoPanel({ ruc }: Props) {
     }
   }
 
+  async function descargarTalonResumen() {
+    if (!lote?.id) {
+      setError("Primero importa un lote ATS.");
+      return;
+    }
+
+    try {
+      setError("");
+      setDownloading(true);
+
+      const res = await fetch(`${API_BASE}/ats/lote/${lote.id}/talon-resumen`);
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || "Error generando talón resumen.");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const filename = `Talon_Resumen_ATS_${lote.rucInformante}_${lote.mes}${lote.anio}.pdf`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message || "Error descargando talón resumen.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="w-full">
       <div className="mb-5 flex flex-col gap-2">
@@ -264,6 +298,14 @@ export default function AtsMasivoPanel({ ruc }: Props) {
                   className="rounded-lg bg-green-700 px-5 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {downloading ? "Generando..." : "Descargar XML ATS"}
+                </button>
+
+                <button
+                  onClick={descargarTalonResumen}
+                  disabled={downloading}
+                  className="ml-2 rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {downloading ? "Generando..." : "Descargar Talón Resumen"}
                 </button>
 
                 {errorsCount > 0 && (

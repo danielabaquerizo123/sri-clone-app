@@ -5,6 +5,7 @@ import {
   consultarLoteAts,
   listarLotesAts,
   descargarXmlAts,
+  descargarTalonResumenAts,
 } from "../controllers/ats.controller";
 
 const router = Router();
@@ -20,5 +21,6 @@ router.post("/:ruc/importar", upload.single("archivo"), importarAtsExcel);
 router.get("/:ruc/lotes", listarLotesAts);
 router.get("/lote/:loteId", consultarLoteAts);
 router.get("/lote/:loteId/xml", descargarXmlAts);
+router.get("/lote/:loteId/talon-resumen", descargarTalonResumenAts);
 
 export default router;

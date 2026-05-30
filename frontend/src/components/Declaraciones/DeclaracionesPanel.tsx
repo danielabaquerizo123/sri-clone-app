@@ -187,6 +187,32 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
     }
   };
 
+  const descargarDeclaracionPdf = async (declaracion: Declaracion) => {
+    try {
+      setMensaje("");
+      const response = await fetch(
+        `${apiUrl}/api/declaraciones/${rucUsuario}/declaracion/${declaracion.id}/pdf`
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || "No fue posible descargar el PDF.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${declaracion.formulario.replace(/[^\w.-]+/g, "_")}_${declaracion.anio}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : "Error descargando PDF.");
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <section className="bg-white rounded-[2rem] border shadow-sm p-7">
@@ -410,8 +436,16 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                         <td>{d.tipoDeclaracion}</td>
                         <td>{new Date(d.fechaEnvio).toLocaleDateString("es-EC")}</td>
                         <td>${Number(d.valorCancelado || 0).toFixed(2)}</td>
-                        <td className="text-blue-700 font-bold">PDF</td>
-                        <td className="text-blue-700 font-bold">Resumen</td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => descargarDeclaracionPdf(d)}
+                            className="font-bold text-blue-700 hover:underline"
+                          >
+                            PDF
+                          </button>
+                        </td>
+                        <td className="text-slate-400 font-bold">Resumen</td>
                       </tr>
                     ))}
                   </tbody>

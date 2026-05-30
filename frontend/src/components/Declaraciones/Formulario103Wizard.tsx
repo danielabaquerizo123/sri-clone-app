@@ -403,7 +403,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
           identificacion: {
             mes,
             anio,
-            ruc: rucUsuario,
+            ruc: periodoData?.ruc || rucUsuario,
             razonSocial: periodoData?.razonSocial || razonSocial,
           },
           preguntas: questions,
@@ -452,6 +452,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
   };
 
   const hasPayment = totals["999"] > 0;
+  const rucFinal = periodoData?.ruc || rucUsuario;
   const razonSocialFinal = periodoData?.razonSocial || razonSocial || "";
 
   return (
@@ -602,7 +603,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
           )}
 
           <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ReadBox label="RUC 201" value={rucUsuario} />
+            <ReadBox label="RUC 201" value={rucFinal} />
             <ReadBox label="Razón social 202" value={razonSocialFinal || "-"} />
           </div>
 
