@@ -31,6 +31,11 @@ import AnexosPanel from "../components/Anexos/AnexosPanel";
 
 interface DashboardViewProps {
   rucUsuario: string;
+  activeContribuyente: {
+    ruc: string;
+    razonSocial: string;
+  };
+  onActiveContribuyenteChange: (contribuyente: { ruc: string; razonSocial: string }) => void;
   onLogout: () => void;
 }
 
@@ -96,7 +101,12 @@ interface OpcionesRuc {
 
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-export default function DashboardView({ rucUsuario, onLogout }: DashboardViewProps) {
+export default function DashboardView({
+  rucUsuario,
+  activeContribuyente,
+  onActiveContribuyenteChange,
+  onLogout,
+}: DashboardViewProps) {
   const [activeTab, setActiveTab] = useState("inicio");
   const [funcOpen, setFuncOpen] = useState(true);
   const [rucOpen, setRucOpen] = useState(true);
@@ -124,6 +134,8 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
     [data]
   );
 
+  const rucActivo = activeContribuyente.ruc || rucUsuario;
+
   const actividadesList = useMemo(
     () =>
       data?.actividadesEconomicas
@@ -141,8 +153,8 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
       setError("");
 
       const [perfilRes, opcionesRes] = await Promise.all([
-        fetch(`${apiUrl}/api/contribuyentes/perfil/${rucUsuario}`),
-        fetch(`${apiUrl}/api/contribuyentes/${rucUsuario}/ruc/opciones`),
+        fetch(`${apiUrl}/api/contribuyentes/perfil/${rucActivo}`),
+        fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/opciones`),
       ]);
 
       if (!perfilRes.ok) throw new Error("No se pudo cargar el perfil.");
@@ -163,7 +175,7 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
 
   useEffect(() => {
     cargarDatos();
-  }, [rucUsuario]);
+  }, [rucActivo]);
 
   const updateField = (name: keyof ContribuyenteData, value: string | number) => {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -177,7 +189,7 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
       setError("");
       setSuccess("");
 
-      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucUsuario}/ruc/actualizar`, {
+      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/actualizar`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -205,7 +217,7 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
       setError("");
       setSuccess("");
 
-      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucUsuario}/ruc/reapertura`, {
+      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/reapertura`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ motivo: reaperturaMotivo, observaciones: reaperturaObs }),
@@ -233,7 +245,7 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
       setDownloadingPdf(true);
       setError("");
 
-      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucUsuario}/ruc/reimpresion/pdf`);
+      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/reimpresion/pdf`);
 
       if (!response.ok) throw new Error("No se pudo descargar el PDF.");
 
@@ -242,7 +254,7 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
 
       const link = document.createElement("a");
       link.href = url;
-      link.download = `RUC-${rucUsuario}.pdf`;
+      link.download = `RUC-${rucActivo}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -296,6 +308,12 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
         </div>
 
         <div className="flex items-center gap-5">
+          {rucUsuario !== rucActivo && (
+            <div className="hidden lg:flex flex-col text-right leading-tight border-r border-white/20 pr-5">
+              <span className="text-[10px] text-white/50 uppercase font-black">Usuario logueado</span>
+              <span className="text-[11px] text-white/70 font-mono">RUC {rucUsuario}</span>
+            </div>
+          )}
           <div className="hidden md:flex flex-col text-right leading-tight">
             <span className="text-xs font-black uppercase">{data.razonSocial}</span>
             <span className="text-[11px] text-white/60 font-mono">RUC {data.ruc}</span>
@@ -454,8 +472,8 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
 
           <div className="m-4 mt-8 rounded-3xl bg-gradient-to-br from-[#003565] to-[#0077b6] text-white p-5 shadow-lg">
             <Sparkles size={24} className="mb-3 text-blue-100" />
-            <h3 className="font-black text-sm">Sistema conectado</h3>
-            <p className="text-xs text-white/70 mt-1">Información actualizada del contribuyente.</p>
+            <h3 className="font-black text-sm">Contribuyente activo</h3>
+            <p className="text-xs text-white/70 mt-1">{data.ruc} - {data.razonSocial}</p>
           </div>
         </aside>
 
@@ -705,14 +723,19 @@ export default function DashboardView({ rucUsuario, onLogout }: DashboardViewPro
 
           {activeTab.startsWith("declaracion_") && (
   <DeclaracionesPanel
-    rucUsuario={rucUsuario}
+    rucUsuario={rucActivo}
     activeView={activeTab}
     razonSocial={data.razonSocial}
   />
 )}
 
 {activeTab.startsWith("anexo_") && (
-  <AnexosPanel rucUsuario={rucUsuario} activeView={activeTab} />
+  <AnexosPanel
+    rucUsuario={rucUsuario}
+    rucActivo={rucActivo}
+    activeView={activeTab}
+    onActiveContribuyenteChange={onActiveContribuyenteChange}
+  />
 )}
         </main>
       </div>

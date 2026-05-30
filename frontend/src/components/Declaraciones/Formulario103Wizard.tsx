@@ -91,8 +91,14 @@ const numericCasilleros = [
   "361",
   "312",
   "362",
+  "314",
+  "364",
   "322",
   "372",
+  "323",
+  "373",
+  "325",
+  "375",
   "332",
   "343",
   "393",
@@ -116,6 +122,7 @@ const numericCasilleros = [
   "475",
   "497",
   "498",
+  "890",
   "897",
   "898",
   "899",
@@ -150,7 +157,10 @@ const residentRows = [
   ["309", "359", "Publicidad y comunicación"],
   ["311", "361", "Liquidaciones de compra por nivel cultural o rusticidad"],
   ["312", "362", "Transferencia de bienes muebles de naturaleza corporal"],
+  ["314", "364", "Regalías, derechos de autor, marcas y patentes"],
   ["322", "372", "Seguros y reaseguros"],
+  ["323", "373", "Rendimientos financieros"],
+  ["325", "375", "Dividendos"],
   ["343", "393", "Pagos aplicables 1%"],
   ["344", "394", "Pagos aplicables 2%"],
   ["345", "395", "Otras retenciones aplicables 8%"],
@@ -222,6 +232,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     );
 
     const pagoPrevio = toNumber(form["898"]);
+    const pagoPrevioInformativo = toNumber(form["890"]);
     const interes = toNumber(form["903"]);
     const multa = toNumber(form["904"]);
     const notasCredito = toNumber(form["907"]);
@@ -236,6 +247,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
       "497": basesExterior,
       "498": retenidoExterior,
       "499": impuesto,
+      "890": pagoPrevioInformativo,
       "902": impuestoAPagar,
       "999": totalPagado,
     };
@@ -400,6 +412,11 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
         datosJSON: {
           paso: "Formulario 103 Wizard",
           resumen: periodoData?.resumen || null,
+          sugerenciasATS: periodoData
+            ? Object.fromEntries(
+                numericCasilleros.map((key) => [key, Number(periodoData.casilleros?.[key] || 0)])
+              )
+            : null,
           identificacion: {
             mes,
             anio,
@@ -418,6 +435,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
             497: totals["497"],
             498: totals["498"],
             499: totals["499"],
+            890: totals["890"],
             902: totals["902"],
             999: totals["999"],
           },
@@ -719,6 +737,11 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
               <SummaryRow label="Total a pagar" value={totals["999"]} strong />
 
               <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <MoneyField
+                  label="Pago previo 890"
+                  value={form["890"]}
+                  onChange={(value) => updateForm("890", value)}
+                />
                 <MoneyField
                   label="Interés 903"
                   value={form["903"]}

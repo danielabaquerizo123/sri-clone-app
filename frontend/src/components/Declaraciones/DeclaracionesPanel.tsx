@@ -187,7 +187,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
     }
   };
 
-  const descargarDeclaracionPdf = async (declaracion: Declaracion) => {
+  const descargarDeclaracionPdf = async (declaracion: Declaracion, tipo: "formulario" | "resumen" = "formulario") => {
     try {
       setMensaje("");
       const response = await fetch(
@@ -203,7 +203,8 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${declaracion.formulario.replace(/[^\w.-]+/g, "_")}_${declaracion.anio}.pdf`;
+      const prefijo = tipo === "resumen" ? "Resumen" : "Formulario";
+      link.download = `${prefijo}_${declaracion.formulario.replace(/[^\w.-]+/g, "_")}_${declaracion.anio}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -445,7 +446,15 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                             PDF
                           </button>
                         </td>
-                        <td className="text-slate-400 font-bold">Resumen</td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => descargarDeclaracionPdf(d, "resumen")}
+                            className="font-bold text-blue-700 hover:underline"
+                          >
+                            Resumen
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

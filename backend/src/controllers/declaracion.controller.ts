@@ -21,6 +21,10 @@ const mesesMap: Record<string, string> = {
   "12": "Diciembre",
 };
 
+const mesesMapInverso = Object.fromEntries(
+  Object.entries(mesesMap).map(([codigo, nombre]) => [nombre.toUpperCase(), codigo])
+);
+
 const retencionToCasillero: Record<string, { base: string; retenido?: string }> = {
   "302": { base: "302", retenido: "352" },
   "303": { base: "303", retenido: "353" },
@@ -30,7 +34,10 @@ const retencionToCasillero: Record<string, { base: string; retenido?: string }> 
   "309": { base: "309", retenido: "359" },
   "311": { base: "311", retenido: "361" },
   "312": { base: "312", retenido: "362" },
+  "314": { base: "314", retenido: "364" },
   "322": { base: "322", retenido: "372" },
+  "323": { base: "323", retenido: "373" },
+  "325": { base: "325", retenido: "375" },
   "332": { base: "332" },
   "343": { base: "343", retenido: "393" },
   "344": { base: "344", retenido: "394" },
@@ -49,6 +56,12 @@ function round2(value: number) {
 
 function add(casilleros: Record<string, number>, key: string, value: number) {
   casilleros[key] = round2((casilleros[key] || 0) + value);
+}
+
+function mesCodigoFromValue(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (/^(0?[1-9]|1[0-2])$/.test(raw)) return raw.padStart(2, "0");
+  return mesesMapInverso[raw.toUpperCase()] || undefined;
 }
 
 function money(value: unknown) {
@@ -208,10 +221,17 @@ function previousMonth(anio: number, mesCodigo: string) {
 export const crearDeclaracion = async (req: Request, res: Response) => {
   try {
     const { ruc } = req.params;
+    const anio = Number(req.body.anio);
+    const mesCodigo = mesCodigoFromValue(req.body.mes || asObject(req.body.datosJSON).identificacion?.mes);
+    const usaContribuyenteOperativo =
+      String(req.body.formulario || "").includes("103") ||
+      String(req.body.formulario || "").includes("104");
 
-    const contribuyente = await prisma.contribuyente.findUnique({
-      where: { ruc },
-    });
+    const contribuyente = usaContribuyenteOperativo
+      ? await contribuyenteParaConsulta(ruc, anio, mesCodigo)
+      : await prisma.contribuyente.findUnique({
+          where: { ruc },
+        });
 
     if (!contribuyente) {
       return res.status(404).json({
@@ -224,7 +244,7 @@ export const crearDeclaracion = async (req: Request, res: Response) => {
         formulario: req.body.formulario,
         tipoImpuesto: req.body.tipoImpuesto,
         periodoFiscal: req.body.periodoFiscal,
-        anio: Number(req.body.anio),
+        anio,
         mes: req.body.mes || null,
         semestre: req.body.semestre || null,
 
@@ -395,8 +415,14 @@ export const consultarFormulario103 = async (req: Request, res: Response) => {
       "361": 0,
       "312": 0,
       "362": 0,
+      "314": 0,
+      "364": 0,
       "322": 0,
       "372": 0,
+      "323": 0,
+      "373": 0,
+      "325": 0,
+      "375": 0,
       "332": 0,
       "343": 0,
       "393": 0,
@@ -411,6 +437,10 @@ export const consultarFormulario103 = async (req: Request, res: Response) => {
       "497": 0,
       "498": 0,
       "499": 0,
+      "890": 0,
+      "897": 0,
+      "898": 0,
+      "899": 0,
       "902": 0,
       "903": 0,
       "904": 0,
@@ -482,7 +512,10 @@ export const consultarFormulario103 = async (req: Request, res: Response) => {
       "309",
       "311",
       "312",
+      "314",
       "322",
+      "323",
+      "325",
       "332",
       "343",
       "344",
@@ -499,7 +532,10 @@ export const consultarFormulario103 = async (req: Request, res: Response) => {
       "359",
       "361",
       "362",
+      "364",
       "372",
+      "373",
+      "375",
       "393",
       "394",
       "395",
@@ -624,12 +660,18 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
       "406": 0,
       "407": 0,
       "408": 0,
+      "421": 0,
+      "422": 0,
       "429": 0,
       "431": 0,
+      "480": 0,
+      "481": 0,
+      "484": 0,
       "500": 0,
       "501": 0,
       "502": 0,
       "507": 0,
+      "518": 0,
       "531": 0,
       "532": 0,
       "563": 0,
@@ -645,6 +687,8 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
       "609": 0,
       "615": 0,
       "617": 0,
+      "620": 0,
+      "699": 0,
       "721": 0,
       "723": 0,
       "725": 0,
@@ -652,6 +696,10 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
       "729": 0,
       "731": 0,
       "800": 0,
+      "890": 0,
+      "897": 0,
+      "898": 0,
+      "899": 0,
       "902": 0,
       "903": 0,
       "904": 0,
@@ -734,7 +782,7 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
       casilleros["431"];
     const ventasConDerecho = casilleros["401"] + casilleros["405"] + casilleros["407"] + casilleros["408"];
 
-    casilleros["429"] = round2(casilleros["402"] + casilleros["404"] + casilleros["406"]);
+    casilleros["429"] = round2(casilleros["402"] + casilleros["404"] + casilleros["406"] + casilleros["422"]);
     casilleros["563"] = totalVentas > 0 ? round2((ventasConDerecho / totalVentas) * 100) : 0;
     casilleros["564"] = round2(casilleros["501"] * (casilleros["563"] / 100));
     casilleros["602"] = casilleros["564"];
@@ -752,6 +800,8 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
 
     casilleros["615"] = saldoCompras;
     casilleros["617"] = saldoRetenciones;
+    casilleros["620"] = round2(casilleros["601"] - casilleros["602"]);
+    casilleros["699"] = casilleros["902"];
     casilleros["999"] = round2(casilleros["902"] + casilleros["903"] + casilleros["904"]);
 
     return res.json({

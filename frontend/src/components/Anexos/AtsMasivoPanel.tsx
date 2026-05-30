@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 
 type Props = {
-  ruc: string;
+  rucAcceso: string;
+  rucActivo: string;
+  onActiveContribuyenteChange: (contribuyente: { ruc: string; razonSocial: string }) => void;
 };
 
 type AtsIssue = {
@@ -59,7 +61,11 @@ const steps = [
   "Generar XML",
 ];
 
-export default function AtsMasivoPanel({ ruc }: Props) {
+export default function AtsMasivoPanel({
+  rucAcceso,
+  rucActivo,
+  onActiveContribuyenteChange,
+}: Props) {
   const [archivo, setArchivo] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -88,10 +94,10 @@ export default function AtsMasivoPanel({ ruc }: Props) {
       return;
     }
 
-    if (!ruc) {
-      setError("No se encontró el RUC del contribuyente.");
-      return;
-    }
+      if (!rucAcceso) {
+        setError("No se encontró el RUC del contribuyente.");
+        return;
+      }
 
     try {
       setError("");
@@ -100,7 +106,7 @@ export default function AtsMasivoPanel({ ruc }: Props) {
       const formData = new FormData();
       formData.append("archivo", archivo);
 
-      const res = await fetch(`${API_BASE}/ats/${ruc}/importar`, {
+      const res = await fetch(`${API_BASE}/ats/${rucAcceso}/importar`, {
         method: "POST",
         body: formData,
       });
@@ -112,6 +118,12 @@ export default function AtsMasivoPanel({ ruc }: Props) {
       }
 
       setResponse(data);
+      if (data.contribuyenteDetectado?.ruc) {
+        onActiveContribuyenteChange({
+          ruc: data.contribuyenteDetectado.ruc,
+          razonSocial: data.contribuyenteDetectado.razonSocial,
+        });
+      }
       setActiveStep(0);
     } catch (err: any) {
       setError(err.message || "Error inesperado importando archivo.");
@@ -199,6 +211,9 @@ export default function AtsMasivoPanel({ ruc }: Props) {
         </h2>
         <p className="text-sm text-gray-500">
           Sube el Excel, revisa el lote procesado y genera el XML listo para validar.
+        </p>
+        <p className="text-xs font-semibold text-gray-500">
+          Usuario logueado: {rucAcceso} · Contribuyente activo: {rucActivo}
         </p>
       </div>
 

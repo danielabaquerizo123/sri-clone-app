@@ -70,12 +70,18 @@ const numericCasilleros = [
   "406",
   "407",
   "408",
+  "421",
+  "422",
   "429",
   "431",
+  "480",
+  "481",
+  "484",
   "500",
   "501",
   "502",
   "507",
+  "518",
   "531",
   "532",
   "563",
@@ -91,6 +97,8 @@ const numericCasilleros = [
   "609",
   "615",
   "617",
+  "620",
+  "699",
   "721",
   "723",
   "725",
@@ -98,6 +106,10 @@ const numericCasilleros = [
   "729",
   "731",
   "800",
+  "890",
+  "897",
+  "898",
+  "899",
   "902",
   "903",
   "904",
@@ -133,13 +145,18 @@ const ventasRows = [
   ["405", "406", "Ventas locales tarifa 0% con derecho a crédito tributario"],
   ["407", "", "Exportaciones de bienes"],
   ["408", "", "Exportaciones de servicios"],
+  ["421", "422", "Ventas tarifa diferente de cero - casos especiales"],
   ["431", "", "Transferencias no objeto o exentas"],
+  ["480", "", "Transferencias gravadas a contado este mes"],
+  ["481", "", "Transferencias gravadas a crédito este mes"],
+  ["484", "", "Impuesto a liquidar en este mes"],
 ];
 
 const comprasRows = [
   ["500", "501", "Adquisiciones gravadas con derecho a crédito tributario"],
   ["502", "", "Adquisiciones gravadas sin derecho a crédito tributario"],
   ["507", "", "Adquisiciones tarifa 0%"],
+  ["518", "", "Adquisiciones realizadas a contribuyentes RISE"],
   ["531", "", "Adquisiciones no objeto de IVA"],
   ["532", "", "Adquisiciones exentas de IVA"],
 ];
@@ -158,7 +175,13 @@ const resumenRows = [
   ["609", "Retenciones IVA recibidas"],
   ["615", "Saldo crédito tributario próximo mes por adquisiciones"],
   ["617", "Saldo crédito tributario próximo mes por retenciones"],
+  ["620", "Saldo impuesto antes de imputaciones"],
+  ["699", "Total impuesto a pagar antes de intereses y multas"],
   ["800", "Otros valores imputables"],
+  ["890", "Pago previo informativo"],
+  ["897", "Pago previo imputado a intereses"],
+  ["898", "Pago previo imputado a impuesto"],
+  ["899", "Pago previo imputado a multas"],
 ];
 
 const retencionesRows = [
@@ -207,18 +230,22 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
   });
 
   const totals = useMemo(() => {
-    const impuestoGenerado = toNumber(form["402"]) + toNumber(form["404"]) + toNumber(form["406"]);
+    const impuestoGenerado =
+      toNumber(form["402"]) + toNumber(form["404"]) + toNumber(form["406"]) + toNumber(form["422"]);
     const creditoCompras = toNumber(form["564"]);
     const creditoAnteriorCompras = toNumber(form["605"]);
     const creditoAnteriorRetenciones = toNumber(form["606"]);
     const retencionesRecibidas = toNumber(form["609"]);
+    const pagoPrevioImpuesto = toNumber(form["898"]);
     const interes = toNumber(form["903"]);
     const multa = toNumber(form["904"]);
+    const pagoPrevioInteres = toNumber(form["897"]);
+    const pagoPrevioMulta = toNumber(form["899"]);
 
     const creditoDisponible =
       creditoCompras + creditoAnteriorCompras + creditoAnteriorRetenciones + retencionesRecibidas;
     const impuestoCausado = Math.max(impuestoGenerado - creditoCompras, 0);
-    const impuestoAPagar = Math.max(impuestoGenerado - creditoDisponible, 0);
+    const impuestoAPagar = Math.max(impuestoGenerado - creditoDisponible - pagoPrevioImpuesto, 0);
     const saldoCompras = Math.max(creditoCompras + creditoAnteriorCompras - impuestoGenerado, 0);
     const impuestoLuegoCreditoCompras = Math.max(
       impuestoGenerado - creditoCompras - creditoAnteriorCompras,
@@ -234,8 +261,10 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       "601": impuestoCausado,
       "615": saldoCompras,
       "617": saldoRetenciones,
+      "620": impuestoAPagar,
+      "699": impuestoAPagar,
       "902": impuestoAPagar,
-      "999": impuestoAPagar + interes + multa,
+      "999": Math.max(impuestoAPagar + Math.max(interes - pagoPrevioInteres, 0) + Math.max(multa - pagoPrevioMulta, 0), 0),
     };
   }, [form]);
 
@@ -411,6 +440,8 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
         601: totals["601"],
         615: totals["615"],
         617: totals["617"],
+        620: totals["620"],
+        699: totals["699"],
         902: totals["902"],
         999: totals["999"],
       };
@@ -440,10 +471,15 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
             mes,
             semestre,
             anio,
-            ruc: rucUsuario,
+            ruc: periodoData?.ruc || rucUsuario,
             razonSocial: periodoData?.razonSocial || razonSocial,
           },
           preguntas: questions,
+          sugerenciasATS: periodoData
+            ? Object.fromEntries(
+                numericCasilleros.map((key) => [key, Number(periodoData.casilleros?.[key] || 0)])
+              )
+            : null,
           casilleros,
           formaPago: {
             tipo: form.formaPago,
@@ -475,6 +511,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     }
   };
 
+  const rucFinal = periodoData?.ruc || rucUsuario;
   const razonSocialFinal = periodoData?.razonSocial || razonSocial || "";
   const hasPayment = totals["999"] > 0;
 
@@ -618,7 +655,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
           )}
 
           <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ReadBox label="RUC 201" value={rucUsuario} />
+            <ReadBox label="RUC 201" value={rucFinal} />
             <ReadBox label="Razón social 202" value={razonSocialFinal || "-"} />
           </div>
 
@@ -682,7 +719,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
             {openSections.resumen && (
               <div className="grid grid-cols-1 gap-4 border-t p-4 md:grid-cols-2 xl:grid-cols-4">
                 {resumenRows.map(([code, label]) => {
-                  const calculated = code === "601" || code === "615" || code === "617";
+                  const calculated = code === "601" || code === "615" || code === "617" || code === "620" || code === "699";
                   return calculated ? (
                     <TotalBox key={code} label={`${code} ${label}`} value={totals[code as keyof typeof totals]} />
                   ) : (

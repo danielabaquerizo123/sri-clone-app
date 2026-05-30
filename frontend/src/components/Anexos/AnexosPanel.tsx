@@ -8,7 +8,9 @@ import {
 
 interface Props {
   rucUsuario: string;
+  rucActivo: string;
   activeView: string;
+  onActiveContribuyenteChange: (contribuyente: { ruc: string; razonSocial: string }) => void;
 }
 
 interface Anexo {
@@ -24,7 +26,12 @@ interface Anexo {
 
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-export default function AnexosPanel({ rucUsuario, activeView }: Props) {
+export default function AnexosPanel({
+  rucUsuario,
+  rucActivo,
+  activeView,
+  onActiveContribuyenteChange,
+}: Props) {
   const active =
     activeView === "anexo_envio"
       ? "envio"
@@ -74,21 +81,21 @@ export default function AnexosPanel({ rucUsuario, activeView }: Props) {
   });
 
   const cargarAnexos = async () => {
-    const res = await fetch(`${apiUrl}/api/anexos/${rucUsuario}/consultar`);
+    const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/consultar`);
     const data = await res.json();
     setAnexos(Array.isArray(data) ? data : []);
   };
 
   useEffect(() => {
     cargarAnexos();
-  }, [rucUsuario]);
+  }, [rucActivo]);
 
   const enviarAnexo = async () => {
     try {
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucUsuario}/enviar`, {
+      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/enviar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...anexoForm, datosJSON: anexoForm }),
@@ -111,7 +118,7 @@ export default function AnexosPanel({ rucUsuario, activeView }: Props) {
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucUsuario}/beneficiario-pension`, {
+      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/beneficiario-pension`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(beneficiarioForm),
@@ -133,7 +140,7 @@ export default function AnexosPanel({ rucUsuario, activeView }: Props) {
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucUsuario}/cargas-familiares`, {
+      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/cargas-familiares`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -161,7 +168,7 @@ export default function AnexosPanel({ rucUsuario, activeView }: Props) {
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucUsuario}/cargas-familiares`, {
+      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/cargas-familiares`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cargaForm),
@@ -200,7 +207,13 @@ export default function AnexosPanel({ rucUsuario, activeView }: Props) {
         </div>
       )}
 
-                {active === "atsMasivo" && <AtsMasivoPanel ruc={rucUsuario} />}
+                {active === "atsMasivo" && (
+                  <AtsMasivoPanel
+                    rucAcceso={rucUsuario}
+                    rucActivo={rucActivo}
+                    onActiveContribuyenteChange={onActiveContribuyenteChange}
+                  />
+                )}
 
           {active === "envio" && (
             <Card
