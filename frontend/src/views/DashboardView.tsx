@@ -148,8 +148,12 @@ export default function DashboardView({
   );
 
   const cargarDatos = async () => {
+    const primeraCarga = !data;
+
     try {
-      setLoading(true);
+      if (primeraCarga) {
+        setLoading(true);
+      }
       setError("");
 
       const [perfilRes, opcionesRes] = await Promise.all([
@@ -169,7 +173,9 @@ export default function DashboardView({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error cargando información.");
     } finally {
-      setLoading(false);
+      if (primeraCarga) {
+        setLoading(false);
+      }
     }
   };
 
