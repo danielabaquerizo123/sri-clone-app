@@ -275,6 +275,43 @@ function buildFormasPago(
   };
 }
 
+const VALID_ATS_PAYMENT_CODES = new Set(["01", "15", "16", "17", "18", "19", "20", "21"]);
+const CLIENT_ID_TYPES_WITH_CONDITIONAL_NAME = new Set(["06"]);
+
+function cleanPaymentCodes(formaPago1?: string | null, formaPago2?: string | null) {
+  return [formaPago1, formaPago2]
+    .map((x) => clean(x))
+    .filter((x) => VALID_ATS_PAYMENT_CODES.has(x));
+}
+
+function ventaRequiresClientName(tpIdCliente: string): boolean {
+  // Regla ATS ventas: tipoCliente y denoCli se informan solo para identificación pasaporte/exterior.
+  return CLIENT_ID_TYPES_WITH_CONDITIONAL_NAME.has(tpIdCliente);
+}
+
+function buildFormasCobroVenta(v: any) {
+  const totalOperacion = ventaTotalFormaPago(v);
+  const formas = cleanPaymentCodes(v.formaPago1, v.formaPago2);
+
+  if (formas.length > 0) {
+    return {
+      formaPago: formas,
+    };
+  }
+
+  const fallback = totalOperacion <= 500 ? "01" : "20";
+
+  console.info(
+    `[ATS][VENTAS] Forma de cobro no informada o inválida. ` +
+      `Se aplicó fallback ${fallback} para fila ${v.filaExcel || "-"}, ` +
+      `cliente ${clean(v.noIdentificacion) || "-"}, total ${money(totalOperacion)}.`
+  );
+
+  return {
+    formaPago: [fallback],
+  };
+}
+
 function buildCompra(c: any) {
   const retencionTieneDatos =
     hasValue(c.establecimientoRet) &&
@@ -359,12 +396,17 @@ function buildCompra(c: any) {
 }
 
 function buildVenta(v: any) {
+  const tpIdCliente = tipoIdCliente(v.noIdentificacion, v.codigoIdentif);
+  const emitClientName = ventaRequiresClientName(tpIdCliente);
+
   return removeUndefinedDeep({
-    tpIdCliente: tipoIdCliente(v.noIdentificacion, v.codigoIdentif),
+    tpIdCliente,
     idCliente: clean(v.noIdentificacion),
     parteRelVtas: siNo(v.parteRelacionada),
-    tipoCliente: clean(v.tipoCliente) || undefined,
-    denoCli: cleanTributaryName(v.razonSocialCliente, "CONSUMIDOR FINAL") || undefined,
+    tipoCliente: emitClientName ? clean(v.tipoCliente) || undefined : undefined,
+    denoCli: emitClientName
+      ? cleanTributaryName(v.razonSocialCliente, "CONSUMIDOR FINAL") || undefined
+      : undefined,
 
     tipoComprobante: clean(v.tipoComprobante),
     tipoEmision: tipoEmision(v.tipoEmisionComprobante),
@@ -379,7 +421,7 @@ function buildVenta(v: any) {
     valorRetIva: money(v.valorRetenidoIva),
     valorRetRenta: money(v.valorRetenidoFuente),
 
-    formasDePago: buildFormasPago(ventaTotalFormaPago(v), v.formaPago1, v.formaPago2),
+    formasDePago: buildFormasCobroVenta(v),
   });
 }
 
