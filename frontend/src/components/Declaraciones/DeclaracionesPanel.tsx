@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   FileSpreadsheet,
   Search,
@@ -27,6 +27,7 @@ interface Declaracion {
   tipoDeclaracion: string;
   estado: string;
   valorCancelado: string | number;
+  createdAt?: string;
   fechaEnvio: string;
   linkFormulario?: string | null;
   linkTalonResumen?: string | null;
@@ -61,6 +62,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [declaraciones, setDeclaraciones] = useState<Declaracion[]>([]);
+  const [busquedaEjecutada, setBusquedaEjecutada] = useState(false);
 
   const [form, setForm] = useState({
     tipoImpuesto: "Formulario de Impuesto al Valor Agregado (IVA)",
@@ -104,30 +106,70 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
   const isSemestral = form.periodoFiscal === "Semestral";
 
   const cargarDeclaraciones = async () => {
-    const params = new URLSearchParams({
-      tipoImpuesto: filtros.tipoImpuesto,
-      anioDesde: String(filtros.anioDesde),
-      anioHasta: String(filtros.anioHasta),
-      estado: filtros.estado,
-    });
+    try {
+      setLoading(true);
+      setMensaje("");
 
-    const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/consultar?${params}`);
-    const data = await res.json();
-    setDeclaraciones(Array.isArray(data) ? data : []);
+      const params = new URLSearchParams({
+        tipoImpuesto: filtros.tipoImpuesto,
+        anioDesde: String(filtros.anioDesde),
+        anioHasta: String(filtros.anioHasta),
+        estado: filtros.estado,
+      });
+
+      const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/consultar?${params}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "No fue posible consultar declaraciones.");
+      }
+
+      setDeclaraciones(Array.isArray(data) ? data : []);
+      setBusquedaEjecutada(true);
+    } catch (err) {
+      setDeclaraciones([]);
+      setBusquedaEjecutada(true);
+      setMensaje(err instanceof Error ? err.message : "Error consultando declaraciones.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => {
-    cargarDeclaraciones();
-  }, [rucUsuario]);
+  const mesIndex = (value?: string | null) => {
+    if (!value) return -1;
+    const normalized = value.toLowerCase();
+    return meses.findIndex((mes) => mes.toLowerCase() === normalized);
+  };
 
   const declaracionesFiltradas = useMemo(() => {
     return declaraciones.filter((d) => {
       if (filtros.numeroAdhesion && !d.numeroAdhesion.includes(filtros.numeroAdhesion)) {
         return false;
       }
+      const declaracionMes = mesIndex(d.mes);
+      const desde = mesIndex(filtros.mesDesde);
+      const hasta = mesIndex(filtros.mesHasta);
+
+      if (declaracionMes >= 0 && desde >= 0 && hasta >= 0) {
+        return declaracionMes >= desde && declaracionMes <= hasta;
+      }
+
       return true;
     });
-  }, [declaraciones, filtros.numeroAdhesion]);
+  }, [declaraciones, filtros.numeroAdhesion, filtros.mesDesde, filtros.mesHasta]);
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    const pad = (num: number) => String(num).padStart(2, "0");
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  };
+
+  const estadoLabel = (estado?: string | null) => {
+    const value = String(estado || "SIN ESTADO").trim();
+    return value ? value.toUpperCase() : "SIN ESTADO";
+  };
 
   const updateForm = (key: string, value: any) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -402,16 +444,18 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                 <Field label="Estado de la declaración">
                   <select className="input" value={filtros.estado} onChange={(e) => setFiltros({ ...filtros, estado: e.target.value })}>
                     <option>Todas</option>
-                    <option>Aceptadas</option>
-                    <option>Procesadas</option>
-                    <option>Rechazadas</option>
+                    <option>Borrador</option>
+                    <option>Procesada</option>
+                    <option>Enviada</option>
+                    <option>Aceptada</option>
+                    <option>Rechazada</option>
                   </select>
                 </Field>
               </div>
 
-              <button onClick={cargarDeclaraciones} className="btn-secondary mt-5">
-                <Search size={18} />
-                Buscar
+              <button onClick={cargarDeclaraciones} disabled={loading} className="btn-secondary mt-5 disabled:opacity-60">
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
+                {loading ? "Buscando..." : "Buscar"}
               </button>
 
               <div className="mt-7 overflow-x-auto">
@@ -422,8 +466,9 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                       <th>Impuesto</th>
                       <th>Período</th>
                       <th>Tipo</th>
-                      <th>Fecha</th>
+                      <th>Fecha y hora</th>
                       <th>Valor</th>
+                      <th>Estado</th>
                       <th>Formulario</th>
                       <th>Talón</th>
                     </tr>
@@ -435,13 +480,18 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                         <td>{d.tipoImpuesto}</td>
                         <td>{d.periodoFiscal} - {d.mes || d.semestre || d.anio}</td>
                         <td>{d.tipoDeclaracion}</td>
-                        <td>{new Date(d.fechaEnvio).toLocaleDateString("es-EC")}</td>
+                        <td>{formatDateTime(d.createdAt || d.fechaEnvio)}</td>
                         <td>${Number(d.valorCancelado || 0).toFixed(2)}</td>
+                        <td>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+                            {estadoLabel(d.estado)}
+                          </span>
+                        </td>
                         <td>
                           <button
                             type="button"
                             onClick={() => descargarDeclaracionPdf(d)}
-                            className="font-bold text-blue-700 hover:underline"
+                            className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
                           >
                             PDF
                           </button>
@@ -450,7 +500,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                           <button
                             type="button"
                             onClick={() => descargarDeclaracionPdf(d, "resumen")}
-                            className="font-bold text-blue-700 hover:underline"
+                            className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-200"
                           >
                             Resumen
                           </button>
@@ -461,7 +511,11 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                 </table>
 
                 {declaracionesFiltradas.length === 0 && (
-                  <p className="text-sm text-slate-500 mt-5">No hay resultados.</p>
+                  <p className="text-sm text-slate-500 mt-5">
+                    {busquedaEjecutada
+                      ? "No existen resultados para los filtros seleccionados."
+                      : "No existen resultados para mostrar. Seleccione filtros y presione Buscar."}
+                  </p>
                 )}
               </div>
             </Card>
