@@ -293,6 +293,8 @@ export default function DashboardView({
   }
 
   const isActivo = data.estadoRuc?.toUpperCase() === "ACTIVO";
+  const displayRuc = activeContribuyente.ruc || data.ruc;
+  const displayRazonSocial = activeContribuyente.razonSocial || data.razonSocial;
 
   return (
     <div className="min-h-screen bg-[#eef3f8] text-slate-800 overflow-hidden">
@@ -315,8 +317,8 @@ export default function DashboardView({
             </div>
           )}
           <div className="hidden md:flex flex-col text-right leading-tight">
-            <span className="text-xs font-black uppercase">{data.razonSocial}</span>
-            <span className="text-[11px] text-white/60 font-mono">RUC {data.ruc}</span>
+            <span className="text-xs font-black uppercase">{displayRazonSocial}</span>
+            <span className="text-[11px] text-white/60 font-mono">RUC {displayRuc}</span>
           </div>
           <button onClick={onLogout} className="p-2 rounded-xl hover:bg-white/10 text-red-200 hover:text-red-100">
             <LogOut size={18} />
@@ -529,8 +531,8 @@ export default function DashboardView({
                 <div className="xl:col-span-2 bg-white rounded-[2rem] border shadow-sm p-6">
                   <h2 className="font-black text-[#003565] mb-5">Resumen del contribuyente</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Info label="RUC" value={data.ruc} />
-                    <Info label="Razón social" value={data.razonSocial} />
+                    <Info label="RUC" value={displayRuc} />
+                    <Info label="Razón social" value={displayRazonSocial} />
                     <Info label="Tipo contribuyente" value={data.tipoContribuyente} />
                     <Info label="Estado tributario" value={data.estadoTributario} />
                     <Info label="Provincia" value={data.provincia} />

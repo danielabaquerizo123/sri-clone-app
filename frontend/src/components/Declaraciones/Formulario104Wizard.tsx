@@ -232,7 +232,17 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
   const totals = useMemo(() => {
     const impuestoGenerado =
       toNumber(form["402"]) + toNumber(form["404"]) + toNumber(form["406"]) + toNumber(form["422"]);
-    const creditoCompras = toNumber(form["564"]);
+    const totalVentas =
+      toNumber(form["401"]) +
+      toNumber(form["403"]) +
+      toNumber(form["405"]) +
+      toNumber(form["407"]) +
+      toNumber(form["408"]) +
+      toNumber(form["431"]);
+    const ventasConDerecho =
+      toNumber(form["401"]) + toNumber(form["405"]) + toNumber(form["407"]) + toNumber(form["408"]);
+    const factorProporcionalidad = totalVentas > 0 ? (ventasConDerecho / totalVentas) * 100 : 0;
+    const creditoCompras = toNumber(form["501"]) * (factorProporcionalidad / 100);
     const creditoAnteriorCompras = toNumber(form["605"]);
     const creditoAnteriorRetenciones = toNumber(form["606"]);
     const retencionesRecibidas = toNumber(form["609"]);
@@ -258,7 +268,10 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
 
     return {
       "429": impuestoGenerado,
+      "563": factorProporcionalidad,
+      "564": creditoCompras,
       "601": impuestoCausado,
+      "602": creditoCompras,
       "615": saldoCompras,
       "617": saldoRetenciones,
       "620": impuestoAPagar,
@@ -437,7 +450,10 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
             .map(([key, value]) => [key, toNumber(value)])
         ),
         429: totals["429"],
+        563: totals["563"],
+        564: totals["564"],
         601: totals["601"],
+        602: totals["602"],
         615: totals["615"],
         617: totals["617"],
         620: totals["620"],
@@ -719,9 +735,22 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
             {openSections.resumen && (
               <div className="grid grid-cols-1 gap-4 border-t p-4 md:grid-cols-2 xl:grid-cols-4">
                 {resumenRows.map(([code, label]) => {
-                  const calculated = code === "601" || code === "615" || code === "617" || code === "620" || code === "699";
+                  const calculated =
+                    code === "563" ||
+                    code === "564" ||
+                    code === "601" ||
+                    code === "602" ||
+                    code === "615" ||
+                    code === "617" ||
+                    code === "620" ||
+                    code === "699";
                   return calculated ? (
-                    <TotalBox key={code} label={`${code} ${label}`} value={totals[code as keyof typeof totals]} />
+                    <TotalBox
+                      key={code}
+                      label={`${code} ${label}`}
+                      value={totals[code as keyof typeof totals]}
+                      format={code === "563" ? "percent" : "money"}
+                    />
                   ) : (
                     <MoneyField
                       key={code}
@@ -1108,11 +1137,23 @@ function CasilleroPair({
   );
 }
 
-function TotalBox({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
+function TotalBox({
+  label,
+  value,
+  strong = false,
+  format = "money",
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  format?: "money" | "percent";
+}) {
   return (
     <div className={`rounded-2xl border p-4 ${strong ? "bg-[#003565] text-white" : "bg-slate-50 text-slate-700"}`}>
       <p className={`text-xs font-black uppercase ${strong ? "text-white/70" : "text-slate-400"}`}>{label}</p>
-      <p className="mt-1 text-2xl font-black">${money(value)}</p>
+      <p className="mt-1 text-2xl font-black">
+        {format === "percent" ? `${money(value)}%` : `$${money(value)}`}
+      </p>
     </div>
   );
 }
