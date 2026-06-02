@@ -232,8 +232,9 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
   const descargarDeclaracionPdf = async (declaracion: Declaracion, tipo: "formulario" | "resumen" = "formulario") => {
     try {
       setMensaje("");
+      const query = tipo === "resumen" ? "?tipo=resumen" : "";
       const response = await fetch(
-        `${apiUrl}/api/declaraciones/${rucUsuario}/declaracion/${declaracion.id}/pdf`
+        `${apiUrl}/api/declaraciones/${rucUsuario}/declaracion/${declaracion.id}/pdf${query}`
       );
 
       if (!response.ok) {

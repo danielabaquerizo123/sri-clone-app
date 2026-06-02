@@ -73,6 +73,16 @@ function fechaLocal(value: Date | string | null | undefined) {
   return new Date(value).toLocaleDateString("es-EC");
 }
 
+function fechaHoraLocal(value: Date | string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const pad = (num: number) => String(num).padStart(2, "0");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 function filenameSafe(value: string) {
   return value.replace(/[^\w.-]+/g, "_");
 }
@@ -150,6 +160,295 @@ function pdfTable(
   });
 
   doc.y = y + 4;
+}
+
+type TalonRow = [string, string | number, boolean?];
+
+const casilleroLabels103: Record<string, string> = {
+  "302": "Honorarios profesionales y dietas",
+  "303": "Predomina intelecto",
+  "304": "Predomina mano de obra",
+  "307": "Servicios predomina intelecto no relacionados",
+  "311": "Servicios predomina mano de obra",
+  "314": "Servicios entre sociedades",
+  "322": "Pagos locales",
+  "323": "Pagos al exterior",
+  "325": "Otros pagos sujetos a retención",
+  "332": "Retención en la fuente de IVA",
+  "343": "Dividendos",
+  "344": "Rendimientos financieros",
+  "345": "Loterías, rifas, apuestas y similares",
+  "346": "Otros conceptos",
+  "352": "Retención honorarios profesionales",
+  "353": "Retención predomina intelecto",
+  "354": "Retención predomina mano de obra",
+  "357": "Retención servicios intelecto no relacionados",
+  "361": "Retención servicios mano de obra",
+  "364": "Retención servicios entre sociedades",
+  "372": "Retención pagos locales",
+  "373": "Retención pagos al exterior",
+  "375": "Retención otros pagos",
+  "393": "Retención dividendos",
+  "394": "Retención rendimientos financieros",
+  "395": "Retención loterías, rifas, apuestas y similares",
+  "396": "Retención otros conceptos",
+  "499": "Total retenciones",
+  "890": "Pago previo",
+  "897": "Interés por mora",
+  "898": "Multa",
+  "899": "Total impuesto a pagar",
+  "902": "Impuesto causado",
+  "903": "Interés",
+  "904": "Multa",
+  "999": "Total pagado",
+};
+
+const casilleroLabels104: Record<string, string> = {
+  "401": "Ventas tarifa diferente de 0%",
+  "402": "IVA generado ventas tarifa diferente de 0%",
+  "403": "Ventas tarifa 0%",
+  "404": "IVA ventas tarifa 0%",
+  "405": "Ventas no objeto de IVA",
+  "406": "IVA ventas no objeto",
+  "421": "Notas de crédito emitidas",
+  "422": "IVA notas de crédito emitidas",
+  "429": "IVA generado",
+  "480": "Total transferencias",
+  "481": "Total IVA generado",
+  "484": "IVA en ventas",
+  "500": "Compras tarifa diferente de 0%",
+  "501": "IVA compras tarifa diferente de 0%",
+  "502": "Compras tarifa 0%",
+  "507": "Compras sin derecho a crédito tributario",
+  "518": "Adquisiciones no objeto de IVA",
+  "563": "Factor de proporcionalidad",
+  "564": "Crédito tributario aplicable",
+  "601": "Impuesto causado",
+  "602": "Crédito tributario",
+  "605": "Saldo crédito tributario mes anterior",
+  "606": "Saldo retenciones mes anterior",
+  "609": "Retenciones IVA recibidas",
+  "615": "Saldo crédito tributario próximo mes",
+  "617": "Saldo retenciones próximo mes",
+  "620": "Subtotal a pagar",
+  "699": "Impuesto a pagar",
+  "890": "Pago previo",
+  "897": "Interés por mora",
+  "898": "Multa",
+  "899": "Total impuesto a pagar",
+  "902": "Impuesto causado a pagar",
+  "903": "Interés",
+  "904": "Multa",
+  "999": "Total pagado",
+};
+
+function talonMoney(value: unknown) {
+  return money(value);
+}
+
+function talonInt(value: unknown) {
+  return String(Math.round(Number(value || 0)));
+}
+
+function sumFields(row: Record<string, unknown>, fields: string[]) {
+  return fields.reduce((acc, field) => acc + n(row[field]), 0);
+}
+
+function atsCompraBaseGravada(compra: Record<string, unknown>) {
+  return sumFields(compra, ["baseGravableIva1", "baseGravableIva2", "baseGravableIva3"]);
+}
+
+function atsCompraIva(compra: Record<string, unknown>) {
+  return sumFields(compra, ["montoIva1", "montoIva2", "montoIva3"]);
+}
+
+function atsVentaBaseGravada(venta: Record<string, unknown>) {
+  return sumFields(venta, ["baseGravableIva1", "baseGravableIva2", "baseGravableIva3"]);
+}
+
+function atsVentaIva(venta: Record<string, unknown>) {
+  return sumFields(venta, ["montoIva1", "montoIva2", "montoIva3"]);
+}
+
+function resumenComprasAts(compras: Array<Record<string, unknown>>) {
+  return {
+    facturas: compras.filter((compra) => String(compra.comprobante || "") !== "04").length,
+    notasCredito: compras.filter((compra) => String(compra.comprobante || "") === "04").length,
+    base0: round2(compras.reduce((acc, compra) => acc + n(compra.baseTarifa0), 0)),
+    baseGravada: round2(compras.reduce((acc, compra) => acc + atsCompraBaseGravada(compra), 0)),
+    baseNoObjeto: round2(compras.reduce((acc, compra) => acc + n(compra.baseNoObjetoIva), 0)),
+    iva: round2(compras.reduce((acc, compra) => acc + atsCompraIva(compra), 0)),
+    retIva: round2(
+      compras.reduce(
+        (acc, compra) =>
+          acc +
+          n(compra.valorRetencionIva30) +
+          n(compra.valorRetencionIva50) +
+          n(compra.valorRetencionIva70) +
+          n(compra.valorRetencionIva100) +
+          n(compra.valorRetencionIva100SectorPublico) +
+          n(compra.liqImpSumatoriaRetIva),
+        0
+      )
+    ),
+  };
+}
+
+function resumenVentasAts(ventas: Array<Record<string, unknown>>) {
+  return {
+    documentos: ventas.reduce((acc, venta) => acc + Number(venta.cantidadComprobantes || 1), 0),
+    base0: round2(ventas.reduce((acc, venta) => acc + n(venta.baseTarifa0), 0)),
+    baseGravada: round2(ventas.reduce((acc, venta) => acc + atsVentaBaseGravada(venta), 0)),
+    baseNoObjeto: round2(ventas.reduce((acc, venta) => acc + n(venta.baseNoObjetoIva), 0)),
+    iva: round2(ventas.reduce((acc, venta) => acc + atsVentaIva(venta), 0)),
+    retIva: round2(ventas.reduce((acc, venta) => acc + n(venta.valorRetenidoIva), 0)),
+    retFuente: round2(ventas.reduce((acc, venta) => acc + n(venta.valorRetenidoFuente), 0)),
+  };
+}
+
+function talonHeader(
+  doc: PDFKit.PDFDocument,
+  tipoDocumento: string,
+  nombre: string,
+  ruc: string,
+  periodo: string,
+  fechaGeneracion: string
+) {
+  const startY = 34;
+  doc
+    .roundedRect(42, startY, 82, 46, 5)
+    .fill("#003565")
+    .fillColor("#ffffff")
+    .fontSize(24)
+    .text("SRI", 42, startY + 11, { width: 82, align: "center" });
+
+  doc
+    .fillColor("#003565")
+    .fontSize(18)
+    .text("TALÓN RESUMEN", 130, startY + 1, { width: 380, align: "center" })
+    .fontSize(10)
+    .text("SERVICIO DE RENTAS INTERNAS", 130, startY + 23, { width: 380, align: "center" })
+    .fontSize(11)
+    .fillColor("#111827")
+    .text(tipoDocumento, 130, startY + 39, { width: 380, align: "center" });
+
+  doc.moveDown(2.7);
+  pdfTable(doc, "DATOS DEL CONTRIBUYENTE", [
+    ["Nombre contribuyente", nombre],
+    ["RUC", ruc],
+    ["Período", periodo],
+    ["Fecha de generación", fechaGeneracion],
+  ]);
+}
+
+function talonTable(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  rows: TalonRow[],
+  startX = 42,
+  width = 511
+) {
+  doc.moveDown(0.48).fontSize(9.7).fillColor("#003565").text(title, startX);
+  const labelWidth = Math.round(width * 0.68);
+  const valueWidth = width - labelWidth;
+  let y = doc.y + 4;
+
+  rows.forEach(([label, value, bold], index) => {
+    const rowHeight = 18;
+    doc
+      .rect(startX, y, width, rowHeight)
+      .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+      .strokeColor("#cbd5e1")
+      .rect(startX, y, width, rowHeight)
+      .stroke();
+
+    doc
+      .font(bold ? "Helvetica-Bold" : "Helvetica")
+      .fontSize(7.8)
+      .fillColor("#334155")
+      .text(label, startX + 6, y + 5, { width: labelWidth - 12 })
+      .fillColor("#111827")
+      .text(String(value), startX + labelWidth + 6, y + 5, {
+        width: valueWidth - 12,
+        align: "right",
+      })
+      .font("Helvetica");
+
+    y += rowHeight;
+  });
+
+  doc.y = y + 2;
+}
+
+function talonCasilleros(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  casilleros: Record<string, number>,
+  labels: Record<string, string>,
+  keys: string[]
+) {
+  const rows = keys
+    .filter((key) => Number(casilleros[key] || 0) !== 0 || ["499", "699", "899", "999"].includes(key))
+    .map((key) => [`${key} - ${labels[key] || "Casillero"}`, talonMoney(casilleros[key]), ["499", "699", "899", "999"].includes(key)] as TalonRow);
+
+  talonTable(doc, title, rows.length ? rows : [["Sin casilleros con valor", "0.00"]]);
+}
+
+function talonDeclaracionTexto(doc: PDFKit.PDFDocument) {
+  doc
+    .moveDown(0.6)
+    .fontSize(7.8)
+    .fillColor("#334155")
+    .text(
+      "Declaro que los valores presentados corresponden a la información registrada y almacenada para la declaración indicada.",
+      { align: "justify" }
+    );
+}
+
+function talonFirmasYPie(doc: PDFKit.PDFDocument, fechaEmision: string) {
+  const y = Math.max(doc.y + 26, 705);
+  doc
+    .strokeColor("#111827")
+    .moveTo(82, y)
+    .lineTo(242, y)
+    .stroke()
+    .moveTo(350, y)
+    .lineTo(510, y)
+    .stroke()
+    .fontSize(8)
+    .fillColor("#111827")
+    .text("Firma del Contador", 82, y + 8, { width: 160, align: "center" })
+    .text("Firma del Representante Legal", 350, y + 8, { width: 160, align: "center" });
+
+  doc
+    .fontSize(7.2)
+    .fillColor("#64748b")
+    .text(`Fecha de emisión: ${fechaEmision}`, 42, 812, { width: 250 })
+    .text("Page 1 of 1", 360, 812, { width: 170, align: "right" });
+}
+
+function periodoTalon(declaracion: { mes: string | null; semestre: string | null; anio: number }) {
+  return `${declaracion.mes || declaracion.semestre || "-"} / ${declaracion.anio}`;
+}
+
+function findAtsLoteId(root: Record<string, any>, nested: Record<string, any>, resumen: Record<string, any>) {
+  const resumenNested = asObject(nested.resumen);
+  return (
+    root.atsLoteId ||
+    root.loteId ||
+    nested.atsLoteId ||
+    nested.loteId ||
+    resumen.atsLoteId ||
+    resumen.loteId ||
+    resumenNested.atsLoteId ||
+    resumenNested.loteId ||
+    null
+  );
+}
+
+function isAtsDeclaracion(formulario: string, tipoImpuesto: string) {
+  const value = `${formulario} ${tipoImpuesto}`.toUpperCase();
+  return value.includes("ATS") || value.includes("ANEXO TRANSACCIONAL");
 }
 
 function getJsonCasilleros(value: unknown): Record<string, number> {
@@ -830,6 +1129,7 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
 export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
   try {
     const { declaracionId } = req.params;
+    const esResumen = String(req.query.tipo || "").toLowerCase() === "resumen";
 
     const declaracion = await prisma.declaracion.findUnique({
       where: { id: declaracionId },
@@ -846,10 +1146,217 @@ export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
     const resumen = asObject(root.resumen || nested.resumen);
     const casilleros = getJsonCasilleros(declaracion.datosJSON);
     const formulario = declaracion.formulario.includes("104") ? "104" : declaracion.formulario.includes("103") ? "103" : "";
+    const ruc = String(identificacion.ruc || declaracion.contribuyente.ruc);
+    const razonSocial = String(identificacion.razonSocial || declaracion.contribuyente.razonSocial);
+
+    if (esResumen) {
+      if (isAtsDeclaracion(declaracion.formulario, declaracion.tipoImpuesto)) {
+        const loteId = findAtsLoteId(root, nested, resumen);
+
+        if (!loteId) {
+          return res.status(422).json({
+            message:
+              "No existe un lote ATS asociado a esta declaración. Genere el talón desde el lote ATS o regenere la declaración con referencia al lote.",
+          });
+        }
+
+        const lote = await prisma.atsLote.findUnique({
+          where: { id: String(loteId) },
+          include: {
+            ventas: true,
+            compras: true,
+            anulados: true,
+            guias: true,
+          },
+        });
+
+        if (!lote) {
+          return res.status(404).json({ message: "Lote ATS asociado no encontrado." });
+        }
+
+        const compras = resumenComprasAts(lote.compras as unknown as Array<Record<string, unknown>>);
+        const ventas = resumenVentasAts(lote.ventas as unknown as Array<Record<string, unknown>>);
+        const periodo = `${String(lote.mes).padStart(2, "0")}/${lote.anio}`;
+
+        return sendPdf(res, `Talon_Resumen_ATS_${lote.rucInformante}_${lote.id}.pdf`, (doc) => {
+          talonHeader(
+            doc,
+            "ANEXO TRANSACCIONAL",
+            lote.razonSocial,
+            lote.rucInformante,
+            periodo,
+            fechaHoraLocal(new Date())
+          );
+
+          talonTable(doc, "COMPRAS", [
+            ["Facturas", talonInt(compras.facturas)],
+            ["Notas de crédito", talonInt(compras.notasCredito)],
+            ["BI tarifa 0%", talonMoney(compras.base0)],
+            ["BI tarifa diferente 0%", talonMoney(compras.baseGravada)],
+            ["BI No Objeto IVA", talonMoney(compras.baseNoObjeto)],
+            ["Valor IVA", talonMoney(compras.iva), true],
+          ]);
+
+          talonTable(doc, "VENTAS", [
+            ["Documentos autorizados", talonInt(ventas.documentos)],
+            ["BI tarifa 0%", talonMoney(ventas.base0)],
+            ["BI tarifa diferente 0%", talonMoney(ventas.baseGravada)],
+            ["BI No Objeto IVA", talonMoney(ventas.baseNoObjeto)],
+            ["Valor IVA", talonMoney(ventas.iva), true],
+          ]);
+
+          talonTable(doc, "RETENCION EN LA FUENTE DE IVA", [
+            ["Retención IVA compras", talonMoney(compras.retIva)],
+            ["Retenciones que le efectuaron en ventas", talonMoney(ventas.retIva), true],
+          ]);
+
+          talonTable(doc, "RESUMEN DE RETENCIONES QUE LE EFECTUARON EN EL PERIODO", [
+            ["Retenciones de IVA", talonMoney(ventas.retIva)],
+            ["Retenciones en la fuente", talonMoney(ventas.retFuente)],
+            ["Total retenciones efectuadas", talonMoney(round2(ventas.retIva + ventas.retFuente)), true],
+          ]);
+
+          talonDeclaracionTexto(doc);
+          talonFirmasYPie(doc, fechaHoraLocal(new Date()));
+        });
+      }
+
+      const tipoDocumento = formulario === "104" ? "FORMULARIO 104 - IVA" : "FORMULARIO 103 - RETENCIONES EN LA FUENTE";
+      const filename = `Talon_Resumen_${formulario || "Declaracion"}_${ruc}_${declaracion.id}.pdf`;
+
+      return sendPdf(res, filename, (doc) => {
+        talonHeader(doc, tipoDocumento, razonSocial, ruc, periodoTalon(declaracion), fechaHoraLocal(new Date()));
+
+        pdfKV(doc, "Número de adhesión", declaracion.numeroAdhesion);
+        pdfKV(doc, "Estado", declaracion.estado);
+        doc.moveDown(0.4);
+
+        if (formulario === "103") {
+          talonTable(doc, "RESUMEN DE RETENCIONES EN LA FUENTE", [
+            ["Total retenciones", talonMoney(casilleros["499"] ?? declaracion.valorRetenido), true],
+            ["Interés", talonMoney(casilleros["903"] ?? casilleros["897"])],
+            ["Multa", talonMoney(casilleros["904"] ?? casilleros["898"])],
+            ["Total pagado", talonMoney(casilleros["999"] ?? casilleros["899"] ?? declaracion.valorCancelado), true],
+          ]);
+
+          talonCasilleros(
+            doc,
+            "CASILLEROS RELEVANTES",
+            casilleros,
+            casilleroLabels103,
+            [
+              "302",
+              "303",
+              "304",
+              "307",
+              "311",
+              "314",
+              "322",
+              "323",
+              "325",
+              "332",
+              "343",
+              "344",
+              "345",
+              "346",
+              "352",
+              "353",
+              "354",
+              "357",
+              "361",
+              "364",
+              "372",
+              "373",
+              "375",
+              "393",
+              "394",
+              "395",
+              "396",
+              "499",
+              "890",
+              "897",
+              "898",
+              "899",
+              "902",
+              "903",
+              "904",
+              "999",
+            ]
+          );
+        } else if (formulario === "104") {
+          talonTable(doc, "RESUMEN IVA", [
+            ["Ventas tarifa diferente 0%", talonMoney(casilleros["401"])],
+            ["Ventas tarifa 0%", talonMoney(casilleros["403"])],
+            ["Compras tarifa diferente 0%", talonMoney(casilleros["500"])],
+            ["Compras tarifa 0%", talonMoney(casilleros["507"] ?? casilleros["502"])],
+            ["IVA generado", talonMoney(casilleros["429"] ?? declaracion.impuestoGenerado), true],
+            ["Crédito tributario", talonMoney(casilleros["564"])],
+            ["Retenciones IVA", talonMoney(casilleros["609"] ?? declaracion.valorRetenido)],
+            ["Impuesto a pagar", talonMoney(casilleros["699"] ?? casilleros["902"])],
+            ["Total pagado", talonMoney(casilleros["999"] ?? declaracion.valorCancelado), true],
+          ]);
+
+          talonCasilleros(
+            doc,
+            "CASILLEROS RELEVANTES",
+            casilleros,
+            casilleroLabels104,
+            [
+              "401",
+              "402",
+              "403",
+              "404",
+              "405",
+              "406",
+              "421",
+              "422",
+              "429",
+              "480",
+              "481",
+              "484",
+              "500",
+              "501",
+              "502",
+              "507",
+              "518",
+              "563",
+              "564",
+              "601",
+              "602",
+              "605",
+              "606",
+              "609",
+              "615",
+              "617",
+              "620",
+              "699",
+              "890",
+              "897",
+              "898",
+              "899",
+              "902",
+              "903",
+              "904",
+              "999",
+            ]
+          );
+        } else {
+          talonTable(doc, "RESUMEN", [
+            ["Base imponible", talonMoney(declaracion.baseImponible)],
+            ["Impuesto generado", talonMoney(declaracion.impuestoGenerado)],
+            ["Valor retenido", talonMoney(declaracion.valorRetenido)],
+            ["Valor cancelado", talonMoney(declaracion.valorCancelado), true],
+          ]);
+        }
+
+        talonDeclaracionTexto(doc);
+        talonFirmasYPie(doc, fechaHoraLocal(new Date()));
+      });
+    }
 
     return sendPdf(
       res,
-      `Formulario_${formulario || "Declaracion"}_${declaracion.contribuyente.ruc}_${declaracion.id}.pdf`,
+      `Formulario_${formulario || "Declaracion"}_${ruc}_${declaracion.id}.pdf`,
       (doc) => {
         pdfTitle(
           doc,
@@ -857,8 +1364,8 @@ export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
           declaracion.formulario
         );
 
-        pdfKV(doc, "RUC", identificacion.ruc || declaracion.contribuyente.ruc);
-        pdfKV(doc, "Razón social", identificacion.razonSocial || declaracion.contribuyente.razonSocial);
+        pdfKV(doc, "RUC", ruc);
+        pdfKV(doc, "Razón social", razonSocial);
         pdfKV(doc, "Período", `${declaracion.mes || declaracion.semestre || "-"} / ${declaracion.anio}`);
         pdfKV(doc, "Número de adhesión", declaracion.numeroAdhesion);
         pdfKV(doc, "Estado", declaracion.estado);
