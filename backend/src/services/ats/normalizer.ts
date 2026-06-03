@@ -86,11 +86,16 @@ function paymentCode(value: any): string {
   return validCodes.has(code) ? code : "";
 }
 
-function money(value: any): number {
+function money(value: any, options: { allowNegative?: boolean } = {}): number {
   const raw = clean(value);
   if (!raw || raw === "-" || raw === "–" || raw === "—") return 0;
 
   let normalized = raw.replace(/\s/g, "");
+  const isParenthesizedNegative = /^\(.+\)$/.test(normalized);
+
+  if (isParenthesizedNegative) {
+    normalized = `-${normalized.slice(1, -1)}`;
+  }
 
   if (normalized.includes(",") && normalized.includes(".")) {
     normalized = normalized.replace(/\./g, "").replace(",", ".");
@@ -99,7 +104,7 @@ function money(value: any): number {
   }
 
   const num = Number(normalized);
-  if (!Number.isFinite(num) || num < 0) return 0;
+  if (!Number.isFinite(num) || (!options.allowNegative && num < 0)) return 0;
 
   return Number(num.toFixed(2));
 }
@@ -218,7 +223,7 @@ function hasMonetaryMovement(row: Record<string, any>) {
     "Total Retención IVA+Fte.",
   ];
 
-  return fields.some((field) => money(get(row, [field])) > 0);
+  return fields.some((field) => money(get(row, [field]), { allowNegative: true }) !== 0);
 }
 
 function normalizeParteRelacionada(value: any): string {
@@ -557,6 +562,9 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
     if (!comprobante) return;
     if (!establecimiento || !puntoEmision || !numeroSecuencial) return;
 
+    const isNotaCreditoCompra = comprobante === "04";
+    const compraMoney = (value: any) => money(value, { allowNegative: isNotaCreditoCompra });
+
     const compra = {
       filaExcel: fila,
       noIdentificacion,
@@ -595,13 +603,20 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
         ])
       ),
 
-      baseNoObjetoIva: money(getByAny(row, ["Base Imponible NO Objeto de IVA"])),
-      baseExenta: money(getByAny(row, ["Base Imponible EXENTA"])),
-      baseTarifa0: money(getByAny(row, ["Base Imponible Tarifa 0%"])),
-      baseGravableIva1: money(getByAny(row, ["Base Imp. 1 Gravable IVA diferente de cero"])),
-      montoIva1: money(getByAny(row, ["Monto-1 de I.V.A."])),
-      montoIceNoIncluido: money(getByAny(row, ["Monto de I.C.E. NO incluido en Base Imp."])),
-      totalDocumento: money(getByAny(row, ["Total del Documento"])),
+      baseNoObjetoIva: compraMoney(getByAny(row, ["Base Imponible NO Objeto de IVA"])),
+      baseExenta: compraMoney(getByAny(row, ["Base Imponible EXENTA"])),
+      baseTarifa0: compraMoney(getByAny(row, ["Base Imponible Tarifa 0%"])),
+      baseGravableIva1: compraMoney(getByAny(row, ["Base Imp. 1 Gravable IVA diferente de cero"])),
+      tarifaIva1Aplicada: money(getByAny(row, ["Tarifa1 de IVA aplicada"])) || 15,
+      montoIva1: compraMoney(getByAny(row, ["Monto-1 de I.V.A."])),
+      baseGravableIva2: compraMoney(getByAny(row, ["Base Imp. 2 Gravable IVA Construcción", "Base Imp. 2 Gravable IVA Construccion"])),
+      tarifaIva2Aplicada: money(getByAny(row, ["Tarifa2 de IVA aplicada"])),
+      montoIva2: compraMoney(getByAny(row, ["Monto-2 de I.V.A."])),
+      baseGravableIva3: compraMoney(getByAny(row, ["Base Imp. 3 Gravable IVA Especial"])),
+      tarifaIva3Aplicada: money(getByAny(row, ["Tarifa3 de IVA aplicada"])),
+      montoIva3: compraMoney(getByAny(row, ["Monto-3 de I.V.A."])),
+      montoIceNoIncluido: compraMoney(getByAny(row, ["Monto de I.C.E. NO incluido en Base Imp."])),
+      totalDocumento: compraMoney(getByAny(row, ["Total del Documento"])),
 
       establecimientoRet: pad(getByAny(row, ["Establecimiento Ret."]), 3),
       puntoEmisionRet: pad(getByAny(row, ["Punto Emisión Ret.", "Punto Emision Ret."]), 3),
@@ -628,24 +643,24 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
         ]) || null,
 
       codigoRetencion1: firstCode(getByAny(row, ["Código Retención 1"]), 3),
-      baseImponibleRet1: money(getByAny(row, ["Ret. Fuente Base Imponible 1"])),
+      baseImponibleRet1: compraMoney(getByAny(row, ["Ret. Fuente Base Imponible 1"])),
       porcentajeRetencion1: money(getByAny(row, ["Porcentaje Retención 1"])),
-      valorRetenido1: money(getByAny(row, ["Ret. Fuente Valor Retenido 1"])),
+      valorRetenido1: compraMoney(getByAny(row, ["Ret. Fuente Valor Retenido 1"])),
 
       codigoRetencion2: firstCode(getByAny(row, ["Código Retención 2"]), 3),
-      baseImponibleRet2: money(getByAny(row, ["Ret. Fuente Base Imponible 2"])),
+      baseImponibleRet2: compraMoney(getByAny(row, ["Ret. Fuente Base Imponible 2"])),
       porcentajeRetencion2: money(getByAny(row, ["Porcentaje Retención 2"])),
-      valorRetenido2: money(getByAny(row, ["Ret. Fuente Valor Retenido 2"])),
+      valorRetenido2: compraMoney(getByAny(row, ["Ret. Fuente Valor Retenido 2"])),
 
       codigoRetencion3: firstCode(getByAny(row, ["Código Retención 3"]), 3),
-      baseImponibleRet3: money(getByAny(row, ["Ret. Fuente Base Imponible 3"])),
+      baseImponibleRet3: compraMoney(getByAny(row, ["Ret. Fuente Base Imponible 3"])),
       porcentajeRetencion3: money(getByAny(row, ["Porcentaje Retención 3"])),
-      valorRetenido3: money(getByAny(row, ["Ret. Fuente Valor Retenido 3"])),
+      valorRetenido3: compraMoney(getByAny(row, ["Ret. Fuente Valor Retenido 3"])),
 
-      valorRetencionIva30: money(getByAny(row, ["Ret. IVA Valor Retenido 30%"])),
-      valorRetencionIva50: money(getByAny(row, ["Ret. IVA Valor Retenido 50%"])),
-      valorRetencionIva70: money(getByAny(row, ["Ret. IVA Valor Retenido 70%"])),
-      valorRetencionIva100: money(getByAny(row, ["Ret. IVA Valor Retenido 100%"])),
+      valorRetencionIva30: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 30%"])),
+      valorRetencionIva50: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 50%"])),
+      valorRetencionIva70: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 70%"])),
+      valorRetencionIva100: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 100%"])),
 
       formaPago1: paymentCode(getByAny(row, ["Forma de PAGO 1"])),
       formaPago2: paymentCode(getByAny(row, ["Forma de PAGO 2"])),
