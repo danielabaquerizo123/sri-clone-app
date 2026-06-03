@@ -192,6 +192,121 @@ function compraIva(compra: any) {
   return safeNumber(compra.montoIva1) + safeNumber(compra.montoIva2) + safeNumber(compra.montoIva3);
 }
 
+function absRound2(value: number) {
+  return round2(Math.abs(value));
+}
+
+function comprasTotales(compras: any[]) {
+  return compras.reduce(
+    (acc, compra) => {
+      acc.count += 1;
+      acc.base0 = round2(acc.base0 + safeNumber(compra.baseTarifa0));
+      acc.baseGravada = round2(acc.baseGravada + compraBaseGravada(compra));
+      acc.baseNoObjeto = round2(acc.baseNoObjeto + safeNumber(compra.baseNoObjetoIva));
+      acc.iva = round2(acc.iva + compraIva(compra));
+      return acc;
+    },
+    {
+      count: 0,
+      base0: 0,
+      baseGravada: 0,
+      baseNoObjeto: 0,
+      iva: 0,
+    }
+  );
+}
+
+function comprasTotalesAbsolutos(compras: any[]) {
+  const raw = comprasTotales(compras);
+
+  return {
+    count: raw.count,
+    base0: absRound2(raw.base0),
+    baseGravada: absRound2(raw.baseGravada),
+    baseNoObjeto: absRound2(raw.baseNoObjeto),
+    iva: absRound2(raw.iva),
+  };
+}
+
+function retencionesFuenteComprasResumen(compras: any[]) {
+  const grupos = new Map<string, { codigo: string; registros: number; base: number; valor: number }>();
+
+  for (const compra of compras.filter((c) => c.comprobante !== "04")) {
+    for (const index of [1, 2, 3]) {
+      const codigo = clean(compra[`codigoRetencion${index}`]);
+      const base = safeNumber(compra[`baseImponibleRet${index}`]);
+      const valor = safeNumber(compra[`valorRetenido${index}`]);
+
+      if (!codigo || (base === 0 && valor === 0)) continue;
+
+      const current = grupos.get(codigo) || {
+        codigo,
+        registros: 0,
+        base: 0,
+        valor: 0,
+      };
+
+      current.registros += 1;
+      current.base = round2(current.base + base);
+      current.valor = round2(current.valor + valor);
+      grupos.set(codigo, current);
+    }
+  }
+
+  const detalle = Array.from(grupos.values()).sort((a, b) => a.codigo.localeCompare(b.codigo));
+  const total = detalle.reduce(
+    (acc, item) => ({
+      base: round2(acc.base + item.base),
+      valor: round2(acc.valor + item.valor),
+    }),
+    { base: 0, valor: 0 }
+  );
+
+  return { detalle, total };
+}
+
+function retencionesIvaComprasResumen(compras: any[]) {
+  const resumen = compras.reduce(
+    (acc, compra) => {
+      acc.iva10 = round2(acc.iva10 + safeNumber(compra.retIvaValor10) + safeNumber(compra.valorRetencionIva10));
+      acc.iva20 = round2(acc.iva20 + safeNumber(compra.retIvaValor20) + safeNumber(compra.valorRetencionIva20));
+      acc.iva30 = round2(acc.iva30 + safeNumber(compra.retIvaValor30) + safeNumber(compra.valorRetencionIva30));
+      acc.iva50 = round2(acc.iva50 + safeNumber(compra.retIvaValor50) + safeNumber(compra.valorRetencionIva50));
+      acc.iva70 = round2(acc.iva70 + safeNumber(compra.retIvaValor70) + safeNumber(compra.valorRetencionIva70));
+      acc.iva100 = round2(
+        acc.iva100 +
+          safeNumber(compra.retIvaValor100) +
+          safeNumber(compra.valorRetencionIva100) +
+          safeNumber(compra.valorRetencionIva100SectorPublico)
+      );
+      acc.ivaNc = round2(acc.ivaNc + safeNumber(compra.valorRetencionIvaEnNc));
+      return acc;
+    },
+    {
+      iva10: 0,
+      iva20: 0,
+      iva30: 0,
+      iva50: 0,
+      iva70: 0,
+      iva100: 0,
+      ivaNc: 0,
+    }
+  );
+
+  return {
+    ...resumen,
+    total: round2(
+      resumen.iva10 +
+        resumen.iva20 +
+        resumen.iva30 +
+        resumen.iva50 +
+        resumen.iva70 +
+        resumen.iva100 +
+        resumen.ivaNc
+    ),
+  };
+}
+
 function ventaBaseGravada(venta: any) {
   return (
     safeNumber(venta.baseGravableIva1) +
@@ -205,16 +320,22 @@ function ventaIva(venta: any) {
 }
 
 function comprasResumen(compras: any[]) {
-  const facturas = compras.filter((c) => c.comprobante !== "04").length;
-  const notasCredito = compras.filter((c) => c.comprobante === "04").length;
+  const facturasRows = compras.filter((c) => c.comprobante === "01");
+  const notasCreditoRows = compras.filter((c) => c.comprobante === "04");
+  const facturas = comprasTotales(facturasRows);
+  const notasCredito = comprasTotalesAbsolutos(notasCreditoRows);
+  const total = {
+    count: facturas.count + notasCredito.count,
+    base0: round2(facturas.base0 - notasCredito.base0),
+    baseGravada: round2(facturas.baseGravada - notasCredito.baseGravada),
+    baseNoObjeto: round2(facturas.baseNoObjeto - notasCredito.baseNoObjeto),
+    iva: round2(facturas.iva - notasCredito.iva),
+  };
 
   return {
     facturas,
     notasCredito,
-    base0: round2(compras.reduce((acc, c) => acc + safeNumber(c.baseTarifa0), 0)),
-    baseGravada: round2(compras.reduce((acc, c) => acc + compraBaseGravada(c), 0)),
-    baseNoObjeto: round2(compras.reduce((acc, c) => acc + safeNumber(c.baseNoObjetoIva), 0)),
-    iva: round2(compras.reduce((acc, c) => acc + compraIva(c), 0)),
+    total,
     retIva: round2(
       compras.reduce(
         (acc, c) =>
@@ -232,14 +353,18 @@ function comprasResumen(compras: any[]) {
 }
 
 function ventasResumen(ventas: any[]) {
+  const ventasConRetencion = ventas.filter(
+    (v) => clean(v.noDocumentoRetencion) || clean(v.noAutorizacionRetencion) || v.fechaRetencion
+  );
+
   return {
     documentos: ventas.reduce((acc, v) => acc + Number(v.cantidadComprobantes || 1), 0),
     base0: round2(ventas.reduce((acc, v) => acc + safeNumber(v.baseTarifa0), 0)),
     baseGravada: round2(ventas.reduce((acc, v) => acc + ventaBaseGravada(v), 0)),
     baseNoObjeto: round2(ventas.reduce((acc, v) => acc + safeNumber(v.baseNoObjetoIva), 0)),
     iva: round2(ventas.reduce((acc, v) => acc + ventaIva(v), 0)),
-    retIva: round2(ventas.reduce((acc, v) => acc + safeNumber(v.valorRetenidoIva), 0)),
-    retFuente: round2(ventas.reduce((acc, v) => acc + safeNumber(v.valorRetenidoFuente), 0)),
+    retIva: round2(ventasConRetencion.reduce((acc, v) => acc + safeNumber(v.valorRetenidoIva), 0)),
+    retFuente: round2(ventasConRetencion.reduce((acc, v) => acc + safeNumber(v.valorRetenidoFuente), 0)),
   };
 }
 
@@ -1095,6 +1220,8 @@ export const descargarTalonResumenAts = async (req: Request, res: Response) => {
     }
 
     const compras = comprasResumen(lote.compras);
+    const retencionesFuenteCompras = retencionesFuenteComprasResumen(lote.compras);
+    const retencionesIvaCompras = retencionesIvaComprasResumen(lote.compras);
     const ventas = ventasResumen(lote.ventas);
     const periodo = `${String(lote.mes).padStart(2, "0")}/${lote.anio}`;
     const resumen = jsonObject(lote.resumenJSON);
@@ -1130,12 +1257,20 @@ export const descargarTalonResumenAts = async (req: Request, res: Response) => {
       ]);
 
       pdfTable(doc, "COMPRAS", [
-        ["Facturas", pdfInt(compras.facturas)],
-        ["Notas de crédito", pdfInt(compras.notasCredito)],
-        ["BI tarifa 0%", pdfMoney(compras.base0)],
-        ["BI tarifa diferente 0%", pdfMoney(compras.baseGravada)],
-        ["BI No Objeto IVA", pdfMoney(compras.baseNoObjeto)],
-        ["Valor IVA", pdfMoney(compras.iva)],
+        ["01 FACTURA - Cantidad", pdfInt(compras.facturas.count)],
+        ["01 FACTURA - BI tarifa 0%", pdfMoney(compras.facturas.base0)],
+        ["01 FACTURA - BI tarifa diferente 0%", pdfMoney(compras.facturas.baseGravada)],
+        ["01 FACTURA - BI No Objeto IVA", pdfMoney(compras.facturas.baseNoObjeto)],
+        ["01 FACTURA - Valor IVA", pdfMoney(compras.facturas.iva)],
+        ["04 NOTAS DE CREDITO - Cantidad", pdfInt(compras.notasCredito.count)],
+        ["04 NOTAS DE CREDITO - BI tarifa 0%", pdfMoney(compras.notasCredito.base0)],
+        ["04 NOTAS DE CREDITO - BI tarifa diferente 0%", pdfMoney(compras.notasCredito.baseGravada)],
+        ["04 NOTAS DE CREDITO - BI No Objeto IVA", pdfMoney(compras.notasCredito.baseNoObjeto)],
+        ["04 NOTAS DE CREDITO - Valor IVA", pdfMoney(compras.notasCredito.iva)],
+        ["TOTAL - BI tarifa 0%", pdfMoney(compras.total.base0)],
+        ["TOTAL - BI tarifa diferente 0%", pdfMoney(compras.total.baseGravada)],
+        ["TOTAL - BI No Objeto IVA", pdfMoney(compras.total.baseNoObjeto)],
+        ["TOTAL - Valor IVA", pdfMoney(compras.total.iva)],
       ]);
 
       pdfTable(doc, "VENTAS", [
@@ -1146,15 +1281,31 @@ export const descargarTalonResumenAts = async (req: Request, res: Response) => {
         ["Valor IVA", pdfMoney(ventas.iva)],
       ]);
 
+      pdfTable(doc, "RESUMEN DE RETENCIONES - AGENTE DE RETENCION", [
+        ["RETENCION EN LA FUENTE DE IMPUESTO A LA RENTA", ""],
+        ...retencionesFuenteCompras.detalle.flatMap((item) => [
+          [`${item.codigo} - No. registros`, pdfInt(item.registros)] as [string, string | number],
+          [`${item.codigo} - Base imponible`, pdfMoney(item.base)] as [string, string | number],
+          [`${item.codigo} - Valor retenido`, pdfMoney(item.valor)] as [string, string | number],
+        ]),
+        ["TOTAL - Base imponible", pdfMoney(retencionesFuenteCompras.total.base)],
+        ["TOTAL - Valor retenido", pdfMoney(retencionesFuenteCompras.total.valor)],
+      ]);
+
       pdfTable(doc, "RETENCION EN LA FUENTE DE IVA", [
-        ["Retención IVA compras", pdfMoney(compras.retIva)],
-        ["Retenciones que le efectuaron en ventas", pdfMoney(ventas.retIva)],
+        ["Retención IVA 10%", pdfMoney(retencionesIvaCompras.iva10)],
+        ["Retención IVA 20%", pdfMoney(retencionesIvaCompras.iva20)],
+        ["Retención IVA 30%", pdfMoney(retencionesIvaCompras.iva30)],
+        ["Retención IVA 50%", pdfMoney(retencionesIvaCompras.iva50)],
+        ["Retención IVA 70%", pdfMoney(retencionesIvaCompras.iva70)],
+        ["Retención IVA 100%", pdfMoney(retencionesIvaCompras.iva100)],
+        ["Retención IVA NC", pdfMoney(retencionesIvaCompras.ivaNc)],
+        ["TOTAL", pdfMoney(retencionesIvaCompras.total)],
       ]);
 
       pdfTable(doc, "RESUMEN DE RETENCIONES QUE LE EFECTUARON EN EL PERIODO", [
-        ["Retenciones de IVA", pdfMoney(ventas.retIva)],
-        ["Retenciones en la fuente", pdfMoney(ventas.retFuente)],
-        ["Total retenciones efectuadas", pdfMoney(round2(ventas.retIva + ventas.retFuente))],
+        ["VENTA Valor de IVA que le han retenido", pdfMoney(ventas.retIva)],
+        ["VENTA Valor de Renta que le han retenido", pdfMoney(ventas.retFuente)],
       ]);
 
       doc
