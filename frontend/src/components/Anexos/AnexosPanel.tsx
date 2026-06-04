@@ -10,7 +10,6 @@ interface Props {
   rucUsuario: string;
   rucActivo: string;
   activeView: string;
-  onActiveContribuyenteChange: (contribuyente: { ruc: string; razonSocial: string }) => void;
 }
 
 interface Anexo {
@@ -30,7 +29,6 @@ export default function AnexosPanel({
   rucUsuario,
   rucActivo,
   activeView,
-  onActiveContribuyenteChange,
 }: Props) {
   const active =
     activeView === "anexo_envio"
@@ -210,8 +208,6 @@ export default function AnexosPanel({
                 {active === "atsMasivo" && (
                   <AtsMasivoPanel
                     rucAcceso={rucUsuario}
-                    rucActivo={rucActivo}
-                    onActiveContribuyenteChange={onActiveContribuyenteChange}
                   />
                 )}
 

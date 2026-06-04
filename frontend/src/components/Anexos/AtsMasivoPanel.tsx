@@ -2,8 +2,6 @@ import { useMemo, useState } from "react";
 
 type Props = {
   rucAcceso: string;
-  rucActivo: string;
-  onActiveContribuyenteChange: (contribuyente: { ruc: string; razonSocial: string }) => void;
 };
 
 type AtsIssue = {
@@ -63,8 +61,6 @@ const steps = [
 
 export default function AtsMasivoPanel({
   rucAcceso,
-  rucActivo,
-  onActiveContribuyenteChange,
 }: Props) {
   const [archivo, setArchivo] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -120,12 +116,6 @@ export default function AtsMasivoPanel({
 
       setResponse(data);
       setLoteActual(data.lote);
-      if (data.contribuyenteDetectado?.ruc) {
-        onActiveContribuyenteChange({
-          ruc: data.contribuyenteDetectado.ruc,
-          razonSocial: data.contribuyenteDetectado.razonSocial,
-        });
-      }
       setActiveStep(0);
     } catch (err: any) {
       setError(err.message || "Error inesperado importando archivo.");
@@ -215,7 +205,7 @@ export default function AtsMasivoPanel({
           Sube el Excel, revisa el lote procesado y genera el XML listo para validar.
         </p>
         <p className="text-xs font-semibold text-gray-500">
-          Usuario logueado: {rucAcceso} · Contribuyente activo: {rucActivo}
+          Usuario logueado: {rucAcceso}
         </p>
       </div>
 
@@ -263,8 +253,13 @@ export default function AtsMasivoPanel({
       {lote && (
         <>
           {contribuyenteDetectado && (
-            <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
-              Contribuyente detectado: {contribuyenteDetectado.ruc} - {contribuyenteDetectado.razonSocial}
+            <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              <p className="font-black">Contribuyente detectado en archivo ATS</p>
+              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                <Info label="RUC" value={contribuyenteDetectado.ruc} />
+                <Info label="Razón social" value={contribuyenteDetectado.razonSocial} />
+                <Info label="Período" value={lote ? `${lote.mes}/${lote.anio}` : "-"} />
+              </div>
             </div>
           )}
 

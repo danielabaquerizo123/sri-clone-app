@@ -31,11 +31,11 @@ import AnexosPanel from "../components/Anexos/AnexosPanel";
 
 interface DashboardViewProps {
   rucUsuario: string;
+  razonSocialUsuario: string;
   activeContribuyente: {
     ruc: string;
     razonSocial: string;
   };
-  onActiveContribuyenteChange: (contribuyente: { ruc: string; razonSocial: string }) => void;
   onLogout: () => void;
 }
 
@@ -103,8 +103,8 @@ const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export default function DashboardView({
   rucUsuario,
+  razonSocialUsuario,
   activeContribuyente,
-  onActiveContribuyenteChange,
   onLogout,
 }: DashboardViewProps) {
   const [activeTab, setActiveTab] = useState("inicio");
@@ -299,8 +299,8 @@ export default function DashboardView({
   }
 
   const isActivo = data.estadoRuc?.toUpperCase() === "ACTIVO";
-  const displayRuc = activeContribuyente.ruc || data.ruc;
-  const displayRazonSocial = activeContribuyente.razonSocial || data.razonSocial;
+  const displayRuc = rucUsuario;
+  const displayRazonSocial = razonSocialUsuario || rucUsuario;
 
   return (
     <div className="min-h-screen bg-[#eef3f8] text-slate-800 overflow-hidden">
@@ -742,7 +742,6 @@ export default function DashboardView({
     rucUsuario={rucUsuario}
     rucActivo={rucActivo}
     activeView={activeTab}
-    onActiveContribuyenteChange={onActiveContribuyenteChange}
   />
 )}
         </main>
