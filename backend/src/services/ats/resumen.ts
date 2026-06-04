@@ -107,6 +107,8 @@ function ventaBaseNoObjeto(venta: any) {
 
 function retencionesFuenteCompras(compras: any[]) {
   const grupos = new Map<string, { codigo: string; registros: number; base: number; valor: number }>();
+  const baseRetencion = (compra: any, index: number) =>
+    safeNumber(compra[`baseImponibleRetencion${index}`] ?? compra[`baseImponibleRet${index}`]);
 
   for (const compra of compras.filter((c) => tipoCompra(c) !== "04")) {
     const airs = arrayOf(compra.air?.detalleAir);
@@ -116,7 +118,7 @@ function retencionesFuenteCompras(compras: any[]) {
         const codigo = clean(air.codRetAir);
         const base = safeNumber(air.baseImpAir);
         const valor = safeNumber(air.valRetAir);
-        if (!codigo || (base === 0 && valor === 0)) continue;
+        if (!codigo || base <= 0) continue;
         const current = grupos.get(codigo) || { codigo, registros: 0, base: 0, valor: 0 };
         current.registros += 1;
         current.base = round2(current.base + base);
@@ -128,9 +130,9 @@ function retencionesFuenteCompras(compras: any[]) {
 
     for (const index of [1, 2, 3]) {
       const codigo = clean(compra[`codigoRetencion${index}`]);
-      const base = safeNumber(compra[`baseImponibleRet${index}`]);
+      const base = baseRetencion(compra, index);
       const valor = safeNumber(compra[`valorRetenido${index}`]);
-      if (!codigo || (base === 0 && valor === 0)) continue;
+      if (!codigo || base <= 0) continue;
       const current = grupos.get(codigo) || { codigo, registros: 0, base: 0, valor: 0 };
       current.registros += 1;
       current.base = round2(current.base + base);
