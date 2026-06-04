@@ -63,7 +63,10 @@ const years = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - i);
 
 const numericCasilleros = [
   "111",
+  "113",
   "115",
+  "117",
+  "119",
   "401",
   "402",
   "403",
@@ -80,6 +83,7 @@ const numericCasilleros = [
   "480",
   "481",
   "482",
+  "483",
   "484",
   "485",
   "499",
@@ -89,14 +93,18 @@ const numericCasilleros = [
   "507",
   "509",
   "510",
+  "517",
   "518",
   "519",
   "520",
   "529",
   "531",
   "532",
+  "541",
+  "542",
   "563",
   "564",
+  "565",
   "601",
   "602",
   "603",
@@ -106,9 +114,17 @@ const numericCasilleros = [
   "607",
   "608",
   "609",
+  "610",
+  "611",
+  "612",
+  "613",
+  "614",
   "615",
   "617",
+  "618",
+  "619",
   "620",
+  "621",
   "699",
   "721",
   "723",
@@ -128,6 +144,9 @@ const numericCasilleros = [
   "903",
   "904",
   "905",
+  "906",
+  "907",
+  "925",
   "999",
 ];
 
@@ -156,6 +175,7 @@ const initialQuestions: Record<QuestionKey, "SI" | "NO"> = {
 
 const ventasRows = [
   ["401", "402", "Ventas locales gravadas con tarifa diferente de cero"],
+  ["411", "", "Ventas locales gravadas netas"],
   ["403", "404", "Ventas locales tarifa 0% sin derecho a crédito tributario"],
   ["405", "406", "Ventas locales tarifa 0% con derecho a crédito tributario"],
   ["407", "", "Exportaciones de bienes"],
@@ -164,21 +184,34 @@ const ventasRows = [
   ["431", "", "Transferencias no objeto o exentas"],
   ["480", "", "Transferencias gravadas a contado este mes"],
   ["481", "", "Transferencias gravadas a crédito este mes"],
+  ["482", "", "Total impuesto generado"],
+  ["483", "", "Impuesto a liquidar en el mes anterior"],
   ["484", "", "Impuesto a liquidar en este mes"],
+  ["485", "", "Impuesto a liquidar en el próximo mes"],
+  ["499", "", "Total impuesto a liquidar"],
 ];
 
 const comprasRows = [
   ["500", "501", "Adquisiciones gravadas con derecho a crédito tributario"],
+  ["509", "", "Total adquisiciones gravadas brutas"],
+  ["510", "", "Adquisiciones gravadas netas"],
+  ["519", "", "Total adquisiciones gravadas netas"],
+  ["520", "", "IVA generado en adquisiciones gravadas"],
+  ["529", "", "Total IVA generado en adquisiciones"],
   ["502", "", "Adquisiciones gravadas sin derecho a crédito tributario"],
   ["507", "", "Adquisiciones tarifa 0%"],
+  ["517", "", "Adquisiciones tarifa 0% netas"],
   ["518", "", "Adquisiciones realizadas a contribuyentes RISE"],
   ["531", "", "Adquisiciones no objeto de IVA"],
+  ["541", "", "Adquisiciones no objeto de IVA netas"],
   ["532", "", "Adquisiciones exentas de IVA"],
+  ["542", "", "Adquisiciones exentas de IVA netas"],
 ];
 
 const resumenRows = [
   ["563", "Factor de proporcionalidad"],
   ["564", "Crédito tributario aplicable"],
+  ["565", "IVA no considerado como crédito tributario"],
   ["601", "Impuesto causado"],
   ["602", "Crédito tributario aplicable"],
   ["603", "Compensaciones"],
@@ -188,11 +221,18 @@ const resumenRows = [
   ["607", "Ajustes por crédito tributario"],
   ["608", "Otros créditos tributarios"],
   ["609", "Retenciones IVA recibidas"],
+  ["610", "Ajuste por IVA devuelto"],
+  ["611", "Ajuste por IVA devuelto"],
+  ["612", "Ajuste por IVA devuelto"],
+  ["613", "Ajuste por IVA devuelto"],
+  ["614", "Ajuste por IVA devuelto"],
   ["615", "Saldo crédito tributario próximo mes por adquisiciones"],
   ["617", "Saldo crédito tributario próximo mes por retenciones"],
+  ["618", "Saldo crédito tributario próximo mes por compensación"],
+  ["619", "Saldo crédito tributario próximo mes por compensación"],
   ["620", "Saldo impuesto antes de imputaciones"],
+  ["621", "IVA presuntivo"],
   ["699", "Total impuesto a pagar antes de intereses y multas"],
-  ["800", "Otros valores imputables"],
   ["890", "Pago previo informativo"],
   ["897", "Pago previo imputado a intereses"],
   ["898", "Pago previo imputado a impuesto"],
@@ -206,6 +246,10 @@ const retencionesRows = [
   ["727", "Retenciones IVA efectuadas 100%"],
   ["729", "Retenciones IVA 100% sector público"],
   ["731", "Total retenciones IVA efectuadas"],
+  ["799", "Total impuesto retenido"],
+  ["800", "Otros valores imputables"],
+  ["801", "Total impuesto a pagar por retención"],
+  ["859", "Total consolidado de impuesto a pagar"],
 ];
 
 function toNumber(value: string | number | undefined) {
@@ -263,37 +307,59 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     const creditoAnteriorRetenciones = toNumber(form["606"]);
     const retencionesRecibidas = toNumber(form["609"]);
     const pagoPrevioImpuesto = toNumber(form["898"]);
+    const impuestoLiquidar = toNumber(form["499"]) || impuestoGenerado;
+    const impuestoRetenido = toNumber(form["799"]);
+    const otrosValoresRetencion = toNumber(form["800"]);
     const interes = toNumber(form["903"]);
     const multa = toNumber(form["904"]);
     const pagoPrevioInteres = toNumber(form["897"]);
     const pagoPrevioMulta = toNumber(form["899"]);
 
-    const creditoDisponible =
-      creditoCompras + creditoAnteriorCompras + creditoAnteriorRetenciones + retencionesRecibidas;
-    const impuestoCausado = Math.max(impuestoGenerado - creditoCompras, 0);
-    const impuestoAPagar = toNumber(form["859"]) || Math.max(impuestoGenerado - creditoDisponible - pagoPrevioImpuesto, 0);
-    const saldoCompras = Math.max(creditoCompras + creditoAnteriorCompras - impuestoGenerado, 0);
+    const impuestoCausado = Math.max(impuestoLiquidar - creditoCompras, 0);
+    const saldoCompras = Math.max(creditoCompras + creditoAnteriorCompras - impuestoLiquidar, 0);
     const impuestoLuegoCreditoCompras = Math.max(
-      impuestoGenerado - creditoCompras - creditoAnteriorCompras,
+      impuestoLiquidar - creditoCompras - creditoAnteriorCompras,
       0
     );
     const saldoRetenciones = Math.max(
       creditoAnteriorRetenciones + retencionesRecibidas - impuestoLuegoCreditoCompras,
       0
     );
+    const subtotalPercepcion = Math.max(
+      impuestoCausado -
+        saldoCompras -
+        toNumber(form["603"]) -
+        toNumber(form["604"]) -
+        creditoAnteriorRetenciones -
+        toNumber(form["607"]) -
+        toNumber(form["608"]) -
+        retencionesRecibidas +
+        toNumber(form["610"]) +
+        toNumber(form["611"]) +
+        toNumber(form["612"]) +
+        toNumber(form["613"]) +
+        toNumber(form["614"]),
+      0
+    );
+    const impuestoPercepcion = subtotalPercepcion + toNumber(form["621"]);
+    const impuestoRetencion = toNumber(form["801"]) || Math.max(impuestoRetenido - otrosValoresRetencion, 0);
+    const totalConsolidado = toNumber(form["859"]) || impuestoPercepcion + impuestoRetencion;
+    const impuestoAPagar = Math.max(totalConsolidado - pagoPrevioImpuesto, 0);
 
     return {
       "429": impuestoGenerado,
-      "499": toNumber(form["499"]) || impuestoGenerado,
+      "499": impuestoLiquidar,
       "563": factorProporcionalidad,
       "564": creditoCompras,
       "601": impuestoCausado,
-      "602": creditoCompras,
+      "602": saldoCompras,
       "615": saldoCompras,
       "617": saldoRetenciones,
-      "620": impuestoAPagar,
-      "699": impuestoAPagar,
-      "859": toNumber(form["859"]),
+      "620": subtotalPercepcion,
+      "699": impuestoPercepcion,
+      "799": impuestoRetenido,
+      "801": impuestoRetencion,
+      "859": totalConsolidado,
       "902": impuestoAPagar,
       "905": toNumber(form["905"]) || Math.max(impuestoAPagar + Math.max(interes - pagoPrevioInteres, 0) + Math.max(multa - pagoPrevioMulta, 0), 0),
       "999": toNumber(form["905"]) || Math.max(impuestoAPagar + Math.max(interes - pagoPrevioInteres, 0) + Math.max(multa - pagoPrevioMulta, 0), 0),
@@ -469,6 +535,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
             .map(([key, value]) => [key, toNumber(value)])
         ),
         429: totals["429"],
+        499: totals["499"],
         563: totals["563"],
         564: totals["564"],
         601: totals["601"],
@@ -477,7 +544,11 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
         617: totals["617"],
         620: totals["620"],
         699: totals["699"],
+        799: totals["799"],
+        801: totals["801"],
+        859: totals["859"],
         902: totals["902"],
+        905: totals["905"],
         999: totals["999"],
       };
 
@@ -762,13 +833,15 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
                     code === "615" ||
                     code === "617" ||
                     code === "620" ||
+                    code === "801" ||
+                    code === "859" ||
                     code === "699";
                   return calculated ? (
                     <TotalBox
                       key={code}
                       label={`${code} ${label}`}
                       value={totals[code as keyof typeof totals]}
-                      format={code === "563" ? "percent" : "money"}
+                      format={code === "563" ? "factor" : "money"}
                     />
                   ) : (
                     <MoneyField
@@ -789,14 +862,22 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
             />
             {openSections.retenciones && (
               <div className="grid grid-cols-1 gap-4 border-t p-4 md:grid-cols-2 xl:grid-cols-3">
-                {retencionesRows.map(([code, label]) => (
-                  <MoneyField
-                    key={code}
-                    label={`${code} ${label}`}
-                    value={form[code]}
-                    onChange={(value) => updateForm(code, value)}
-                  />
-                ))}
+                {retencionesRows.map(([code, label]) =>
+                  code === "799" || code === "801" || code === "859" ? (
+                    <TotalBox
+                      key={code}
+                      label={`${code} ${label}`}
+                      value={totals[code as keyof typeof totals]}
+                    />
+                  ) : (
+                    <MoneyField
+                      key={code}
+                      label={`${code} ${label}`}
+                      value={form[code]}
+                      onChange={(value) => updateForm(code, value)}
+                    />
+                  )
+                )}
               </div>
             )}
           </div>
@@ -1165,13 +1246,13 @@ function TotalBox({
   label: string;
   value: number;
   strong?: boolean;
-  format?: "money" | "percent";
+  format?: "money" | "percent" | "factor";
 }) {
   return (
     <div className={`rounded-2xl border p-4 ${strong ? "bg-[#003565] text-white" : "bg-slate-50 text-slate-700"}`}>
       <p className={`text-xs font-black uppercase ${strong ? "text-white/70" : "text-slate-400"}`}>{label}</p>
       <p className="mt-1 text-2xl font-black">
-        {format === "percent" ? `${money(value)}%` : `$${money(value)}`}
+        {format === "factor" ? value.toFixed(4) : format === "percent" ? `${money(value)}%` : `$${money(value)}`}
       </p>
     </div>
   );
