@@ -731,9 +731,9 @@ export default function DashboardView({
 
           {activeTab.startsWith("declaracion_") && (
   <DeclaracionesPanel
-    rucUsuario={rucActivo}
+    rucUsuario={rucUsuario}
     activeView={activeTab}
-    razonSocial={data.razonSocial}
+    razonSocial={razonSocialUsuario}
   />
 )}
 

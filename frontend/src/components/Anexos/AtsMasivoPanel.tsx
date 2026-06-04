@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { saveLastAtsContribuyente } from "../../utils/atsSession";
 
 type Props = {
   rucAcceso: string;
@@ -116,6 +117,15 @@ export default function AtsMasivoPanel({
 
       setResponse(data);
       setLoteActual(data.lote);
+      if (data.contribuyenteDetectado?.ruc && data.lote?.id) {
+        saveLastAtsContribuyente({
+          ruc: data.contribuyenteDetectado.ruc,
+          razonSocial: data.contribuyenteDetectado.razonSocial,
+          anio: Number(data.lote.anio),
+          mes: data.lote.mes,
+          loteId: data.lote.id,
+        });
+      }
       setActiveStep(0);
     } catch (err: any) {
       setError(err.message || "Error inesperado importando archivo.");

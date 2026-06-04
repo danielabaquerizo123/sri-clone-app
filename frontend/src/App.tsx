@@ -19,12 +19,18 @@ export default function App() {
     if (user) {
       const parsedUser = JSON.parse(user);
       const storedActive = localStorage.getItem("sri_active_contribuyente");
+      const parsedActive = storedActive ? JSON.parse(storedActive) : null;
+      const activeFromSession =
+        parsedActive?.ruc === parsedUser.ruc
+          ? parsedActive
+          : {
+              ruc: parsedUser.ruc,
+              razonSocial: parsedUser.razonSocial || parsedUser.ruc,
+            };
       setUserRuc(parsedUser.ruc);
       setUserRazonSocial(parsedUser.razonSocial || parsedUser.ruc);
-      setActiveContribuyente(storedActive ? JSON.parse(storedActive) : {
-        ruc: parsedUser.ruc,
-        razonSocial: parsedUser.razonSocial || parsedUser.ruc,
-      });
+      setActiveContribuyente(activeFromSession);
+      localStorage.setItem("sri_active_contribuyente", JSON.stringify(activeFromSession));
       setIsAuthenticated(true);
     }
   }, []);

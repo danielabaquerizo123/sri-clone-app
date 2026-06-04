@@ -10,6 +10,7 @@ import {
   Save,
   Send,
 } from "lucide-react";
+import { getLastAtsContribuyenteForPeriod } from "../../utils/atsSession";
 
 type Props = {
   rucUsuario: string;
@@ -494,6 +495,10 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const atsContribuyente = periodicidad === "Mensual" ? getLastAtsContribuyenteForPeriod(anio, mes) : null;
+  const rucDeclaracion = atsContribuyente?.ruc || rucUsuario;
+  const razonSocialDeclaracion = atsContribuyente?.razonSocial || razonSocial || "";
+
   const setFormularioEnCero = () => {
     setForm((prev) => ({
       ...initialForm,
@@ -525,7 +530,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       }
 
       const response = await fetch(
-        `${apiUrl}/api/declaraciones/${rucUsuario}/formulario104?${params}`
+        `${apiUrl}/api/declaraciones/${rucDeclaracion}/formulario104?${params}`
       );
       const data = await response.json();
 
@@ -684,8 +689,8 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
           mes,
           semestre,
           anio,
-          ruc: periodoData?.ruc || rucUsuario,
-          razonSocial: periodoData?.razonSocial || razonSocial,
+          ruc: periodoData?.ruc || rucDeclaracion,
+          razonSocial: periodoData?.razonSocial || razonSocialDeclaracion,
         },
         preguntas: questions,
         sugerenciasATS: periodoData
@@ -703,7 +708,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     try {
       setLoadingEnviar(true);
       setMensaje("");
-      const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
+      const res = await fetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload("BORRADOR")),
@@ -712,7 +717,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       if (!res.ok) throw new Error(data.message || "No fue posible guardar el borrador.");
 
       localStorage.setItem(
-        `formulario104-${rucUsuario}`,
+        `formulario104-${rucDeclaracion}`,
         JSON.stringify({ periodicidad, mes, semestre, anio, questions, form, totals, periodoData })
       );
       setDraftSaved(true);
@@ -732,7 +737,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       setLoadingEnviar(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
+      const res = await fetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload("PRESENTADA")),
@@ -745,7 +750,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       }
 
       setMensaje("Su declaración ha sido procesada satisfactoriamente.");
-      localStorage.removeItem(`formulario104-${rucUsuario}`);
+      localStorage.removeItem(`formulario104-${rucDeclaracion}`);
     } catch (err) {
       setMensaje(err instanceof Error ? err.message : "No fue posible procesar la declaración.");
     } finally {
@@ -753,8 +758,8 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     }
   };
 
-  const rucFinal = periodoData?.ruc || rucUsuario;
-  const razonSocialFinal = periodoData?.razonSocial || razonSocial || "";
+  const rucFinal = periodoData?.ruc || rucDeclaracion;
+  const razonSocialFinal = periodoData?.razonSocial || razonSocialDeclaracion;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -795,6 +800,14 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
 
       {step === 1 && (
         <Panel title="1. Período fiscal">
+          {atsContribuyente && (
+            <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              <p className="font-black">Declaración para contribuyente detectado ATS</p>
+              <p className="mt-1 font-semibold">
+                RUC: {atsContribuyente.ruc} · Razón social: {atsContribuyente.razonSocial} · Lote: {atsContribuyente.loteId}
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Obligación">
               <select

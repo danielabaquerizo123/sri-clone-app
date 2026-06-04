@@ -12,6 +12,7 @@ import {
   Save,
   Send,
 } from "lucide-react";
+import { getLastAtsContribuyenteForPeriod } from "../../utils/atsSession";
 
 type Props = {
   rucUsuario: string;
@@ -418,8 +419,11 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     };
   }, [form]);
 
-  const rucFinal = periodoData?.ruc || rucUsuario;
-  const razonSocialFinal = periodoData?.razonSocial || razonSocial || "";
+  const atsContribuyente = getLastAtsContribuyenteForPeriod(anio, mes);
+  const rucDeclaracion = atsContribuyente?.ruc || rucUsuario;
+  const razonSocialDeclaracion = atsContribuyente?.razonSocial || razonSocial || "";
+  const rucFinal = periodoData?.ruc || rucDeclaracion;
+  const razonSocialFinal = periodoData?.razonSocial || razonSocialDeclaracion;
   const mesTexto = meses.find((item) => item.value === mes)?.label || mes;
 
   const updateForm = (key: string, value: string) => {
@@ -437,7 +441,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
       setErrors([]);
 
       const response = await fetch(
-        `${apiUrl}/api/declaraciones/${rucUsuario}/formulario103?anio=${anio}&mes=${mes}`
+        `${apiUrl}/api/declaraciones/${rucDeclaracion}/formulario103?anio=${anio}&mes=${mes}`
       );
       const data = await response.json();
 
@@ -554,7 +558,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
   };
 
   const guardarDeclaracion = async (estado: "BORRADOR" | "PRESENTADA") => {
-    const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
+    const res = await fetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildPayload(estado)),
@@ -575,7 +579,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
       setMensaje("");
       const declaracion = await guardarDeclaracion("BORRADOR");
       localStorage.setItem(
-        `formulario103-${rucUsuario}`,
+        `formulario103-${rucDeclaracion}`,
         JSON.stringify({ declaracionId: declaracion.id, mes, anio, form, questions, totals, periodoData })
       );
       setDraftSaved(true);
@@ -602,7 +606,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
 
       await guardarDeclaracion("PRESENTADA");
       setMensaje("Su declaración ha sido procesada satisfactoriamente.");
-      localStorage.removeItem(`formulario103-${rucUsuario}`);
+      localStorage.removeItem(`formulario103-${rucDeclaracion}`);
     } catch (err) {
       setMensaje(err instanceof Error ? err.message : "Error inesperado enviando Formulario 103.");
     } finally {
@@ -614,8 +618,8 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     if (!declaracionGuardada) return;
     const path =
       tipo === "pdf"
-        ? `/api/declaraciones/${rucUsuario}/declaracion/${declaracionGuardada.id}/pdf`
-        : `/api/declaraciones/${rucUsuario}/declaracion/${declaracionGuardada.id}/comprobante`;
+        ? `/api/declaraciones/${rucDeclaracion}/declaracion/${declaracionGuardada.id}/pdf`
+        : `/api/declaraciones/${rucDeclaracion}/declaracion/${declaracionGuardada.id}/comprobante`;
     const response = await fetch(`${apiUrl}${path}`);
     if (!response.ok) {
       setMensaje("No fue posible descargar el documento.");
@@ -625,7 +629,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${tipo === "pdf" ? "Formulario103" : "Comprobante103"}_${rucUsuario}_${anio}_${mes}.pdf`;
+    link.download = `${tipo === "pdf" ? "Formulario103" : "Comprobante103"}_${rucDeclaracion}_${anio}_${mes}.pdf`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -708,6 +712,14 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
 
       {step === 1 && (
         <Panel title="1. Período fiscal">
+          {atsContribuyente && (
+            <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              <p className="font-black">Declaración para contribuyente detectado ATS</p>
+              <p className="mt-1 font-semibold">
+                RUC: {atsContribuyente.ruc} · Razón social: {atsContribuyente.razonSocial} · Lote: {atsContribuyente.loteId}
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Field label="Obligación">
               <input className="input" value="DECLARACIÓN DE RETENCIONES EN LA FUENTE" disabled />
