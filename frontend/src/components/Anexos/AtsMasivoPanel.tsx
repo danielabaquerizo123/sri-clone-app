@@ -71,9 +71,10 @@ export default function AtsMasivoPanel({
   const [downloading, setDownloading] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [response, setResponse] = useState<ImportResponse | null>(null);
+  const [loteActual, setLoteActual] = useState<AtsLote | null>(null);
   const [error, setError] = useState("");
 
-  const lote = response?.lote;
+  const lote = loteActual;
   const contribuyenteDetectado = response?.contribuyenteDetectado;
   const resumen = response?.resumen;
   const issues = response?.issues || [];
@@ -118,6 +119,7 @@ export default function AtsMasivoPanel({
       }
 
       setResponse(data);
+      setLoteActual(data.lote);
       if (data.contribuyenteDetectado?.ruc) {
         onActiveContribuyenteChange({
           ruc: data.contribuyenteDetectado.ruc,
@@ -226,7 +228,13 @@ export default function AtsMasivoPanel({
           <input
             type="file"
             accept=".xlsx,.xls"
-            onChange={(e) => setArchivo(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              setArchivo(e.target.files?.[0] || null);
+              setResponse(null);
+              setLoteActual(null);
+              setActiveStep(0);
+              setError("");
+            }}
             className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
           />
 
