@@ -62,6 +62,8 @@ const meses = [
 const years = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - i);
 
 const numericCasilleros = [
+  "111",
+  "115",
   "401",
   "402",
   "403",
@@ -70,18 +72,27 @@ const numericCasilleros = [
   "406",
   "407",
   "408",
+  "411",
   "421",
   "422",
   "429",
   "431",
   "480",
   "481",
+  "482",
   "484",
+  "485",
+  "499",
   "500",
   "501",
   "502",
   "507",
+  "509",
+  "510",
   "518",
+  "519",
+  "520",
+  "529",
   "531",
   "532",
   "563",
@@ -105,7 +116,10 @@ const numericCasilleros = [
   "727",
   "729",
   "731",
+  "799",
+  "801",
   "800",
+  "859",
   "890",
   "897",
   "898",
@@ -113,6 +127,7 @@ const numericCasilleros = [
   "902",
   "903",
   "904",
+  "905",
   "999",
 ];
 
@@ -231,6 +246,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
 
   const totals = useMemo(() => {
     const impuestoGenerado =
+      toNumber(form["421"]) ||
       toNumber(form["402"]) + toNumber(form["404"]) + toNumber(form["406"]) + toNumber(form["422"]);
     const totalVentas =
       toNumber(form["401"]) +
@@ -241,8 +257,8 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       toNumber(form["431"]);
     const ventasConDerecho =
       toNumber(form["401"]) + toNumber(form["405"]) + toNumber(form["407"]) + toNumber(form["408"]);
-    const factorProporcionalidad = totalVentas > 0 ? (ventasConDerecho / totalVentas) * 100 : 0;
-    const creditoCompras = toNumber(form["501"]) * (factorProporcionalidad / 100);
+    const factorProporcionalidad = toNumber(form["563"]) || (totalVentas > 0 ? ventasConDerecho / totalVentas : 0);
+    const creditoCompras = (toNumber(form["529"]) || toNumber(form["501"])) * factorProporcionalidad;
     const creditoAnteriorCompras = toNumber(form["605"]);
     const creditoAnteriorRetenciones = toNumber(form["606"]);
     const retencionesRecibidas = toNumber(form["609"]);
@@ -255,7 +271,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     const creditoDisponible =
       creditoCompras + creditoAnteriorCompras + creditoAnteriorRetenciones + retencionesRecibidas;
     const impuestoCausado = Math.max(impuestoGenerado - creditoCompras, 0);
-    const impuestoAPagar = Math.max(impuestoGenerado - creditoDisponible - pagoPrevioImpuesto, 0);
+    const impuestoAPagar = toNumber(form["859"]) || Math.max(impuestoGenerado - creditoDisponible - pagoPrevioImpuesto, 0);
     const saldoCompras = Math.max(creditoCompras + creditoAnteriorCompras - impuestoGenerado, 0);
     const impuestoLuegoCreditoCompras = Math.max(
       impuestoGenerado - creditoCompras - creditoAnteriorCompras,
@@ -268,6 +284,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
 
     return {
       "429": impuestoGenerado,
+      "499": toNumber(form["499"]) || impuestoGenerado,
       "563": factorProporcionalidad,
       "564": creditoCompras,
       "601": impuestoCausado,
@@ -276,8 +293,10 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       "617": saldoRetenciones,
       "620": impuestoAPagar,
       "699": impuestoAPagar,
+      "859": toNumber(form["859"]),
       "902": impuestoAPagar,
-      "999": Math.max(impuestoAPagar + Math.max(interes - pagoPrevioInteres, 0) + Math.max(multa - pagoPrevioMulta, 0), 0),
+      "905": toNumber(form["905"]) || Math.max(impuestoAPagar + Math.max(interes - pagoPrevioInteres, 0) + Math.max(multa - pagoPrevioMulta, 0), 0),
+      "999": toNumber(form["905"]) || Math.max(impuestoAPagar + Math.max(interes - pagoPrevioInteres, 0) + Math.max(multa - pagoPrevioMulta, 0), 0),
     };
   }, [form]);
 

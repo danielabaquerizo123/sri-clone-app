@@ -237,34 +237,42 @@ function removeUndefinedDeep(value: any): any {
 }
 
 function buildAir(c: any) {
+  if (clean(c.comprobante) === "04") return undefined;
+
   const detalleAir: any[] = [];
+  const baseRetencion = (index: number) =>
+    firstMoney(
+      c[`baseImponibleRetencion${index}`],
+      c[`baseImponibleRet${index}`],
+      c[`retFuenteBaseImponible${index}`]
+    );
 
   const valorRetenido1 = firstMoney(c.valorRetenido1, c.retFuenteValorRetenido1);
   const valorRetenido2 = firstMoney(c.valorRetenido2, c.retFuenteValorRetenido2);
   const valorRetenido3 = firstMoney(c.valorRetenido3, c.retFuenteValorRetenido3);
 
-  if (hasMoney(valorRetenido1)) {
+  if (clean(c.codigoRetencion1) && hasMoney(baseRetencion(1))) {
     detalleAir.push({
-      codRetAir: clean(c.codigoRetencion1 || "332"),
-      baseImpAir: money(firstMoney(c.baseImponibleRet1, c.retFuenteBaseImponible1)),
+      codRetAir: clean(c.codigoRetencion1),
+      baseImpAir: money(baseRetencion(1)),
       porcentajeAir: porcentajeAirValue(c.porcentajeRetencion1),
       valRetAir: money(valorRetenido1),
     });
   }
 
-  if (hasMoney(valorRetenido2)) {
+  if (clean(c.codigoRetencion2) && hasMoney(baseRetencion(2))) {
     detalleAir.push({
-      codRetAir: clean(c.codigoRetencion2 || "332"),
-      baseImpAir: money(firstMoney(c.baseImponibleRet2, c.retFuenteBaseImponible2)),
+      codRetAir: clean(c.codigoRetencion2),
+      baseImpAir: money(baseRetencion(2)),
       porcentajeAir: porcentajeAirValue(c.porcentajeRetencion2),
       valRetAir: money(valorRetenido2),
     });
   }
 
-  if (hasMoney(valorRetenido3)) {
+  if (clean(c.codigoRetencion3) && hasMoney(baseRetencion(3))) {
     detalleAir.push({
-      codRetAir: clean(c.codigoRetencion3 || "332"),
-      baseImpAir: money(firstMoney(c.baseImponibleRet3, c.retFuenteBaseImponible3)),
+      codRetAir: clean(c.codigoRetencion3),
+      baseImpAir: money(baseRetencion(3)),
       porcentajeAir: porcentajeAirValue(c.porcentajeRetencion3),
       valRetAir: money(valorRetenido3),
     });

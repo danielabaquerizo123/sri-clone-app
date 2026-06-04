@@ -881,76 +881,48 @@ export const consultarFormulario103 = async (req: Request, res: Response) => {
 export const consultarFormulario104 = async (req: Request, res: Response) => {
   try {
     const { ruc } = req.params;
-    const { anio, mes, semestre } = req.query;
+    const { anio, mes } = req.query;
 
-    if (!anio || (!mes && !semestre)) {
+    if (!anio || !mes) {
       return res.status(400).json({
         message: "Debe seleccionar el período fiscal.",
       });
     }
 
     const anioNumero = Number(anio);
-    const mesCodigo = mes ? String(mes).padStart(2, "0") : "";
-    const mesTexto = mesCodigo ? mesesMap[mesCodigo] || String(mes) : null;
-    const semestreTexto = semestre ? String(semestre) : null;
+    const mesCodigo = String(mes).padStart(2, "0");
+    const mesTexto = mesesMap[mesCodigo] || String(mes);
 
-    const contribuyente = await contribuyenteParaConsulta(ruc, Number(anio), mesCodigo);
+    const lote = await prisma.atsLote.findFirst({
+      where: {
+        rucInformante: ruc,
+        anio: anioNumero,
+        mes: mesCodigo,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        compras: true,
+        ventas: true,
+        anulados: true,
+      },
+    });
 
-    if (!contribuyente) {
+    if (!lote) {
       return res.status(404).json({
-        message: "Contribuyente no encontrado.",
+        message: "No existe un lote ATS vigente para el RUC y período seleccionado.",
       });
     }
 
-    const fechaDesde = mesCodigo
-      ? new Date(anioNumero, Number(mesCodigo) - 1, 1)
-      : semestreTexto === "Primer Semestre"
-      ? new Date(anioNumero, 0, 1)
-      : new Date(anioNumero, 6, 1);
-
-    const fechaHasta = mesCodigo
-      ? new Date(anioNumero, Number(mesCodigo), 1)
-      : semestreTexto === "Primer Semestre"
-      ? new Date(anioNumero, 6, 1)
-      : new Date(anioNumero + 1, 0, 1);
-
-    const periodoFiltros = [
-      ...(mesTexto ? [{ periodoDeclaradoForm104: mesTexto }, { periodoDeclaradoForm104: mesCodigo }] : []),
-      ...(semestreTexto ? [{ periodoDeclaradoForm104: semestreTexto }] : []),
-    ];
-
-    const [ventas, compras] = await Promise.all([
-      prisma.venta.findMany({
-        where: {
-          contribuyenteId: contribuyente.id,
-          OR: [
-            ...periodoFiltros,
-            {
-              fechaEmision: {
-                gte: fechaDesde,
-                lt: fechaHasta,
-              },
-            },
-          ],
-        },
-      }),
-      prisma.compra.findMany({
-        where: {
-          contribuyenteId: contribuyente.id,
-          OR: [
-            ...periodoFiltros,
-            {
-              fechaRegistro: {
-                gte: fechaDesde,
-                lt: fechaHasta,
-              },
-            },
-          ],
-        },
-      }),
-    ]);
+    const ventas = lote.ventas;
+    const compras = lote.compras;
+    const facturas = compras.filter((compra) => String(compra.comprobante || "") !== "04");
+    const notasCredito = compras.filter((compra) => String(compra.comprobante || "") === "04");
 
     const casilleros: Record<string, number> = {
+      "111": 0,
+      "115": 0,
       "401": 0,
       "402": 0,
       "403": 0,
@@ -959,18 +931,27 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
       "406": 0,
       "407": 0,
       "408": 0,
+      "411": 0,
       "421": 0,
       "422": 0,
       "429": 0,
       "431": 0,
       "480": 0,
       "481": 0,
+      "482": 0,
       "484": 0,
+      "485": 0,
+      "499": 0,
       "500": 0,
       "501": 0,
       "502": 0,
       "507": 0,
+      "509": 0,
+      "510": 0,
       "518": 0,
+      "519": 0,
+      "520": 0,
+      "529": 0,
       "531": 0,
       "532": 0,
       "563": 0,
@@ -994,7 +975,10 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
       "727": 0,
       "729": 0,
       "731": 0,
+      "799": 0,
+      "801": 0,
       "800": 0,
+      "859": 0,
       "890": 0,
       "897": 0,
       "898": 0,
@@ -1002,118 +986,71 @@ export const consultarFormulario104 = async (req: Request, res: Response) => {
       "902": 0,
       "903": 0,
       "904": 0,
+      "905": 0,
       "999": 0,
     };
 
     for (const venta of ventas) {
-      add(
-        casilleros,
-        "401",
-        n(venta.baseGravableIva1) + n(venta.baseGravableIva2) + n(venta.baseGravableIva3)
-      );
-      add(casilleros, "402", n(venta.montoIva1) + n(venta.montoIva2) + n(venta.montoIva3));
-      add(casilleros, "403", n(venta.baseTarifa0));
-      add(casilleros, "431", n(venta.baseNoObjetoIva) + n(venta.baseExenta));
+      add(casilleros, "111", n(venta.cantidadComprobantes || 1));
+      add(casilleros, "401", n(venta.baseGravableIva1));
+      add(casilleros, "421", n(venta.montoIva1));
       add(casilleros, "609", n(venta.valorRetenidoIva));
     }
 
-    for (const compra of compras) {
-      const baseGravada =
-        n(compra.baseGravableIva1) + n(compra.baseGravableIva2) + n(compra.baseGravableIva3);
-      const ivaCompras = n(compra.montoIva1) + n(compra.montoIva2) + n(compra.montoIva3);
-      const creditoTributario = n(compra.liqImpIvaCreditoTributario);
-
-      add(casilleros, "500", baseGravada);
-      add(casilleros, "501", creditoTributario > 0 ? creditoTributario : ivaCompras);
-      add(casilleros, "507", n(compra.baseTarifa0));
-      add(casilleros, "531", n(compra.baseNoObjetoIva));
-      add(casilleros, "532", n(compra.baseExenta));
-      add(casilleros, "721", n(compra.valorRetencionIva30));
-      add(casilleros, "723", n(compra.valorRetencionIva50));
-      add(casilleros, "725", n(compra.valorRetencionIva70));
-      add(casilleros, "727", n(compra.valorRetencionIva100));
-      add(casilleros, "729", n(compra.valorRetencionIva100SectorPublico));
-
-      const totalRetenidoIva = n(compra.totalRetencionIvaFte);
-      add(
-        casilleros,
-        "731",
-        totalRetenidoIva > 0
-          ? totalRetenidoIva
-          : n(compra.valorRetencionIva30) +
-              n(compra.valorRetencionIva50) +
-              n(compra.valorRetencionIva70) +
-              n(compra.valorRetencionIva100) +
-              n(compra.valorRetencionIva100SectorPublico) +
-              n(compra.liqImpSumatoriaRetIva)
-      );
+    for (const compra of facturas) {
+      add(casilleros, "115", 1);
+      add(casilleros, "500", n(compra.baseGravableIva1));
+      add(casilleros, "520", n(compra.montoIva1));
+      add(casilleros, "725", n(compra.valorRetencionIva30));
+      add(casilleros, "729", n(compra.valorRetencionIva70));
     }
 
-    if (mesCodigo) {
-      const anterior = previousMonth(anioNumero, mesCodigo);
-
-      const declaracionAnterior = await prisma.declaracion.findFirst({
-        where: {
-          contribuyenteId: contribuyente.id,
-          formulario: {
-            contains: "104",
-            mode: "insensitive",
-          },
-          anio: anterior.anio,
-          mes: anterior.mes,
-        },
-        orderBy: {
-          fechaEnvio: "desc",
-        },
-      });
-
-      const casillerosAnteriores = getJsonCasilleros(declaracionAnterior?.datosJSON);
-      casilleros["605"] = n(casillerosAnteriores["615"] ?? casillerosAnteriores[615] ?? 0);
-      casilleros["606"] = n(casillerosAnteriores["617"] ?? casillerosAnteriores[617] ?? 0);
+    for (const notaCredito of notasCredito) {
+      add(casilleros, "510", Math.abs(n(notaCredito.baseGravableIva1)));
+      add(casilleros, "520", -Math.abs(n(notaCredito.montoIva1)));
     }
+    const notasCreditoBaseGravada = casilleros["510"];
 
-    const totalVentas =
-      casilleros["401"] +
-      casilleros["403"] +
-      casilleros["405"] +
-      casilleros["407"] +
-      casilleros["408"] +
-      casilleros["431"];
-    const ventasConDerecho = casilleros["401"] + casilleros["405"] + casilleros["407"] + casilleros["408"];
+    casilleros["411"] = casilleros["401"];
+    casilleros["429"] = casilleros["421"];
+    casilleros["480"] = casilleros["401"];
+    casilleros["482"] = casilleros["421"];
+    casilleros["484"] = round2(casilleros["480"] * 0.15);
+    casilleros["485"] = round2(casilleros["482"] - casilleros["484"]);
+    casilleros["499"] = casilleros["484"];
 
-    casilleros["429"] = round2(casilleros["402"] + casilleros["404"] + casilleros["406"] + casilleros["422"]);
-    casilleros["563"] = totalVentas > 0 ? round2((ventasConDerecho / totalVentas) * 100) : 0;
-    casilleros["564"] = round2(casilleros["501"] * (casilleros["563"] / 100));
-    casilleros["602"] = casilleros["564"];
+    casilleros["509"] = casilleros["500"];
+    casilleros["510"] = round2(casilleros["500"] - notasCreditoBaseGravada);
+    casilleros["519"] = casilleros["510"];
+    casilleros["529"] = casilleros["520"];
+    casilleros["563"] = casilleros["480"] > 0 ? 1 : 0;
+    casilleros["564"] = round2(casilleros["529"] * casilleros["563"]);
 
-    const creditoDisponible = round2(casilleros["564"] + casilleros["605"] + casilleros["606"] + casilleros["609"]);
-    casilleros["601"] = Math.max(round2(casilleros["429"] - casilleros["564"]), 0);
-    casilleros["902"] = Math.max(round2(casilleros["429"] - creditoDisponible), 0);
+    casilleros["601"] = Math.max(round2(casilleros["499"] - casilleros["564"]), 0);
+    casilleros["602"] = Math.max(round2(casilleros["564"] - casilleros["499"]), 0);
+    casilleros["615"] = casilleros["602"];
+    casilleros["617"] = casilleros["609"];
 
-    const saldoCompras = Math.max(round2(casilleros["564"] + casilleros["605"] - casilleros["429"]), 0);
-    const impuestoLuegoCreditoCompras = Math.max(round2(casilleros["429"] - casilleros["564"] - casilleros["605"]), 0);
-    const saldoRetenciones = Math.max(
-      round2(casilleros["606"] + casilleros["609"] - impuestoLuegoCreditoCompras),
-      0
-    );
-
-    casilleros["615"] = saldoCompras;
-    casilleros["617"] = saldoRetenciones;
-    casilleros["620"] = round2(casilleros["601"] - casilleros["602"]);
-    casilleros["699"] = casilleros["902"];
+    casilleros["799"] = round2(casilleros["725"] + casilleros["729"]);
+    casilleros["801"] = casilleros["799"];
+    casilleros["859"] = casilleros["801"];
+    casilleros["902"] = casilleros["859"];
     casilleros["999"] = round2(casilleros["902"] + casilleros["903"] + casilleros["904"]);
+    casilleros["905"] = casilleros["999"];
 
     return res.json({
-      ruc: contribuyente.ruc,
-      razonSocial: contribuyente.razonSocial,
+      ruc: lote.rucInformante,
+      razonSocial: lote.razonSocial,
       anio: anioNumero,
-      mes: mesCodigo || null,
+      mes: mesCodigo,
       mesTexto,
-      semestre: semestreTexto,
+      semestre: null,
       resumen: {
+        atsLoteId: lote.id,
         ventasLeidas: ventas.length,
         comprasLeidas: compras.length,
-        requiereRevision: ["403/405", "407", "408", "502", "603", "604", "607", "608", "800"],
+        anuladosLeidos: lote.anulados.length,
+        requiereRevision: ["603", "604", "607", "608", "800"],
       },
       casilleros,
     });
