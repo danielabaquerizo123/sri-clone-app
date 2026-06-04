@@ -104,6 +104,23 @@ function sendPdf(res: Response, filename: string, build: (doc: PDFKit.PDFDocumen
   doc.end();
 }
 
+function sendPdfLandscape(res: Response, filename: string, build: (doc: PDFKit.PDFDocument) => void) {
+  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 34 });
+  const chunks: Buffer[] = [];
+
+  doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+  doc.on("end", () => {
+    const pdf = Buffer.concat(chunks);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filenameSafe(filename)}"`);
+    res.setHeader("Content-Length", pdf.length);
+    res.end(pdf);
+  });
+
+  build(doc);
+  doc.end();
+}
+
 function pdfTitle(doc: PDFKit.PDFDocument, title: string, subtitle: string) {
   doc
     .fontSize(10)
@@ -406,6 +423,281 @@ function drawFormulario104Pdf(params: {
     });
 }
 
+type Formulario103PdfRow = {
+  concepto: string;
+  baseCode?: string;
+  retCode?: string;
+};
+
+const formulario103Sections: Array<{ title: string; rows: Formulario103PdfRow[] }> = [
+  {
+    title: "Derivadas del trabajo y servicios prestados",
+    rows: [
+      { concepto: "Publicidad y comunicación", baseCode: "309", retCode: "359" },
+    ],
+  },
+  {
+    title: "Por bienes y servicios",
+    rows: [
+      { concepto: "Transferencia de bienes muebles de naturaleza corporal", baseCode: "312", retCode: "362" },
+      { concepto: "Otras compras de bienes y servicios no sujetas a retención", baseCode: "332" },
+    ],
+  },
+  {
+    title: "Subtotal operaciones efectuadas en el país",
+    rows: [{ concepto: "Subtotal operaciones efectuadas en el país", baseCode: "349", retCode: "399" }],
+  },
+  {
+    title: "Total retención impuesto a la renta",
+    rows: [{ concepto: "Total retención de impuesto a la renta", retCode: "499" }],
+  },
+  {
+    title: "Valores a pagar",
+    rows: [
+      { concepto: "Total impuesto a pagar", retCode: "902" },
+      { concepto: "Mediante cheque, débito bancario, efectivo u otras formas de pago", retCode: "905" },
+      { concepto: "Total pagado", retCode: "999" },
+    ],
+  },
+];
+
+function drawFormulario103Section(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  rows: Formulario103PdfRow[],
+  casilleros: Record<string, number>
+) {
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const conceptWidth = 365;
+  const codeWidth = 72;
+  const valueWidth = 100;
+  const headerHeight = 18;
+  const rowHeight = 20;
+
+  ensureSpace(doc, 24 + headerHeight + rowHeight);
+  doc
+    .moveDown(0.35)
+    .rect(x, doc.y, width, 18)
+    .fill("#003565")
+    .fillColor("#ffffff")
+    .font("Helvetica-Bold")
+    .fontSize(8.4)
+    .text(title.toUpperCase(), x + 8, doc.y + 4, { width: width - 16 });
+  doc.font("Helvetica");
+  doc.y += 21;
+
+  const drawHeader = () => {
+    doc
+      .rect(x, doc.y, width, headerHeight)
+      .fill("#e8eef7")
+      .fillColor("#0f172a")
+      .font("Helvetica-Bold")
+      .fontSize(7.5)
+      .text("CONCEPTO", x + 5, doc.y + 5, { width: conceptWidth - 10 })
+      .text("COD. BASE", x + conceptWidth + 5, doc.y + 5, { width: codeWidth - 10, align: "center" })
+      .text("BASE IMPONIBLE", x + conceptWidth + codeWidth + 5, doc.y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      })
+      .text("COD. RET.", x + conceptWidth + codeWidth + valueWidth + 5, doc.y + 5, {
+        width: codeWidth - 10,
+        align: "center",
+      })
+      .text("VALOR RETENIDO", x + conceptWidth + codeWidth * 2 + valueWidth + 5, doc.y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      });
+    doc.font("Helvetica");
+    doc.y += headerHeight;
+  };
+
+  drawHeader();
+
+  rows.forEach((row, index) => {
+    if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      drawHeader();
+    }
+
+    const y = doc.y;
+    const baseValue = row.baseCode ? casilleros[row.baseCode] || 0 : undefined;
+    const retValue = row.retCode ? casilleros[row.retCode] || 0 : undefined;
+
+    doc
+      .rect(x, y, width, rowHeight)
+      .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+      .strokeColor("#cbd5e1")
+      .rect(x, y, width, rowHeight)
+      .stroke();
+
+    doc
+      .fillColor("#111827")
+      .fontSize(7.7)
+      .font("Helvetica")
+      .text(row.concepto, x + 5, y + 5, { width: conceptWidth - 10 })
+      .font("Helvetica-Bold")
+      .text(row.baseCode || "", x + conceptWidth + 5, y + 5, { width: codeWidth - 10, align: "center" })
+      .font("Helvetica")
+      .text(baseValue === undefined ? "" : formatMoney(baseValue), x + conceptWidth + codeWidth + 5, y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      })
+      .font("Helvetica-Bold")
+      .text(row.retCode || "", x + conceptWidth + codeWidth + valueWidth + 5, y + 5, {
+        width: codeWidth - 10,
+        align: "center",
+      })
+      .font("Helvetica")
+      .text(retValue === undefined ? "" : formatMoney(retValue), x + conceptWidth + codeWidth * 2 + valueWidth + 5, y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      });
+
+    doc.y = y + rowHeight;
+  });
+}
+
+function drawFormulario103Pdf(params: {
+  doc: PDFKit.PDFDocument;
+  declaracion: {
+    formulario: string;
+    mes: string | null;
+    semestre: string | null;
+    anio: number;
+    numeroAdhesion: string;
+    estado: string;
+  };
+  ruc: string;
+  razonSocial: string;
+  casilleros: Record<string, number>;
+}) {
+  const { doc, declaracion, ruc, razonSocial, casilleros } = params;
+  const periodo = `${declaracion.mes || declaracion.semestre || "-"} / ${declaracion.anio}`;
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  const conceptWidth = 365;
+  const codeWidth = 72;
+  const valueWidth = 100;
+  let y = 32;
+
+  doc
+    .fontSize(9)
+    .fillColor("#003565")
+    .font("Helvetica-Bold")
+    .text("SERVICIO DE RENTAS INTERNAS", x, y, { width, align: "center" })
+    .fontSize(16)
+    .text("FORMULARIO 103", x, y + 13, { width, align: "center" })
+    .fontSize(10)
+    .fillColor("#334155")
+    .text("Declaración de Retenciones en la Fuente del Impuesto a la Renta", x, y + 34, {
+      width,
+      align: "center",
+    });
+  y += 58;
+
+  const pageBreak = (needed: number) => {
+    if (y + needed > bottom) {
+      doc.addPage();
+      y = 32;
+    }
+  };
+
+  const sectionTitle = (title: string) => {
+    pageBreak(20);
+    doc.rect(x, y, width, 17).fill("#003565");
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8.2)
+      .fillColor("#ffffff")
+      .text(title.toUpperCase(), x + 8, y + 4, { width: width - 16 });
+    y += 19;
+  };
+
+  const header = () => {
+    pageBreak(18);
+    doc.rect(x, y, width, 17).fill("#e8eef7");
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(7.2)
+      .fillColor("#0f172a")
+      .text("CONCEPTO", x + 5, y + 5, { width: conceptWidth - 10 })
+      .text("COD. BASE", x + conceptWidth + 5, y + 5, { width: codeWidth - 10, align: "center" })
+      .text("BASE IMPONIBLE", x + conceptWidth + codeWidth + 5, y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      })
+      .text("COD. RET.", x + conceptWidth + codeWidth + valueWidth + 5, y + 5, {
+        width: codeWidth - 10,
+        align: "center",
+      })
+      .text("VALOR RETENIDO", x + conceptWidth + codeWidth * 2 + valueWidth + 5, y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      });
+    y += 17;
+  };
+
+  const row = (item: Formulario103PdfRow, index: number) => {
+    const rowHeight = 18;
+    pageBreak(rowHeight);
+    const baseValue = item.baseCode ? casilleros[item.baseCode] || 0 : undefined;
+    const retValue = item.retCode ? casilleros[item.retCode] || 0 : undefined;
+
+    doc
+      .rect(x, y, width, rowHeight)
+      .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+      .strokeColor("#cbd5e1")
+      .rect(x, y, width, rowHeight)
+      .stroke();
+
+    doc
+      .font("Helvetica")
+      .fontSize(7.4)
+      .fillColor("#111827")
+      .text(item.concepto, x + 5, y + 5, { width: conceptWidth - 10, height: rowHeight - 4 })
+      .font("Helvetica-Bold")
+      .text(item.baseCode || "", x + conceptWidth + 5, y + 5, { width: codeWidth - 10, align: "center" })
+      .font("Helvetica")
+      .text(baseValue === undefined ? "" : formatMoney(baseValue), x + conceptWidth + codeWidth + 5, y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      })
+      .font("Helvetica-Bold")
+      .text(item.retCode || "", x + conceptWidth + codeWidth + valueWidth + 5, y + 5, {
+        width: codeWidth - 10,
+        align: "center",
+      })
+      .font("Helvetica")
+      .text(retValue === undefined ? "" : formatMoney(retValue), x + conceptWidth + codeWidth * 2 + valueWidth + 5, y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      });
+    y += rowHeight;
+  };
+
+  sectionTitle("Identificación");
+  doc.font("Helvetica").fontSize(8).fillColor("#111827");
+  const idLines = [
+    `RUC: ${ruc}`,
+    `Razón social: ${razonSocial}`,
+    `Período: ${periodo}    Estado: ${declaracion.estado}    Adhesión: ${declaracion.numeroAdhesion}`,
+    `Fecha generación: ${fechaLocal(new Date())}`,
+  ];
+  idLines.forEach((line) => {
+    pageBreak(14);
+    doc.text(line, x + 6, y + 2, { width: width - 12 });
+    y += 14;
+  });
+
+  formulario103Sections.forEach((section) => {
+    sectionTitle(section.title);
+    header();
+    section.rows.forEach(row);
+  });
+}
+
 type TalonRow = [string, string | number, boolean?];
 
 const casilleroLabels103: Record<string, string> = {
@@ -436,6 +728,8 @@ const casilleroLabels103: Record<string, string> = {
   "394": "Retención rendimientos financieros",
   "395": "Retención loterías, rifas, apuestas y similares",
   "396": "Retención otros conceptos",
+  "349": "Subtotal base operaciones país",
+  "399": "Subtotal retención impuesto a la renta",
   "499": "Total retenciones",
   "890": "Pago previo",
   "897": "Interés por mora",
@@ -444,6 +738,7 @@ const casilleroLabels103: Record<string, string> = {
   "902": "Impuesto causado",
   "903": "Interés",
   "904": "Multa",
+  "905": "Pago con débito bancario, efectivo u otras formas",
   "999": "Total pagado",
 };
 
@@ -759,6 +1054,199 @@ function previousMonth(anio: number, mesCodigo: string) {
 
   const previousCode = String(mes - 1).padStart(2, "0");
   return { anio, mes: mesesMap[previousCode] || previousCode };
+}
+
+function initCasilleros(keys: string[]) {
+  return Object.fromEntries(keys.map((key) => [key, 0]));
+}
+
+function compraRetencionBase(compra: Record<string, unknown>, index: number) {
+  const declarada = n(compra[`baseImponibleRet${index}`]);
+  if (declarada !== 0) return declarada;
+
+  return (
+    n(compra.baseGravableIva1) +
+    n(compra.baseGravableIva2) +
+    n(compra.baseGravableIva3) +
+    n(compra.baseTarifa0) +
+    n(compra.baseNoObjetoIva) +
+    n(compra.baseExenta)
+  );
+}
+
+function compraRetencionValor(compra: Record<string, unknown>, index: number, base: number) {
+  const declarado = n(compra[`valorRetenido${index}`]);
+  if (declarado !== 0) return declarado;
+
+  const porcentaje = n(compra[`porcentajeRetencion${index}`]);
+  return porcentaje > 0 ? round2(base * porcentaje) : 0;
+}
+
+function buildFormulario103Resumen(lote: {
+  id: string;
+  rucInformante: string;
+  razonSocial: string;
+  anio: number;
+  mes: string;
+  createdAt: Date;
+  compras: Array<Record<string, unknown>>;
+}) {
+  const casilleros = initCasilleros([
+    "302",
+    "352",
+    "303",
+    "353",
+    "304",
+    "354",
+    "307",
+    "357",
+    "308",
+    "358",
+    "309",
+    "359",
+    "311",
+    "361",
+    "312",
+    "362",
+    "314",
+    "364",
+    "322",
+    "372",
+    "323",
+    "373",
+    "325",
+    "375",
+    "332",
+    "343",
+    "393",
+    "344",
+    "394",
+    "345",
+    "395",
+    "346",
+    "396",
+    "349",
+    "399",
+    "497",
+    "498",
+    "499",
+    "890",
+    "897",
+    "898",
+    "899",
+    "902",
+    "903",
+    "904",
+    "905",
+    "907",
+    "999",
+  ]);
+
+  let comprasConRetencion = 0;
+  let comprasSinRetencion = 0;
+  let retencionesLeidas = 0;
+  const codigosNoMapeados: string[] = [];
+
+  for (const compra of lote.compras) {
+    const retenciones = [1, 2, 3]
+      .map((index) => {
+        const codigo = String(compra[`codigoRetencion${index}`] || "").trim();
+        const base = compraRetencionBase(compra, index);
+        const valor = compraRetencionValor(compra, index, base);
+        return { codigo, base, valor };
+      })
+      .filter((ret) => ret.codigo && (ret.base !== 0 || ret.valor !== 0));
+
+    if (retenciones.length === 0) {
+      comprasSinRetencion += 1;
+      continue;
+    }
+
+    comprasConRetencion += 1;
+
+    for (const ret of retenciones) {
+      retencionesLeidas += 1;
+      const map = retencionToCasillero[ret.codigo];
+
+      if (!map) {
+        if (!codigosNoMapeados.includes(ret.codigo)) {
+          codigosNoMapeados.push(ret.codigo);
+        }
+
+        add(casilleros, "346", ret.base);
+        add(casilleros, "396", ret.valor);
+        continue;
+      }
+
+      add(casilleros, map.base, ret.base);
+      if (map.retenido) {
+        add(casilleros, map.retenido, ret.valor);
+      }
+    }
+  }
+
+  const basesPais = [
+    "302",
+    "303",
+    "304",
+    "307",
+    "308",
+    "309",
+    "311",
+    "312",
+    "314",
+    "322",
+    "323",
+    "325",
+    "332",
+    "343",
+    "344",
+    "345",
+    "346",
+  ];
+
+  const retenidosPais = [
+    "352",
+    "353",
+    "354",
+    "357",
+    "358",
+    "359",
+    "361",
+    "362",
+    "364",
+    "372",
+    "373",
+    "375",
+    "393",
+    "394",
+    "395",
+    "396",
+  ];
+
+  casilleros["349"] = round2(basesPais.reduce((acc, key) => acc + (casilleros[key] || 0), 0));
+  casilleros["399"] = round2(retenidosPais.reduce((acc, key) => acc + (casilleros[key] || 0), 0));
+  casilleros["499"] = round2(casilleros["399"] + casilleros["498"]);
+  casilleros["902"] = Math.max(round2(casilleros["499"] - casilleros["898"]), 0);
+  casilleros["999"] = Math.max(
+    round2(casilleros["902"] + casilleros["903"] + casilleros["904"] - casilleros["907"]),
+    0
+  );
+  casilleros["905"] = casilleros["999"];
+
+  return {
+    casilleros,
+    resumen: {
+      atsLoteId: lote.id,
+      atsLoteCreatedAt: lote.createdAt,
+      comprasLeidas: lote.compras.length,
+      comprasConRetencion,
+      comprasSinRetencion,
+      comprasSinRetencionExcluidas: comprasSinRetencion,
+      retencionesLeidas,
+      codigosNoMapeados,
+    },
+  };
 }
 
 function buildFormulario104Resumen(lote: {
@@ -1089,213 +1577,38 @@ export const consultarFormulario103 = async (req: Request, res: Response) => {
     const mesCodigo = String(mes).padStart(2, "0");
     const mesTexto = mesesMap[mesCodigo] || String(mes);
 
-    const contribuyente = await contribuyenteParaConsulta(ruc, Number(anio), mesCodigo);
-
-    if (!contribuyente) {
-      return res.status(404).json({
-        message: "Contribuyente no encontrado.",
-      });
-    }
-
-    const fechaDesde = new Date(Number(anio), Number(mesCodigo) - 1, 1);
-    const fechaHasta = new Date(Number(anio), Number(mesCodigo), 1);
-
-    const compras = await prisma.compra.findMany({
+    const lote = await prisma.atsLote.findFirst({
       where: {
-        contribuyenteId: contribuyente.id,
-        OR: [
-          {
-            periodoDeclaradoEn103: mesTexto,
-          },
-          {
-            periodoDeclaradoEn103: mesCodigo,
-          },
-          {
-            fechaEmisionRet1: {
-              gte: fechaDesde,
-              lt: fechaHasta,
-            },
-          },
-          {
-            fechaRegistro: {
-              gte: fechaDesde,
-              lt: fechaHasta,
-            },
-          },
-        ],
+        rucInformante: ruc,
+        anio: Number(anio),
+        mes: mesCodigo,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        compras: true,
       },
     });
 
-    const casilleros: Record<string, number> = {
-      "302": 0,
-      "352": 0,
-      "303": 0,
-      "353": 0,
-      "304": 0,
-      "354": 0,
-      "307": 0,
-      "357": 0,
-      "308": 0,
-      "358": 0,
-      "309": 0,
-      "359": 0,
-      "311": 0,
-      "361": 0,
-      "312": 0,
-      "362": 0,
-      "314": 0,
-      "364": 0,
-      "322": 0,
-      "372": 0,
-      "323": 0,
-      "373": 0,
-      "325": 0,
-      "375": 0,
-      "332": 0,
-      "343": 0,
-      "393": 0,
-      "344": 0,
-      "394": 0,
-      "345": 0,
-      "395": 0,
-      "346": 0,
-      "396": 0,
-      "349": 0,
-      "399": 0,
-      "497": 0,
-      "498": 0,
-      "499": 0,
-      "890": 0,
-      "897": 0,
-      "898": 0,
-      "899": 0,
-      "902": 0,
-      "903": 0,
-      "904": 0,
-      "999": 0,
-    };
-
-    let comprasConRetencion = 0;
-    let comprasSinRetencion = 0;
-    let comprasSinRetencionExcluidas = 0;
-    let retencionesLeidas = 0;
-    const codigosNoMapeados: string[] = [];
-
-    for (const compra of compras) {
-      const retenciones = [
-        {
-          codigo: compra.codigoRetencion1,
-          base: n(compra.baseImponibleRet1),
-          valor: n(compra.valorRetenido1),
-        },
-        {
-          codigo: compra.codigoRetencion2,
-          base: n(compra.baseImponibleRet2),
-          valor: n(compra.valorRetenido2),
-        },
-        {
-          codigo: compra.codigoRetencion3,
-          base: n(compra.baseImponibleRet3),
-          valor: n(compra.valorRetenido3),
-        },
-      ].filter((ret) => ret.codigo && (ret.base > 0 || ret.valor > 0));
-
-      if (retenciones.length === 0) {
-        comprasSinRetencion += 1;
-        comprasSinRetencionExcluidas += 1;
-        continue;
-      }
-
-      comprasConRetencion += 1;
-
-      for (const ret of retenciones) {
-        retencionesLeidas += 1;
-
-        const codigo = String(ret.codigo);
-        const map = retencionToCasillero[codigo];
-
-        if (!map) {
-          if (!codigosNoMapeados.includes(codigo)) {
-            codigosNoMapeados.push(codigo);
-          }
-
-          add(casilleros, "346", ret.base);
-          add(casilleros, "396", ret.valor);
-          continue;
-        }
-
-        add(casilleros, map.base, ret.base);
-        if (map.retenido) {
-          add(casilleros, map.retenido, ret.valor);
-        }
-      }
+    if (!lote) {
+      return res.status(404).json({
+        message: "No existe un lote ATS para el RUC y período seleccionado.",
+      });
     }
 
-    const basesPais = [
-      "302",
-      "303",
-      "304",
-      "307",
-      "308",
-      "309",
-      "311",
-      "312",
-      "314",
-      "322",
-      "323",
-      "325",
-      "332",
-      "343",
-      "344",
-      "345",
-      "346",
-    ];
-
-    const retenidosPais = [
-      "352",
-      "353",
-      "354",
-      "357",
-      "358",
-      "359",
-      "361",
-      "362",
-      "364",
-      "372",
-      "373",
-      "375",
-      "393",
-      "394",
-      "395",
-      "396",
-    ];
-
-    casilleros["349"] = round2(
-      basesPais.reduce((acc, key) => acc + (casilleros[key] || 0), 0)
-    );
-
-    casilleros["399"] = round2(
-      retenidosPais.reduce((acc, key) => acc + (casilleros[key] || 0), 0)
-    );
-
-    casilleros["499"] = round2(casilleros["399"] + casilleros["498"]);
-    casilleros["902"] = casilleros["499"];
-    casilleros["999"] = round2(casilleros["902"] + casilleros["903"] + casilleros["904"]);
+    const { casilleros, resumen } = buildFormulario103Resumen({
+      ...lote,
+      compras: lote.compras as unknown as Array<Record<string, unknown>>,
+    });
 
     return res.json({
-      ruc: contribuyente.ruc,
-      razonSocial: contribuyente.razonSocial,
+      ruc: lote.rucInformante,
+      razonSocial: lote.razonSocial,
       anio: Number(anio),
       mes: mesCodigo,
       mesTexto,
-      resumen: {
-        comprasLeidas: compras.length,
-        comprasConRetencion,
-        comprasSinRetencion,
-        comprasSinRetencionExcluidas,
-        retencionesLeidas,
-        codigosNoMapeados,
-      },
+      resumen,
       casilleros,
     });
   } catch (error) {
@@ -1597,6 +1910,22 @@ export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
         talonDeclaracionTexto(doc);
         talonFirmasYPie(doc, fechaHoraLocal(new Date()));
       });
+    }
+
+    if (formulario === "103") {
+      return sendPdfLandscape(
+        res,
+        `Formulario_103_${ruc}_${declaracion.id}.pdf`,
+        (doc) => {
+          drawFormulario103Pdf({
+            doc,
+            declaracion,
+            ruc,
+            razonSocial,
+            casilleros,
+          });
+        }
+      );
     }
 
     return sendPdf(
