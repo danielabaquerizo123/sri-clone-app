@@ -162,6 +162,250 @@ function pdfTable(
   doc.y = y + 4;
 }
 
+type Formulario104PdfRow = {
+  casillero: string;
+  descripcion: string;
+  valor: unknown;
+  format?: "money" | "factor" | "integer" | "text";
+};
+
+function ensureSpace(doc: PDFKit.PDFDocument, height: number) {
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + height > bottom) {
+    doc.addPage();
+  }
+}
+
+function drawSectionTitle(doc: PDFKit.PDFDocument, title: string) {
+  ensureSpace(doc, 22);
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  doc
+    .moveDown(0.35)
+    .rect(x, doc.y, width, 17)
+    .fill("#003565")
+    .fillColor("#ffffff")
+    .font("Helvetica-Bold")
+    .fontSize(8.5)
+    .text(title.toUpperCase(), x + 7, doc.y + 4, { width: width - 14 });
+
+  doc.font("Helvetica").fillColor("#111827");
+  doc.y += 20;
+}
+
+function formatMoney(value: unknown) {
+  return Number(value || 0).toFixed(2);
+}
+
+function formatFactor(value: unknown) {
+  return Number(value || 0).toFixed(4);
+}
+
+function formatFormulario104Value(row: Formulario104PdfRow) {
+  if (row.format === "factor") return formatFactor(row.valor);
+  if (row.format === "integer") return String(Math.round(Number(row.valor || 0)));
+  if (row.format === "text") return String(row.valor ?? "-");
+  return formatMoney(row.valor);
+}
+
+function drawCasilleroTable(doc: PDFKit.PDFDocument, rows: Formulario104PdfRow[]) {
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const casilleroWidth = 62;
+  const valueWidth = 86;
+  const descWidth = width - casilleroWidth - valueWidth;
+  const headerHeight = 16;
+  const rowHeight = 15;
+
+  ensureSpace(doc, headerHeight + rowHeight);
+
+  const drawHeader = () => {
+    doc
+      .rect(x, doc.y, width, headerHeight)
+      .fill("#e8eef7")
+      .fillColor("#0f172a")
+      .font("Helvetica-Bold")
+      .fontSize(7.7)
+      .text("CASILLERO", x + 5, doc.y + 5, { width: casilleroWidth - 10 })
+      .text("DESCRIPCION", x + casilleroWidth + 5, doc.y + 5, { width: descWidth - 10 })
+      .text("VALOR", x + casilleroWidth + descWidth + 5, doc.y + 5, {
+        width: valueWidth - 10,
+        align: "right",
+      });
+    doc.font("Helvetica");
+    doc.y += headerHeight;
+  };
+
+  drawHeader();
+
+  rows.forEach((row, index) => {
+    if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      drawHeader();
+    }
+
+    const y = doc.y;
+    doc
+      .rect(x, y, width, rowHeight)
+      .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+      .strokeColor("#d7dde6")
+      .rect(x, y, width, rowHeight)
+      .stroke();
+
+    doc
+      .fontSize(7.6)
+      .fillColor("#111827")
+      .font("Helvetica-Bold")
+      .text(row.casillero, x + 5, y + 4, { width: casilleroWidth - 10 })
+      .font("Helvetica")
+      .fillColor("#334155")
+      .text(row.descripcion, x + casilleroWidth + 5, y + 4, { width: descWidth - 10 })
+      .fillColor("#111827")
+      .text(formatFormulario104Value(row), x + casilleroWidth + descWidth + 5, y + 4, {
+        width: valueWidth - 10,
+        align: "right",
+      });
+
+    doc.y = y + rowHeight;
+  });
+
+  doc.moveDown(0.25);
+}
+
+function drawFormulario104Pdf(params: {
+  doc: PDFKit.PDFDocument;
+  declaracion: {
+    formulario: string;
+    mes: string | null;
+    semestre: string | null;
+    anio: number;
+    numeroAdhesion: string;
+    estado: string;
+  };
+  ruc: string;
+  razonSocial: string;
+  casilleros: Record<string, number>;
+}) {
+  const { doc, declaracion, ruc, razonSocial, casilleros } = params;
+  const value = (key: string) => casilleros[key] ?? 0;
+
+  const section = (title: string, rows: Formulario104PdfRow[]) => {
+    drawSectionTitle(doc, title);
+    drawCasilleroTable(doc, rows);
+  };
+
+  pdfTitle(doc, "FORMULARIO 104", "Declaración del Impuesto al Valor Agregado");
+  pdfKV(doc, "RUC", ruc);
+  pdfKV(doc, "Razón social", razonSocial);
+  pdfKV(doc, "Período", `${declaracion.mes || declaracion.semestre || "-"} / ${declaracion.anio}`);
+  pdfKV(doc, "Estado", declaracion.estado);
+  pdfKV(doc, "Fecha generación", fechaLocal(new Date()));
+  pdfKV(doc, "Número de adhesión", declaracion.numeroAdhesion);
+
+  section("Identificación", [
+    { casillero: "201", descripcion: "RUC", valor: ruc, format: "text" },
+    { casillero: "202", descripcion: "Razón social", valor: razonSocial, format: "text" },
+  ]);
+
+  section("Ventas y otras operaciones", [
+    { casillero: "401", descripcion: "Ventas tarifa diferente de 0%", valor: value("401") },
+    { casillero: "411", descripcion: "Total ventas tarifa diferente de 0%", valor: value("411") },
+    { casillero: "421", descripcion: "IVA generado en ventas", valor: value("421") },
+    { casillero: "429", descripcion: "Total IVA generado", valor: value("429") },
+    { casillero: "480", descripcion: "Total transferencias", valor: value("480") },
+    { casillero: "481", descripcion: "Notas de crédito en ventas", valor: value("481") },
+    { casillero: "482", descripcion: "IVA total generado", valor: value("482") },
+    { casillero: "483", descripcion: "IVA notas de crédito", valor: value("483") },
+    { casillero: "484", descripcion: "IVA en ventas", valor: value("484") },
+    { casillero: "485", descripcion: "Ajuste por redondeo", valor: value("485") },
+    { casillero: "499", descripcion: "Impuesto generado", valor: value("499") },
+    { casillero: "111", descripcion: "Comprobantes de venta", valor: value("111"), format: "integer" },
+    { casillero: "113", descripcion: "Notas de crédito emitidas", valor: value("113"), format: "integer" },
+  ]);
+
+  section("Adquisiciones y pagos", [
+    { casillero: "500", descripcion: "Adquisiciones tarifa diferente de 0%", valor: value("500") },
+    { casillero: "510", descripcion: "Adquisiciones netas tarifa diferente de 0%", valor: value("510") },
+    { casillero: "520", descripcion: "IVA pagado en adquisiciones", valor: value("520") },
+    { casillero: "509", descripcion: "Total adquisiciones tarifa diferente de 0%", valor: value("509") },
+    { casillero: "519", descripcion: "Total adquisiciones netas", valor: value("519") },
+    { casillero: "529", descripcion: "Total IVA pagado", valor: value("529") },
+    { casillero: "507", descripcion: "Adquisiciones sin derecho a crédito tributario", valor: value("507") },
+    { casillero: "517", descripcion: "Total adquisiciones sin derecho a crédito", valor: value("517") },
+    { casillero: "531", descripcion: "Notas de crédito en adquisiciones", valor: value("531") },
+    { casillero: "541", descripcion: "IVA notas de crédito en adquisiciones", valor: value("541") },
+    { casillero: "532", descripcion: "Ajustes en adquisiciones", valor: value("532") },
+    { casillero: "542", descripcion: "IVA ajustes en adquisiciones", valor: value("542") },
+    { casillero: "563", descripcion: "Factor de proporcionalidad", valor: value("563"), format: "factor" },
+    { casillero: "564", descripcion: "Crédito tributario aplicable", valor: value("564") },
+    { casillero: "565", descripcion: "IVA no usado como crédito tributario", valor: value("565") },
+    { casillero: "115", descripcion: "Comprobantes de compra", valor: value("115"), format: "integer" },
+    { casillero: "117", descripcion: "Notas de crédito recibidas", valor: value("117"), format: "integer" },
+    { casillero: "119", descripcion: "Comprobantes anulados", valor: value("119"), format: "integer" },
+  ]);
+
+  section("Resumen impositivo", [
+    { casillero: "601", descripcion: "Impuesto causado", valor: value("601") },
+    { casillero: "602", descripcion: "Crédito tributario del mes", valor: value("602") },
+    { casillero: "603", descripcion: "Crédito tributario mes anterior", valor: value("603") },
+    { casillero: "604", descripcion: "Saldo crédito tributario mes anterior", valor: value("604") },
+    { casillero: "605", descripcion: "Saldo crédito tributario por adquisiciones", valor: value("605") },
+    { casillero: "606", descripcion: "Saldo retenciones mes anterior", valor: value("606") },
+    { casillero: "607", descripcion: "Ajustes por devolución", valor: value("607") },
+    { casillero: "608", descripcion: "Ajustes por compensación", valor: value("608") },
+    { casillero: "609", descripcion: "Retenciones IVA que le efectuaron", valor: value("609") },
+    { casillero: "610", descripcion: "Ajuste crédito tributario", valor: value("610") },
+    { casillero: "611", descripcion: "Ajuste por devoluciones", valor: value("611") },
+    { casillero: "612", descripcion: "Ajuste por compensaciones", valor: value("612") },
+    { casillero: "613", descripcion: "Ajuste por notas de crédito", valor: value("613") },
+    { casillero: "614", descripcion: "Otros ajustes", valor: value("614") },
+    { casillero: "615", descripcion: "Saldo crédito tributario próximo mes", valor: value("615") },
+    { casillero: "617", descripcion: "Saldo retenciones próximo mes", valor: value("617") },
+    { casillero: "618", descripcion: "Saldo crédito tributario a compensar", valor: value("618") },
+    { casillero: "619", descripcion: "Saldo retenciones a compensar", valor: value("619") },
+    { casillero: "620", descripcion: "Subtotal a pagar", valor: value("620") },
+    { casillero: "621", descripcion: "IVA presuntivo", valor: value("621") },
+    { casillero: "699", descripcion: "Impuesto a pagar", valor: value("699") },
+  ]);
+
+  section("Retenciones IVA", [
+    { casillero: "721", descripcion: "Retención IVA 10%", valor: value("721") },
+    { casillero: "723", descripcion: "Retención IVA 20%", valor: value("723") },
+    { casillero: "725", descripcion: "Retención IVA 30%", valor: value("725") },
+    { casillero: "727", descripcion: "Retención IVA 50%", valor: value("727") },
+    { casillero: "729", descripcion: "Retención IVA 70%", valor: value("729") },
+    { casillero: "731", descripcion: "Retención IVA 100%", valor: value("731") },
+    { casillero: "799", descripcion: "Total retenciones IVA", valor: value("799") },
+    { casillero: "800", descripcion: "Retenciones IVA compensadas", valor: value("800") },
+    { casillero: "801", descripcion: "Retenciones IVA a pagar", valor: value("801") },
+    { casillero: "859", descripcion: "Total obligación IVA", valor: value("859") },
+  ]);
+
+  section("Valores a pagar", [
+    { casillero: "890", descripcion: "Pago previo", valor: value("890") },
+    { casillero: "897", descripcion: "Interés por mora previo", valor: value("897") },
+    { casillero: "898", descripcion: "Multa previa", valor: value("898") },
+    { casillero: "899", descripcion: "Total impuesto a pagar previo", valor: value("899") },
+    { casillero: "902", descripcion: "Impuesto causado a pagar", valor: value("902") },
+    { casillero: "903", descripcion: "Interés", valor: value("903") },
+    { casillero: "904", descripcion: "Multa", valor: value("904") },
+    { casillero: "905", descripcion: "Total pagado", valor: value("905") },
+    { casillero: "906", descripcion: "Pago con notas de crédito", valor: value("906") },
+    { casillero: "907", descripcion: "Pago con compensación", valor: value("907") },
+    { casillero: "925", descripcion: "Pago en exceso", valor: value("925") },
+    { casillero: "999", descripcion: "Total pagado", valor: value("999") },
+  ]);
+
+  doc
+    .moveDown(0.8)
+    .fontSize(7.5)
+    .fillColor("#475569")
+    .text("Documento generado dinámicamente a partir de la declaración almacenada en el sistema.", {
+      align: "center",
+    });
+}
+
 type TalonRow = [string, string | number, boolean?];
 
 const casilleroLabels103: Record<string, string> = {
@@ -1359,6 +1603,17 @@ export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
       res,
       `Formulario_${formulario || "Declaracion"}_${ruc}_${declaracion.id}.pdf`,
       (doc) => {
+        if (formulario === "104") {
+          drawFormulario104Pdf({
+            doc,
+            declaracion,
+            ruc,
+            razonSocial,
+            casilleros,
+          });
+          return;
+        }
+
         pdfTitle(
           doc,
           `FORMULARIO ${formulario || ""}`.trim(),
