@@ -4,6 +4,7 @@ import PDFDocument from "pdfkit";
 import { prisma } from "../lib/prisma";
 import { readAtsWorkbook } from "../services/ats/excel-reader";
 import { normalizeAtsWorkbook, type AtsIssue } from "../services/ats/normalizer";
+import { buildAtsResumen } from "../services/ats/resumen";
 import { buildAtsXml } from "../services/ats/xml-builder";
 
 const MESES: Record<string, string> = {
@@ -178,194 +179,6 @@ function sendPdf(res: Response, filename: string, build: (doc: PDFKit.PDFDocumen
 
   build(doc);
   doc.end();
-}
-
-function compraBaseGravada(compra: any) {
-  return (
-    safeNumber(compra.baseGravableIva1) +
-    safeNumber(compra.baseGravableIva2) +
-    safeNumber(compra.baseGravableIva3)
-  );
-}
-
-function compraIva(compra: any) {
-  return safeNumber(compra.montoIva1) + safeNumber(compra.montoIva2) + safeNumber(compra.montoIva3);
-}
-
-function absRound2(value: number) {
-  return round2(Math.abs(value));
-}
-
-function comprasTotales(compras: any[]) {
-  return compras.reduce(
-    (acc, compra) => {
-      acc.count += 1;
-      acc.base0 = round2(acc.base0 + safeNumber(compra.baseTarifa0));
-      acc.baseGravada = round2(acc.baseGravada + compraBaseGravada(compra));
-      acc.baseNoObjeto = round2(acc.baseNoObjeto + safeNumber(compra.baseNoObjetoIva));
-      acc.iva = round2(acc.iva + compraIva(compra));
-      return acc;
-    },
-    {
-      count: 0,
-      base0: 0,
-      baseGravada: 0,
-      baseNoObjeto: 0,
-      iva: 0,
-    }
-  );
-}
-
-function comprasTotalesAbsolutos(compras: any[]) {
-  const raw = comprasTotales(compras);
-
-  return {
-    count: raw.count,
-    base0: absRound2(raw.base0),
-    baseGravada: absRound2(raw.baseGravada),
-    baseNoObjeto: absRound2(raw.baseNoObjeto),
-    iva: absRound2(raw.iva),
-  };
-}
-
-function retencionesFuenteComprasResumen(compras: any[]) {
-  const grupos = new Map<string, { codigo: string; registros: number; base: number; valor: number }>();
-
-  for (const compra of compras.filter((c) => c.comprobante !== "04")) {
-    for (const index of [1, 2, 3]) {
-      const codigo = clean(compra[`codigoRetencion${index}`]);
-      const base = safeNumber(compra[`baseImponibleRet${index}`]);
-      const valor = safeNumber(compra[`valorRetenido${index}`]);
-
-      if (!codigo || (base === 0 && valor === 0)) continue;
-
-      const current = grupos.get(codigo) || {
-        codigo,
-        registros: 0,
-        base: 0,
-        valor: 0,
-      };
-
-      current.registros += 1;
-      current.base = round2(current.base + base);
-      current.valor = round2(current.valor + valor);
-      grupos.set(codigo, current);
-    }
-  }
-
-  const detalle = Array.from(grupos.values()).sort((a, b) => a.codigo.localeCompare(b.codigo));
-  const total = detalle.reduce(
-    (acc, item) => ({
-      base: round2(acc.base + item.base),
-      valor: round2(acc.valor + item.valor),
-    }),
-    { base: 0, valor: 0 }
-  );
-
-  return { detalle, total };
-}
-
-function retencionesIvaComprasResumen(compras: any[]) {
-  const resumen = compras.reduce(
-    (acc, compra) => {
-      acc.iva10 = round2(acc.iva10 + safeNumber(compra.retIvaValor10) + safeNumber(compra.valorRetencionIva10));
-      acc.iva20 = round2(acc.iva20 + safeNumber(compra.retIvaValor20) + safeNumber(compra.valorRetencionIva20));
-      acc.iva30 = round2(acc.iva30 + safeNumber(compra.retIvaValor30) + safeNumber(compra.valorRetencionIva30));
-      acc.iva50 = round2(acc.iva50 + safeNumber(compra.retIvaValor50) + safeNumber(compra.valorRetencionIva50));
-      acc.iva70 = round2(acc.iva70 + safeNumber(compra.retIvaValor70) + safeNumber(compra.valorRetencionIva70));
-      acc.iva100 = round2(
-        acc.iva100 +
-          safeNumber(compra.retIvaValor100) +
-          safeNumber(compra.valorRetencionIva100) +
-          safeNumber(compra.valorRetencionIva100SectorPublico)
-      );
-      acc.ivaNc = round2(acc.ivaNc + safeNumber(compra.valorRetencionIvaEnNc));
-      return acc;
-    },
-    {
-      iva10: 0,
-      iva20: 0,
-      iva30: 0,
-      iva50: 0,
-      iva70: 0,
-      iva100: 0,
-      ivaNc: 0,
-    }
-  );
-
-  return {
-    ...resumen,
-    total: round2(
-      resumen.iva10 +
-        resumen.iva20 +
-        resumen.iva30 +
-        resumen.iva50 +
-        resumen.iva70 +
-        resumen.iva100 +
-        resumen.ivaNc
-    ),
-  };
-}
-
-function ventaBaseGravada(venta: any) {
-  return (
-    safeNumber(venta.baseGravableIva1) +
-    safeNumber(venta.baseGravableIva2) +
-    safeNumber(venta.baseGravableIva3)
-  );
-}
-
-function ventaIva(venta: any) {
-  return safeNumber(venta.montoIva1) + safeNumber(venta.montoIva2) + safeNumber(venta.montoIva3);
-}
-
-function comprasResumen(compras: any[]) {
-  const facturasRows = compras.filter((c) => c.comprobante === "01");
-  const notasCreditoRows = compras.filter((c) => c.comprobante === "04");
-  const facturas = comprasTotales(facturasRows);
-  const notasCredito = comprasTotalesAbsolutos(notasCreditoRows);
-  const total = {
-    count: facturas.count + notasCredito.count,
-    base0: round2(facturas.base0 - notasCredito.base0),
-    baseGravada: round2(facturas.baseGravada - notasCredito.baseGravada),
-    baseNoObjeto: round2(facturas.baseNoObjeto - notasCredito.baseNoObjeto),
-    iva: round2(facturas.iva - notasCredito.iva),
-  };
-
-  return {
-    facturas,
-    notasCredito,
-    total,
-    retIva: round2(
-      compras.reduce(
-        (acc, c) =>
-          acc +
-          safeNumber(c.valorRetencionIva30) +
-          safeNumber(c.valorRetencionIva50) +
-          safeNumber(c.valorRetencionIva70) +
-          safeNumber(c.valorRetencionIva100) +
-          safeNumber(c.valorRetencionIva100SectorPublico) +
-          safeNumber(c.liqImpSumatoriaRetIva),
-        0
-      )
-    ),
-  };
-}
-
-function ventasResumen(ventas: any[]) {
-  const ventasConRetencion = ventas.filter(
-    (v) => clean(v.noDocumentoRetencion) || clean(v.noAutorizacionRetencion) || v.fechaRetencion
-  );
-
-  return {
-    documentos: ventas.reduce((acc, v) => acc + Number(v.cantidadComprobantes || 1), 0),
-    base0: round2(ventas.reduce((acc, v) => acc + safeNumber(v.baseTarifa0), 0)),
-    baseGravada: round2(ventas.reduce((acc, v) => acc + ventaBaseGravada(v), 0)),
-    baseNoObjeto: round2(ventas.reduce((acc, v) => acc + safeNumber(v.baseNoObjetoIva), 0)),
-    iva: round2(ventas.reduce((acc, v) => acc + ventaIva(v), 0)),
-    retIva: round2(ventasConRetencion.reduce((acc, v) => acc + safeNumber(v.valorRetenidoIva), 0)),
-    retFuente: round2(ventasConRetencion.reduce((acc, v) => acc + safeNumber(v.valorRetenidoFuente), 0)),
-  };
 }
 
 function pdfTable(
@@ -699,15 +512,10 @@ function buildFormulario103Data(params: {
   resumen: Record<string, any>;
   compras: any[];
 }) {
+  const atsResumen = buildAtsResumen({ compras: params.compras, ventas: [] });
   const casilleros: Record<string, number> = {};
-  const add = (key: string, value: number) => {
-    casilleros[key] = round2((casilleros[key] || 0) + value);
-  };
-
-  for (const compra of params.compras) {
-    add("349", safeNumber(compra.baseImponibleRet1) + safeNumber(compra.baseImponibleRet2) + safeNumber(compra.baseImponibleRet3));
-    add("399", safeNumber(compra.valorRetenido1) + safeNumber(compra.valorRetenido2) + safeNumber(compra.valorRetenido3));
-  }
+  casilleros["349"] = safeNumber(atsResumen.retenciones.renta.total.base);
+  casilleros["399"] = safeNumber(atsResumen.retenciones.renta.total.valor);
 
   casilleros["499"] = round2(casilleros["399"] || 0);
   casilleros["902"] = casilleros["499"];
@@ -735,6 +543,7 @@ function buildFormulario104Data(params: {
   ventas: any[];
   compras: any[];
 }) {
+  const atsResumen = buildAtsResumen({ compras: params.compras, ventas: params.ventas });
   const casilleros: Record<string, number> = {
     "401": 0,
     "402": 0,
@@ -751,33 +560,16 @@ function buildFormulario104Data(params: {
     "999": 0,
   };
 
-  const add = (key: string, value: number) => {
-    casilleros[key] = round2((casilleros[key] || 0) + value);
-  };
-
-  for (const venta of params.ventas) {
-    add("401", safeNumber(venta.baseGravableIva1) + safeNumber(venta.baseGravableIva2) + safeNumber(venta.baseGravableIva3));
-    add("402", safeNumber(venta.montoIva1) + safeNumber(venta.montoIva2) + safeNumber(venta.montoIva3));
-    add("403", safeNumber(venta.baseTarifa0));
-    add("431", safeNumber(venta.baseNoObjetoIva) + safeNumber(venta.baseExenta));
-    add("609", safeNumber(venta.valorRetenidoIva));
-  }
-
-  for (const compra of params.compras) {
-    add("500", safeNumber(compra.baseGravableIva1) + safeNumber(compra.baseGravableIva2) + safeNumber(compra.baseGravableIva3));
-    add("501", safeNumber(compra.montoIva1) + safeNumber(compra.montoIva2) + safeNumber(compra.montoIva3));
-    add("507", safeNumber(compra.baseTarifa0));
-    add("531", safeNumber(compra.baseNoObjetoIva));
-    add("532", safeNumber(compra.baseExenta));
-    add(
-      "731",
-      safeNumber(compra.valorRetencionIva30) +
-        safeNumber(compra.valorRetencionIva50) +
-        safeNumber(compra.valorRetencionIva70) +
-        safeNumber(compra.valorRetencionIva100) +
-        safeNumber(compra.valorRetencionIva100SectorPublico)
-    );
-  }
+  casilleros["401"] = safeNumber(atsResumen.ventas.baseGravada);
+  casilleros["402"] = safeNumber(atsResumen.ventas.iva);
+  casilleros["403"] = safeNumber(atsResumen.ventas.base0);
+  casilleros["431"] = safeNumber(atsResumen.ventas.baseNoObjeto);
+  casilleros["500"] = safeNumber(atsResumen.compras.total.baseGravada);
+  casilleros["501"] = safeNumber(atsResumen.compras.total.iva);
+  casilleros["507"] = safeNumber(atsResumen.compras.total.base0);
+  casilleros["531"] = safeNumber(atsResumen.compras.total.baseNoObjeto);
+  casilleros["609"] = safeNumber(atsResumen.ventas.retIva);
+  casilleros["731"] = safeNumber(atsResumen.retenciones.iva.total);
 
   casilleros["902"] = Math.max(round2(casilleros["402"] - casilleros["501"] - casilleros["609"]), 0);
   casilleros["999"] = casilleros["902"];
@@ -1219,10 +1011,11 @@ export const descargarTalonResumenAts = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Lote ATS no encontrado." });
     }
 
-    const compras = comprasResumen(lote.compras);
-    const retencionesFuenteCompras = retencionesFuenteComprasResumen(lote.compras);
-    const retencionesIvaCompras = retencionesIvaComprasResumen(lote.compras);
-    const ventas = ventasResumen(lote.ventas);
+    const atsResumen = buildAtsResumen({ compras: lote.compras, ventas: lote.ventas });
+    const compras = atsResumen.compras;
+    const retencionesFuenteCompras = atsResumen.retenciones.renta;
+    const retencionesIvaCompras = atsResumen.retenciones.iva;
+    const ventas = atsResumen.ventas;
     const periodo = `${String(lote.mes).padStart(2, "0")}/${lote.anio}`;
     const resumen = jsonObject(lote.resumenJSON);
     const acceso = jsonObject(resumen.contribuyenteAcceso);

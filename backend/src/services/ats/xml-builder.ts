@@ -24,6 +24,21 @@ function money(value: any): string {
   return num.toFixed(2);
 }
 
+function moneyAbs(value: any): string {
+  const num = Math.abs(Number(value ?? 0));
+  if (!Number.isFinite(num)) return "0.00";
+  return num.toFixed(2);
+}
+
+function firstMoney(...values: any[]): any {
+  return values.find((value) => Number(value ?? 0) !== 0) ?? 0;
+}
+
+function sumMoney(...values: any[]): number {
+  const total = values.reduce((acc, value) => acc + Number(value ?? 0), 0);
+  return Number.isFinite(total) ? Number(total.toFixed(2)) : 0;
+}
+
 function porcentajeAirValue(value: any): string {
   const num = Number(value ?? 0);
   if (!Number.isFinite(num) || num <= 0) return "0.00";
@@ -224,30 +239,34 @@ function removeUndefinedDeep(value: any): any {
 function buildAir(c: any) {
   const detalleAir: any[] = [];
 
-  if (hasMoney(c.valorRetenido1)) {
+  const valorRetenido1 = firstMoney(c.valorRetenido1, c.retFuenteValorRetenido1);
+  const valorRetenido2 = firstMoney(c.valorRetenido2, c.retFuenteValorRetenido2);
+  const valorRetenido3 = firstMoney(c.valorRetenido3, c.retFuenteValorRetenido3);
+
+  if (hasMoney(valorRetenido1)) {
     detalleAir.push({
       codRetAir: clean(c.codigoRetencion1 || "332"),
-      baseImpAir: money(c.baseImponibleRet1),
+      baseImpAir: money(firstMoney(c.baseImponibleRet1, c.retFuenteBaseImponible1)),
       porcentajeAir: porcentajeAirValue(c.porcentajeRetencion1),
-      valRetAir: money(c.valorRetenido1),
+      valRetAir: money(valorRetenido1),
     });
   }
 
-  if (hasMoney(c.valorRetenido2)) {
+  if (hasMoney(valorRetenido2)) {
     detalleAir.push({
       codRetAir: clean(c.codigoRetencion2 || "332"),
-      baseImpAir: money(c.baseImponibleRet2),
+      baseImpAir: money(firstMoney(c.baseImponibleRet2, c.retFuenteBaseImponible2)),
       porcentajeAir: porcentajeAirValue(c.porcentajeRetencion2),
-      valRetAir: money(c.valorRetenido2),
+      valRetAir: money(valorRetenido2),
     });
   }
 
-  if (hasMoney(c.valorRetenido3)) {
+  if (hasMoney(valorRetenido3)) {
     detalleAir.push({
       codRetAir: clean(c.codigoRetencion3 || "332"),
-      baseImpAir: money(c.baseImponibleRet3),
+      baseImpAir: money(firstMoney(c.baseImponibleRet3, c.retFuenteBaseImponible3)),
       porcentajeAir: porcentajeAirValue(c.porcentajeRetencion3),
-      valRetAir: money(c.valorRetenido3),
+      valRetAir: money(valorRetenido3),
     });
   }
 
@@ -313,6 +332,15 @@ function buildFormasCobroVenta(v: any) {
 }
 
 function buildCompra(c: any) {
+  const isNotaCredito = clean(c.comprobante) === "04";
+  const compraMoney = isNotaCredito ? moneyAbs : money;
+  const baseImpGrav = sumMoney(c.baseGravableIva1, c.baseGravableIva2, c.baseGravableIva3);
+  const montoIva = sumMoney(c.montoIva1, c.montoIva2, c.montoIva3);
+  const valorRetIva30 = firstMoney(c.valorRetencionIva30, c.retIvaValor30);
+  const valorRetIva50 = firstMoney(c.valorRetencionIva50, c.retIvaValor50);
+  const valorRetIva70 = firstMoney(c.valorRetencionIva70, c.retIvaValor70);
+  const valorRetIva100 = firstMoney(c.valorRetencionIva100, c.retIvaValor100);
+  const valorRetIvaNc = firstMoney(c.valorRetencionIvaEnNc, c.valorRetencionNc);
   const retencionTieneDatos =
     hasValue(c.establecimientoRet) &&
     hasValue(c.puntoEmisionRet) &&
@@ -342,21 +370,21 @@ function buildCompra(c: any) {
     fechaEmision: dateDDMMYYYY(c.fechaEmision),
     autorizacion: clean(c.numeroAutorizacionSri),
 
-    baseNoGraIva: money(c.baseNoObjetoIva),
-    baseImponible: money(c.baseTarifa0),
-    baseImpGrav: money(c.baseGravableIva1),
-    baseImpExe: money(c.baseExenta),
-    montoIce: money(c.montoIceNoIncluido),
-    montoIva: money(c.montoIva1),
+    baseNoGraIva: compraMoney(c.baseNoObjetoIva),
+    baseImponible: compraMoney(c.baseTarifa0),
+    baseImpGrav: compraMoney(baseImpGrav),
+    baseImpExe: compraMoney(c.baseExenta),
+    montoIce: compraMoney(c.montoIceNoIncluido),
+    montoIva: compraMoney(montoIva),
 
-    valRetBien10: money(c.valRetBien10),
-    valRetServ20: money(c.valRetServ20),
-    valorRetBienes: money(c.valorRetencionIva30),
-    valRetServ50: money(c.valorRetencionIva50),
-    valorRetServicios: money(c.valorRetencionIva70),
-    valRetServ100: money(c.valorRetencionIva100),
-    valorRetencionNc: hasMoney(c.valorRetencionIvaEnNc)
-      ? money(c.valorRetencionIvaEnNc)
+    valRetBien10: money(firstMoney(c.valRetBien10, c.valorRetencionIva10)),
+    valRetServ20: money(firstMoney(c.valRetServ20, c.valorRetencionIva20)),
+    valorRetBienes: money(valorRetIva30),
+    valRetServ50: money(valorRetIva50),
+    valorRetServicios: money(valorRetIva70),
+    valRetServ100: money(valorRetIva100),
+    valorRetencionNc: hasMoney(valorRetIvaNc)
+      ? money(valorRetIvaNc)
       : undefined,
     totbasesImpReemb: money(c.totbasesImpReemb),
 

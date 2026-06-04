@@ -643,24 +643,44 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
         ]) || null,
 
       codigoRetencion1: firstCode(getByAny(row, ["Código Retención 1"]), 3),
-      baseImponibleRet1: compraMoney(getByAny(row, ["Ret. Fuente Base Imponible 1"])),
+      baseImponibleRet1: compraMoney(
+        getByAny(row, ["Ret. Fuente Base Imponible 1", "Base Imponible - Ret1"])
+      ),
       porcentajeRetencion1: money(getByAny(row, ["Porcentaje Retención 1"])),
-      valorRetenido1: compraMoney(getByAny(row, ["Ret. Fuente Valor Retenido 1"])),
+      valorRetenido1: compraMoney(
+        getByAny(row, ["Ret. Fuente Valor Retenido 1", "Valor Retenido 1"])
+      ),
 
       codigoRetencion2: firstCode(getByAny(row, ["Código Retención 2"]), 3),
-      baseImponibleRet2: compraMoney(getByAny(row, ["Ret. Fuente Base Imponible 2"])),
+      baseImponibleRet2: compraMoney(
+        getByAny(row, ["Ret. Fuente Base Imponible 2", "Base Imponible - Ret2"])
+      ),
       porcentajeRetencion2: money(getByAny(row, ["Porcentaje Retención 2"])),
-      valorRetenido2: compraMoney(getByAny(row, ["Ret. Fuente Valor Retenido 2"])),
+      valorRetenido2: compraMoney(
+        getByAny(row, ["Ret. Fuente Valor Retenido 2", "Valor Retenido 2"])
+      ),
 
       codigoRetencion3: firstCode(getByAny(row, ["Código Retención 3"]), 3),
-      baseImponibleRet3: compraMoney(getByAny(row, ["Ret. Fuente Base Imponible 3"])),
+      baseImponibleRet3: compraMoney(
+        getByAny(row, ["Ret. Fuente Base Imponible 3", "Base Imponible - Ret3"])
+      ),
       porcentajeRetencion3: money(getByAny(row, ["Porcentaje Retención 3"])),
-      valorRetenido3: compraMoney(getByAny(row, ["Ret. Fuente Valor Retenido 3"])),
+      valorRetenido3: compraMoney(
+        getByAny(row, ["Ret. Fuente Valor Retenido 3", "Valor Retenido 3"])
+      ),
 
-      valorRetencionIva30: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 30%"])),
-      valorRetencionIva50: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 50%"])),
-      valorRetencionIva70: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 70%"])),
-      valorRetencionIva100: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 100%"])),
+      valorRetencionIva30: compraMoney(
+        getByAny(row, ["Ret. IVA Valor Retenido 30%", "Valor Retención IVA 30%"])
+      ),
+      valorRetencionIva50: compraMoney(
+        getByAny(row, ["Ret. IVA Valor Retenido 50%", "Valor Retención IVA 50%"])
+      ),
+      valorRetencionIva70: compraMoney(
+        getByAny(row, ["Ret. IVA Valor Retenido 70%", "Valor Retención IVA 70%"])
+      ),
+      valorRetencionIva100: compraMoney(
+        getByAny(row, ["Ret. IVA Valor Retenido 100%", "Valor Retención IVA 100%"])
+      ),
 
       formaPago1: paymentCode(getByAny(row, ["Forma de PAGO 1"])),
       formaPago2: paymentCode(getByAny(row, ["Forma de PAGO 2"])),
