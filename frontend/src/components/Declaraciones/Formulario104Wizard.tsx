@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CreditCard,
   FileSpreadsheet,
   HelpCircle,
   Loader2,
@@ -75,11 +74,33 @@ const numericCasilleros = [
   "406",
   "407",
   "408",
+  "409",
+  "410",
   "411",
+  "412",
+  "413",
+  "414",
+  "415",
+  "416",
+  "417",
+  "418",
+  "419",
+  "420",
   "421",
   "422",
+  "425",
   "429",
+  "430",
   "431",
+  "434",
+  "435",
+  "441",
+  "442",
+  "443",
+  "444",
+  "445",
+  "453",
+  "454",
   "480",
   "481",
   "482",
@@ -90,18 +111,48 @@ const numericCasilleros = [
   "500",
   "501",
   "502",
+  "503",
+  "504",
+  "505",
+  "506",
   "507",
+  "508",
   "509",
   "510",
+  "511",
+  "512",
+  "513",
+  "514",
+  "515",
+  "516",
   "517",
   "518",
   "519",
   "520",
+  "521",
+  "522",
+  "523",
+  "524",
+  "525",
+  "526",
+  "527",
   "529",
+  "530",
   "531",
   "532",
+  "533",
+  "534",
+  "535",
+  "540",
   "541",
   "542",
+  "543",
+  "544",
+  "545",
+  "550",
+  "554",
+  "555",
+  "560",
   "563",
   "564",
   "565",
@@ -114,6 +165,7 @@ const numericCasilleros = [
   "607",
   "608",
   "609",
+  "622",
   "610",
   "611",
   "612",
@@ -125,6 +177,7 @@ const numericCasilleros = [
   "619",
   "620",
   "621",
+  "625",
   "699",
   "721",
   "723",
@@ -135,8 +188,10 @@ const numericCasilleros = [
   "799",
   "801",
   "800",
+  "802",
   "859",
   "890",
+  "880",
   "897",
   "898",
   "899",
@@ -172,41 +227,6 @@ const initialQuestions: Record<QuestionKey, "SI" | "NO"> = {
   efectuoRetenciones: "NO",
   obligadoContabilidad: "NO",
 };
-
-const ventasRows = [
-  ["401", "402", "Ventas locales gravadas con tarifa diferente de cero"],
-  ["411", "", "Ventas locales gravadas netas"],
-  ["403", "404", "Ventas locales tarifa 0% sin derecho a crédito tributario"],
-  ["405", "406", "Ventas locales tarifa 0% con derecho a crédito tributario"],
-  ["407", "", "Exportaciones de bienes"],
-  ["408", "", "Exportaciones de servicios"],
-  ["421", "422", "Ventas tarifa diferente de cero - casos especiales"],
-  ["431", "", "Transferencias no objeto o exentas"],
-  ["480", "", "Transferencias gravadas a contado este mes"],
-  ["481", "", "Transferencias gravadas a crédito este mes"],
-  ["482", "", "Total impuesto generado"],
-  ["483", "", "Impuesto a liquidar en el mes anterior"],
-  ["484", "", "Impuesto a liquidar en este mes"],
-  ["485", "", "Impuesto a liquidar en el próximo mes"],
-  ["499", "", "Total impuesto a liquidar"],
-];
-
-const comprasRows = [
-  ["500", "501", "Adquisiciones gravadas con derecho a crédito tributario"],
-  ["509", "", "Total adquisiciones gravadas brutas"],
-  ["510", "", "Adquisiciones gravadas netas"],
-  ["519", "", "Total adquisiciones gravadas netas"],
-  ["520", "", "IVA generado en adquisiciones gravadas"],
-  ["529", "", "Total IVA generado en adquisiciones"],
-  ["502", "", "Adquisiciones gravadas sin derecho a crédito tributario"],
-  ["507", "", "Adquisiciones tarifa 0%"],
-  ["517", "", "Adquisiciones tarifa 0% netas"],
-  ["518", "", "Adquisiciones realizadas a contribuyentes RISE"],
-  ["531", "", "Adquisiciones no objeto de IVA"],
-  ["541", "", "Adquisiciones no objeto de IVA netas"],
-  ["532", "", "Adquisiciones exentas de IVA"],
-  ["542", "", "Adquisiciones exentas de IVA netas"],
-];
 
 const resumenRows = [
   ["563", "Factor de proporcionalidad"],
@@ -252,6 +272,111 @@ const retencionesRows = [
   ["859", "Total consolidado de impuesto a pagar"],
 ];
 
+type TripletRow = {
+  concepto: string;
+  bruto?: string;
+  neto?: string;
+  impuesto?: string;
+};
+
+type SimpleRow = {
+  code: string;
+  label: string;
+  format?: "money" | "factor" | "integer";
+  editable?: boolean;
+};
+
+const ventasHorizontalRows: TripletRow[] = [
+  { concepto: "Ventas locales gravadas tarifa diferente de cero", bruto: "401", neto: "411", impuesto: "421" },
+  { concepto: "Ventas locales gravadas tarifa diferente de cero no objeto de retención", bruto: "402", neto: "412", impuesto: "422" },
+  { concepto: "Ventas tarifa diferente de cero especiales", bruto: "410", neto: "420", impuesto: "430" },
+  { concepto: "Ventas con liquidación posterior", bruto: "425", neto: "435", impuesto: "445" },
+  { concepto: "Ventas locales tarifa 0% sin derecho a crédito tributario", bruto: "403", neto: "413" },
+  { concepto: "Ventas locales tarifa 0% con derecho a crédito tributario", bruto: "404", neto: "414" },
+  { concepto: "Exportaciones de bienes", bruto: "405", neto: "415" },
+  { concepto: "Exportaciones de servicios", bruto: "406", neto: "416" },
+  { concepto: "Transferencias no objeto de IVA", bruto: "407", neto: "417" },
+  { concepto: "Transferencias exentas de IVA", bruto: "408", neto: "418" },
+  { concepto: "Total ventas y otras operaciones", bruto: "409", neto: "419", impuesto: "429" },
+  { concepto: "Transferencias no objeto o exentas", bruto: "431", neto: "441" },
+  { concepto: "IVA diferenciado", bruto: "442" },
+  { concepto: "Notas de crédito emitidas", bruto: "443", neto: "453" },
+  { concepto: "Ajustes de ventas", bruto: "434", neto: "444", impuesto: "454" },
+];
+
+const comprasHorizontalRows: TripletRow[] = [
+  { concepto: "Adquisiciones gravadas con derecho a crédito tributario", bruto: "500", neto: "510", impuesto: "520" },
+  { concepto: "Adquisiciones gravadas sin derecho a crédito tributario", bruto: "501", neto: "511", impuesto: "521" },
+  { concepto: "Adquisiciones especiales", bruto: "530", neto: "533", impuesto: "534" },
+  { concepto: "Importaciones", bruto: "540", neto: "550", impuesto: "560" },
+  { concepto: "Adquisiciones tarifa 0%", bruto: "502", neto: "512", impuesto: "522" },
+  { concepto: "Adquisiciones no objeto de IVA", bruto: "503", neto: "513", impuesto: "523" },
+  { concepto: "Adquisiciones exentas", bruto: "504", neto: "514", impuesto: "524" },
+  { concepto: "Adquisiciones a contribuyentes RISE", bruto: "505", neto: "515", impuesto: "525" },
+  { concepto: "IVA generado en importaciones de servicios", bruto: "526" },
+  { concepto: "IVA generado en adquisiciones especiales", bruto: "527" },
+  { concepto: "Adquisiciones locales", bruto: "506", neto: "516" },
+  { concepto: "Adquisiciones tarifa 0%", bruto: "507", neto: "517" },
+  { concepto: "Adquisiciones no objeto/exentas", bruto: "508", neto: "518" },
+  { concepto: "Total adquisiciones y pagos", bruto: "509", neto: "519", impuesto: "529" },
+  { concepto: "Notas de crédito recibidas", bruto: "531", impuesto: "541" },
+  { concepto: "Ajustes por notas de crédito", bruto: "532", impuesto: "542" },
+  { concepto: "IVA diferenciado en adquisiciones", bruto: "543" },
+  { concepto: "Importaciones y ajustes", bruto: "544", neto: "554" },
+  { concepto: "Otras adquisiciones", bruto: "535", neto: "545", impuesto: "555" },
+];
+
+const liquidacionIvaRows: SimpleRow[] = [
+  { code: "480", label: "Total transferencias" },
+  { code: "481", label: "Transferencias a crédito" },
+  { code: "482", label: "Total impuesto generado" },
+  { code: "483", label: "Impuesto diferido anterior" },
+  { code: "484", label: "Impuesto a liquidar este mes" },
+  { code: "485", label: "Ajuste próximo mes" },
+  { code: "499", label: "Total impuesto a liquidar" },
+];
+
+const comprobantesEmitidosRows: SimpleRow[] = [
+  { code: "111", label: "Comprobantes de venta", format: "integer" },
+  { code: "113", label: "Notas de crédito emitidas", format: "integer" },
+];
+
+const creditoTributarioRows: SimpleRow[] = [
+  { code: "563", label: "Factor de proporcionalidad", format: "factor" },
+  { code: "564", label: "Crédito tributario aplicable" },
+  { code: "565", label: "IVA no usado como crédito tributario" },
+];
+
+const comprobantesRecibidosRows: SimpleRow[] = [
+  { code: "115", label: "Comprobantes de compra", format: "integer" },
+  { code: "117", label: "Notas de crédito recibidas", format: "integer" },
+  { code: "119", label: "Comprobantes anulados", format: "integer" },
+];
+
+const resumenImpositivoHorizontalRows: SimpleRow[] = [
+  "601", "602", "603", "604", "605", "606", "607", "608", "609", "622", "610", "611", "612", "613", "614", "615", "617", "618", "619", "625", "620", "621", "699",
+].map((code) => ({ code, label: resumenRows.find(([key]) => key === code)?.[1] || "Casillero" }));
+
+const agenteRetencionRows: SimpleRow[] = [
+  "721", "723", "725", "727", "729", "731", "799", "800", "802", "801", "859",
+].map((code) => ({ code, label: retencionesRows.find(([key]) => key === code)?.[1] || "Casillero" }));
+
+const valoresPagarRows: SimpleRow[] = [
+  { code: "890", label: "Pago previo" },
+  { code: "897", label: "Interés pago previo" },
+  { code: "898", label: "Impuesto pago previo" },
+  { code: "899", label: "Multa pago previo" },
+  { code: "880", label: "Total valores imputables" },
+  { code: "902", label: "Total impuesto a pagar" },
+  { code: "903", label: "Interés" },
+  { code: "904", label: "Multa" },
+  { code: "999", label: "Total pagado" },
+  { code: "905", label: "Pago en efectivo/débito" },
+  { code: "906", label: "Pago con notas de crédito" },
+  { code: "907", label: "Pago con compensación" },
+  { code: "925", label: "Pago en exceso" },
+];
+
 function toNumber(value: string | number | undefined) {
   if (value === undefined || value === null) return 0;
   const num = Number(String(value).replace(",", ".").trim());
@@ -279,14 +404,9 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
   const [loadingDatos, setLoadingDatos] = useState(false);
   const [loadingEnviar, setLoadingEnviar] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [confirmado, setConfirmado] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
-  const [openSections, setOpenSections] = useState({
-    ventas: true,
-    compras: true,
-    resumen: true,
-    retenciones: false,
-  });
 
   const totals = useMemo(() => {
     const impuestoGenerado =
@@ -478,8 +598,8 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     }
 
     if (step === 4) {
-      if (form.formaPago === "CONVENIO_DEBITO" && totals["999"] > 0 && !form.numeroCuenta.trim()) {
-        nextErrors.push("Debe ingresar el número de cuenta para convenio de débito.");
+      if (!confirmado) {
+        nextErrors.push("Debe confirmar que los datos proporcionados son exactos y verdaderos.");
       }
 
       if (questions.obligadoContabilidad === "SI") {
@@ -511,14 +631,98 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     setStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const saveDraft = () => {
-    localStorage.setItem(
-      `formulario104-${rucUsuario}`,
-      JSON.stringify({ periodicidad, mes, semestre, anio, questions, form, totals, periodoData })
-    );
-    setDraftSaved(true);
-    setMensaje("Su declaración borrador ha sido guardada exitosamente.");
-    setTimeout(() => setDraftSaved(false), 3500);
+  const buildCasilleros = () => ({
+    ...Object.fromEntries(
+      Object.entries(form)
+        .filter(([key]) => /^\d+$/.test(key))
+        .map(([key, value]) => [key, toNumber(value)])
+    ),
+    429: totals["429"],
+    499: totals["499"],
+    563: totals["563"],
+    564: totals["564"],
+    601: totals["601"],
+    602: totals["602"],
+    615: totals["615"],
+    617: totals["617"],
+    620: totals["620"],
+    699: totals["699"],
+    799: totals["799"],
+    801: totals["801"],
+    859: totals["859"],
+    902: totals["902"],
+    905: totals["905"],
+    999: totals["999"],
+  });
+
+  const buildPayload = (estado?: "BORRADOR" | "PRESENTADA") => {
+    const casilleros = buildCasilleros();
+
+    return {
+      ...(estado ? { estado } : {}),
+      tipoImpuesto: "Impuesto al Valor Agregado",
+      formulario: "Formulario 104 - IVA",
+      periodoFiscal: periodicidad,
+      anio: Number(anio),
+      mes: periodicidad === "Mensual" ? meses.find((item) => item.value === mes)?.label || mes : null,
+      semestre: periodicidad === "Semestral" ? semestre : null,
+      tipoDeclaracion: "Original",
+      ventasPeriodo: questions.realizoVentas === "SI",
+      emitioRetenciones: questions.efectuoRetenciones === "SI",
+      valorCancelado: totals["999"],
+      baseImponible: toNumber(form["401"]) + toNumber(form["403"]) + toNumber(form["405"]) + toNumber(form["431"]),
+      impuestoGenerado: totals["429"],
+      valorRetenido: toNumber(form["609"]),
+      tipoPago: form.formaPago,
+      banco: form.banco,
+      tipoCuenta: form.tipoCuenta,
+      numeroCuenta: form.numeroCuenta,
+      datosJSON: {
+        resumen: periodoData?.resumen || null,
+        identificacion: {
+          periodicidad,
+          mes,
+          semestre,
+          anio,
+          ruc: periodoData?.ruc || rucUsuario,
+          razonSocial: periodoData?.razonSocial || razonSocial,
+        },
+        preguntas: questions,
+        sugerenciasATS: periodoData
+          ? Object.fromEntries(
+              numericCasilleros.map((key) => [key, Number(periodoData.casilleros?.[key] || 0)])
+            )
+          : null,
+        casilleros,
+        confirmacion: confirmado,
+      },
+    };
+  };
+
+  const saveDraft = async () => {
+    try {
+      setLoadingEnviar(true);
+      setMensaje("");
+      const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload("BORRADOR")),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "No fue posible guardar el borrador.");
+
+      localStorage.setItem(
+        `formulario104-${rucUsuario}`,
+        JSON.stringify({ periodicidad, mes, semestre, anio, questions, form, totals, periodoData })
+      );
+      setDraftSaved(true);
+      setMensaje("Borrador guardado correctamente.");
+      setTimeout(() => setDraftSaved(false), 3500);
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : "Error guardando borrador.");
+    } finally {
+      setLoadingEnviar(false);
+    }
   };
 
   const enviarDeclaracion = async () => {
@@ -528,78 +732,10 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       setLoadingEnviar(true);
       setMensaje("");
 
-      const casilleros = {
-        ...Object.fromEntries(
-          Object.entries(form)
-            .filter(([key]) => /^\d+$/.test(key))
-            .map(([key, value]) => [key, toNumber(value)])
-        ),
-        429: totals["429"],
-        499: totals["499"],
-        563: totals["563"],
-        564: totals["564"],
-        601: totals["601"],
-        602: totals["602"],
-        615: totals["615"],
-        617: totals["617"],
-        620: totals["620"],
-        699: totals["699"],
-        799: totals["799"],
-        801: totals["801"],
-        859: totals["859"],
-        902: totals["902"],
-        905: totals["905"],
-        999: totals["999"],
-      };
-
-      const payload = {
-        tipoImpuesto: "Impuesto al Valor Agregado",
-        formulario: "Formulario 104 - IVA",
-        periodoFiscal: periodicidad,
-        anio: Number(anio),
-        mes: periodicidad === "Mensual" ? meses.find((item) => item.value === mes)?.label || mes : null,
-        semestre: periodicidad === "Semestral" ? semestre : null,
-        tipoDeclaracion: "Original",
-        ventasPeriodo: questions.realizoVentas === "SI",
-        emitioRetenciones: questions.efectuoRetenciones === "SI",
-        valorCancelado: totals["999"],
-        baseImponible: toNumber(form["401"]) + toNumber(form["403"]) + toNumber(form["405"]) + toNumber(form["431"]),
-        impuestoGenerado: totals["429"],
-        valorRetenido: toNumber(form["609"]),
-        tipoPago: form.formaPago,
-        banco: form.banco,
-        tipoCuenta: form.tipoCuenta,
-        numeroCuenta: form.numeroCuenta,
-        datosJSON: {
-          resumen: periodoData?.resumen || null,
-          identificacion: {
-            periodicidad,
-            mes,
-            semestre,
-            anio,
-            ruc: periodoData?.ruc || rucUsuario,
-            razonSocial: periodoData?.razonSocial || razonSocial,
-          },
-          preguntas: questions,
-          sugerenciasATS: periodoData
-            ? Object.fromEntries(
-                numericCasilleros.map((key) => [key, Number(periodoData.casilleros?.[key] || 0)])
-              )
-            : null,
-          casilleros,
-          formaPago: {
-            tipo: form.formaPago,
-            banco: form.banco,
-            tipoCuenta: form.tipoCuenta,
-            numeroCuenta: form.numeroCuenta,
-          },
-        },
-      };
-
       const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(buildPayload("PRESENTADA")),
       });
 
       const data = await res.json();
@@ -619,7 +755,6 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
 
   const rucFinal = periodoData?.ruc || rucUsuario;
   const razonSocialFinal = periodoData?.razonSocial || razonSocial || "";
-  const hasPayment = totals["999"] > 0;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -771,191 +906,68 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
             </div>
           ) : null}
 
-          <div className="rounded-2xl border">
-            <AccordionTitle
-              title="Resumen de ventas y otras operaciones"
-              open={openSections.ventas}
-              onClick={() => setOpenSections((prev) => ({ ...prev, ventas: !prev.ventas }))}
+          <div className="space-y-5">
+            <Identificacion104
+              periodicidad={periodicidad}
+              mes={mes}
+              mesTexto={meses.find((item) => item.value === mes)?.label || mes}
+              anio={anio}
+              ruc={rucFinal}
+              razonSocial={razonSocialFinal || "-"}
             />
-            {openSections.ventas && (
-              <div className="space-y-3 border-t p-4">
-                {ventasRows.map(([base, iva, label]) => (
-                  <CasilleroPair
-                    key={`${base}-${iva || "base"}`}
-                    label={label}
-                    baseCode={base}
-                    ivaCode={iva}
-                    baseValue={base === "429" ? money(totals["429"]) : form[base]}
-                    ivaValue={iva ? form[iva] : undefined}
-                    onBaseChange={(value) => updateForm(base, value)}
-                    onIvaChange={(value) => iva && updateForm(iva, value)}
-                  />
-                ))}
-                <TotalBox label="429 Total impuesto generado" value={totals["429"]} strong />
-              </div>
-            )}
-
-            <AccordionTitle
-              title="Resumen de adquisiciones y pagos"
-              open={openSections.compras}
-              onClick={() => setOpenSections((prev) => ({ ...prev, compras: !prev.compras }))}
-            />
-            {openSections.compras && (
-              <div className="space-y-3 border-t p-4">
-                {comprasRows.map(([base, iva, label]) => (
-                  <CasilleroPair
-                    key={`${base}-${iva || "base"}`}
-                    label={label}
-                    baseCode={base}
-                    ivaCode={iva}
-                    baseValue={form[base]}
-                    ivaValue={iva ? form[iva] : undefined}
-                    onBaseChange={(value) => updateForm(base, value)}
-                    onIvaChange={(value) => iva && updateForm(iva, value)}
-                  />
-                ))}
-              </div>
-            )}
-
-            <AccordionTitle
-              title="Resumen impositivo"
-              open={openSections.resumen}
-              onClick={() => setOpenSections((prev) => ({ ...prev, resumen: !prev.resumen }))}
-            />
-            {openSections.resumen && (
-              <div className="grid grid-cols-1 gap-4 border-t p-4 md:grid-cols-2 xl:grid-cols-4">
-                {resumenRows.map(([code, label]) => {
-                  const calculated =
-                    code === "563" ||
-                    code === "564" ||
-                    code === "601" ||
-                    code === "602" ||
-                    code === "615" ||
-                    code === "617" ||
-                    code === "620" ||
-                    code === "801" ||
-                    code === "859" ||
-                    code === "699";
-                  return calculated ? (
-                    <TotalBox
-                      key={code}
-                      label={`${code} ${label}`}
-                      value={totals[code as keyof typeof totals]}
-                      format={code === "563" ? "factor" : "money"}
-                    />
-                  ) : (
-                    <MoneyField
-                      key={code}
-                      label={`${code} ${label}`}
-                      value={form[code]}
-                      onChange={(value) => updateForm(code, value)}
-                    />
-                  );
-                })}
-              </div>
-            )}
-
-            <AccordionTitle
-              title="Retenciones IVA"
-              open={openSections.retenciones}
-              onClick={() => setOpenSections((prev) => ({ ...prev, retenciones: !prev.retenciones }))}
-            />
-            {openSections.retenciones && (
-              <div className="grid grid-cols-1 gap-4 border-t p-4 md:grid-cols-2 xl:grid-cols-3">
-                {retencionesRows.map(([code, label]) =>
-                  code === "799" || code === "801" || code === "859" ? (
-                    <TotalBox
-                      key={code}
-                      label={`${code} ${label}`}
-                      value={totals[code as keyof typeof totals]}
-                    />
-                  ) : (
-                    <MoneyField
-                      key={code}
-                      label={`${code} ${label}`}
-                      value={form[code]}
-                      onChange={(value) => updateForm(code, value)}
-                    />
-                  )
-                )}
-              </div>
-            )}
+            <TripletTable title="Resumen de ventas y otras operaciones" rows={ventasHorizontalRows} form={form} totals={totals} onChange={updateForm} />
+            <SimpleTable title="Liquidación del IVA en el mes" rows={liquidacionIvaRows} form={form} totals={totals} onChange={updateForm} />
+            <SimpleTable title="Comprobantes emitidos" rows={comprobantesEmitidosRows} form={form} totals={totals} onChange={updateForm} />
+            <TripletTable title="Resumen de adquisiciones y pagos" rows={comprasHorizontalRows} form={form} totals={totals} onChange={updateForm} />
+            <SimpleTable title="Crédito tributario" rows={creditoTributarioRows} form={form} totals={totals} onChange={updateForm} />
+            <SimpleTable title="Comprobantes recibidos" rows={comprobantesRecibidosRows} form={form} totals={totals} onChange={updateForm} />
+            <SimpleTable title="Resumen impositivo" rows={resumenImpositivoHorizontalRows} form={form} totals={totals} onChange={updateForm} />
+            <SimpleTable title="Agente de retención IVA" rows={agenteRetencionRows} form={form} totals={totals} onChange={updateForm} />
+            <SimpleTable title="Valores a pagar" rows={valoresPagarRows} form={form} totals={totals} onChange={updateForm} />
           </div>
         </Panel>
       )}
 
       {step === 4 && (
-        <Panel title="4. Pago">
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <section className="rounded-2xl border bg-slate-50 p-5">
-              <h3 className="mb-4 font-black text-[#003565]">Resumen de la declaración</h3>
-              <SummaryRow label="Impuesto" value={totals["902"]} />
-              <SummaryRow label="Interés" value={toNumber(form["903"])} />
-              <SummaryRow label="Multa" value={toNumber(form["904"])} />
-              <SummaryRow label="Total a pagar" value={totals["999"]} strong />
+        <Panel title="Confirmación de declaración">
+          <section className="rounded-2xl border bg-slate-50 p-5">
+            <h3 className="mb-4 font-black text-[#003565]">Resumen de la declaración</h3>
+            <SummaryText label="Formulario" value="Formulario 104" />
+            <SummaryText label="RUC" value={rucFinal} />
+            <SummaryText label="Razón social" value={razonSocialFinal || "-"} />
+            <SummaryText label="Período" value={`${periodicidad === "Mensual" ? meses.find((item) => item.value === mes)?.label || mes : semestre} / ${anio}`} />
+            <SummaryText label="Total impuesto a pagar" value={`$${money(totals["902"])}`} strong />
+            <SummaryText label="Total pagado" value={`$${money(totals["999"])}`} strong />
 
-              <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <MoneyField label="Interés 903" value={form["903"]} onChange={(value) => updateForm("903", value)} />
-                <MoneyField label="Multa 904" value={form["904"]} onChange={(value) => updateForm("904", value)} />
-              </div>
-            </section>
+            <label className="mt-5 flex items-start gap-3 rounded-2xl border bg-white p-4 text-sm font-bold text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4"
+                checked={confirmado}
+                onChange={(event) => setConfirmado(event.target.checked)}
+              />
+              <span>Declaro que los datos proporcionados son exactos y verdaderos.</span>
+            </label>
 
-            <section className="rounded-2xl border bg-white p-5">
-              <h3 className="mb-4 flex items-center gap-2 font-black text-[#003565]">
-                <CreditCard size={18} />
-                Forma de pago
-              </h3>
+            <div className="mt-5 rounded-2xl border bg-white p-4">
+              <QuestionRow
+                text="¿Requiere firma de contador para esta declaración?"
+                value={questions.obligadoContabilidad}
+                onChange={(value) => updateQuestion("obligadoContabilidad", value)}
+              />
 
-              <div className="space-y-3">
-                <PaymentOption active={form.formaPago === "TBC"} label="Títulos de Banco Central" onClick={() => updateForm("formaPago", "TBC")} />
-                <PaymentOption active={form.formaPago === "NOTAS_CREDITO"} label="Notas de crédito desmaterializadas" onClick={() => updateForm("formaPago", "NOTAS_CREDITO")} />
-                <PaymentOption active={form.formaPago === "CONVENIO_DEBITO"} label="Convenio de débito" onClick={() => updateForm("formaPago", "CONVENIO_DEBITO")} />
-                <PaymentOption active={form.formaPago === "OTRAS"} label="Otras formas de pago" onClick={() => updateForm("formaPago", "OTRAS")} />
-              </div>
-
-              {form.formaPago === "CONVENIO_DEBITO" && (
-                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Field label="Banco">
-                    <input className="input" value={form.banco} onChange={(e) => updateForm("banco", e.target.value)} />
+              {questions.obligadoContabilidad === "SI" && (
+                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="RUC contador">
+                    <input className="input" value={form.rucContador} onChange={(e) => updateForm("rucContador", e.target.value.replace(/\D/g, ""))} />
                   </Field>
-                  <Field label="Tipo de cuenta">
-                    <select className="input" value={form.tipoCuenta} onChange={(e) => updateForm("tipoCuenta", e.target.value)}>
-                      <option>Ahorros</option>
-                      <option>Corriente</option>
-                    </select>
-                  </Field>
-                  <Field label="Número de cuenta">
-                    <input className="input" value={form.numeroCuenta} onChange={(e) => updateForm("numeroCuenta", e.target.value.replace(/\D/g, ""))} />
+                  <Field label="Clave contador">
+                    <input className="input" type="password" value={form.claveContador} onChange={(e) => updateForm("claveContador", e.target.value)} />
                   </Field>
                 </div>
               )}
-
-              <div className="mt-6 rounded-2xl border bg-slate-50 p-4">
-                <QuestionRow
-                  text="¿Requiere firma de contador para esta declaración?"
-                  value={questions.obligadoContabilidad}
-                  onChange={(value) => updateQuestion("obligadoContabilidad", value)}
-                />
-
-                {questions.obligadoContabilidad === "SI" && (
-                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <Field label="RUC contador">
-                      <input className="input" value={form.rucContador} onChange={(e) => updateForm("rucContador", e.target.value.replace(/\D/g, ""))} />
-                    </Field>
-                    <Field label="Clave contador">
-                      <input className="input" type="password" value={form.claveContador} onChange={(e) => updateForm("claveContador", e.target.value)} />
-                    </Field>
-                  </div>
-                )}
-              </div>
-
-              {!hasPayment && (
-                <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-black text-emerald-700">
-                  Declaración sin valor a pagar. Al aceptar, se procesará directamente.
-                </div>
-              )}
-            </section>
-          </div>
+            </div>
+          </section>
         </Panel>
       )}
 
@@ -991,7 +1003,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
           ) : (
             <button
               onClick={enviarDeclaracion}
-              disabled={loadingEnviar}
+              disabled={loadingEnviar || !confirmado}
               className="inline-flex items-center gap-2 rounded-xl bg-[#003565] px-5 py-3 font-black text-white disabled:opacity-60"
             >
               {loadingEnviar ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
@@ -1113,6 +1125,186 @@ function ReadBox({ label, value }: { label: string; value: string }) {
   );
 }
 
+function Identificacion104({
+  periodicidad,
+  mes,
+  mesTexto,
+  anio,
+  ruc,
+  razonSocial,
+}: {
+  periodicidad: string;
+  mes: string;
+  mesTexto: string;
+  anio: number;
+  ruc: string;
+  razonSocial: string;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border">
+      <table className="min-w-[760px] w-full text-sm">
+        <thead>
+          <tr className="bg-[#003565] text-left text-xs uppercase text-white">
+            <th className="px-3 py-3">Sección</th>
+            <th className="px-3 py-3 text-center">Código</th>
+            <th className="px-3 py-3">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            ["Identificación de la declaración", "101", periodicidad === "Mensual" ? `${mes} - ${mesTexto}` : periodicidad],
+            ["Identificación de la declaración", "102", String(anio)],
+            ["Identificación del sujeto pasivo", "201", ruc],
+            ["Identificación del sujeto pasivo", "202", razonSocial],
+          ].map(([section, code, value]) => (
+            <tr key={code} className="border-t">
+              <td className="px-3 py-2 font-bold text-slate-700">{section}</td>
+              <td className="px-3 py-2 text-center font-black text-slate-600">{code}</td>
+              <td className="px-3 py-2 font-black text-slate-700">{value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function displayCasilleroValue(code: string, form: FormState, totals: Record<string, number>) {
+  const raw = Object.prototype.hasOwnProperty.call(totals, code) ? totals[code] : toNumber(form[code]);
+  return code === "563" ? raw.toFixed(4) : money(raw);
+}
+
+function CasilleroInput({
+  code,
+  form,
+  totals,
+  onChange,
+}: {
+  code?: string;
+  form: FormState;
+  totals: Record<string, number>;
+  onChange: (key: string, value: string) => void;
+}) {
+  if (!code) return <span />;
+  const calculated = Object.prototype.hasOwnProperty.call(totals, code);
+  if (calculated) {
+    return <span className="block rounded-lg bg-slate-50 px-2 py-1.5 text-right font-black text-slate-700">{displayCasilleroValue(code, form, totals)}</span>;
+  }
+
+  return (
+    <input
+      type="number"
+      min="0"
+      step="0.01"
+      value={form[code] || "0.00"}
+      onChange={(event) => onChange(code, event.target.value)}
+      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-right text-sm font-bold text-slate-700 outline-none focus:border-[#003565]"
+    />
+  );
+}
+
+function TripletTable({
+  title,
+  rows,
+  form,
+  totals,
+  onChange,
+}: {
+  title: string;
+  rows: TripletRow[];
+  form: FormState;
+  totals: Record<string, number>;
+  onChange: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border">
+      <table className="min-w-[920px] w-full text-sm">
+        <thead>
+          <tr className="bg-[#003565] text-left text-xs uppercase text-white">
+            <th colSpan={4} className="px-3 py-2">{title}</th>
+          </tr>
+          <tr className="bg-slate-100 text-xs uppercase text-slate-600">
+            <th className="w-[46%] px-3 py-2">Concepto</th>
+            <th className="w-[18%] px-3 py-2 text-right">Valor bruto</th>
+            <th className="w-[18%] px-3 py-2 text-right">Valor neto</th>
+            <th className="w-[18%] px-3 py-2 text-right">Impuesto generado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${title}-${row.concepto}`} className="border-t">
+              <td className="px-3 py-2 font-bold text-slate-700">{row.concepto}</td>
+              <td className="px-3 py-2"><CodeValue code={row.bruto} form={form} totals={totals} onChange={onChange} /></td>
+              <td className="px-3 py-2"><CodeValue code={row.neto} form={form} totals={totals} onChange={onChange} /></td>
+              <td className="px-3 py-2"><CodeValue code={row.impuesto} form={form} totals={totals} onChange={onChange} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CodeValue({
+  code,
+  form,
+  totals,
+  onChange,
+}: {
+  code?: string;
+  form: FormState;
+  totals: Record<string, number>;
+  onChange: (key: string, value: string) => void;
+}) {
+  if (!code) return <span className="block text-right text-slate-300">-</span>;
+  return (
+    <div>
+      <div className="mb-1 text-right text-[10px] font-black text-slate-400">{code}</div>
+      <CasilleroInput code={code} form={form} totals={totals} onChange={onChange} />
+    </div>
+  );
+}
+
+function SimpleTable({
+  title,
+  rows,
+  form,
+  totals,
+  onChange,
+}: {
+  title: string;
+  rows: SimpleRow[];
+  form: FormState;
+  totals: Record<string, number>;
+  onChange: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border">
+      <table className="min-w-[760px] w-full text-sm">
+        <thead>
+          <tr className="bg-[#003565] text-left text-xs uppercase text-white">
+            <th colSpan={3} className="px-3 py-2">{title}</th>
+          </tr>
+          <tr className="bg-slate-100 text-xs uppercase text-slate-600">
+            <th className="w-[14%] px-3 py-2 text-center">Casillero</th>
+            <th className="px-3 py-2">Concepto</th>
+            <th className="w-[24%] px-3 py-2 text-right">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${title}-${row.code}`} className="border-t">
+              <td className="px-3 py-2 text-center font-black text-slate-600">{row.code}</td>
+              <td className="px-3 py-2 font-bold text-slate-700">{row.label}</td>
+              <td className="px-3 py-2"><CasilleroInput code={row.code} form={form} totals={totals} onChange={onChange} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function QuestionRow({
   text,
   value,
@@ -1158,133 +1350,11 @@ function GhostButton({ onClick, children }: { onClick: () => void; children: Rea
   );
 }
 
-function AccordionTitle({
-  title,
-  open,
-  onClick,
-}: {
-  title: string;
-  open: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center justify-between bg-[#003565] px-5 py-4 text-left font-black text-white first:rounded-t-2xl"
-    >
-      <span>{title}</span>
-      <ChevronRight className={`transition ${open ? "rotate-90" : ""}`} size={18} />
-    </button>
-  );
-}
-
-function MoneyField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Field label={label}>
-      <input
-        className="input"
-        type="number"
-        min="0"
-        step="0.01"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </Field>
-  );
-}
-
-function CasilleroPair({
-  label,
-  baseCode,
-  ivaCode,
-  baseValue,
-  ivaValue,
-  onBaseChange,
-  onIvaChange,
-}: {
-  label: string;
-  baseCode: string;
-  ivaCode?: string;
-  baseValue: string;
-  ivaValue?: string;
-  onBaseChange: (value: string) => void;
-  onIvaChange: (value: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-4 rounded-2xl bg-slate-50 p-4 md:grid-cols-[1fr_180px_180px]">
-      <div>
-        <p className="font-black text-slate-700">{label}</p>
-        <p className="text-xs font-bold text-slate-400">
-          {ivaCode ? `Base ${baseCode} / Impuesto ${ivaCode}` : `Casillero ${baseCode}`}
-        </p>
-      </div>
-      <MoneyField label={`Base ${baseCode}`} value={baseValue} onChange={onBaseChange} />
-      {ivaCode ? (
-        <MoneyField label={`Impuesto ${ivaCode}`} value={ivaValue || "0.00"} onChange={onIvaChange} />
-      ) : (
-        <div className="hidden md:block" />
-      )}
-    </div>
-  );
-}
-
-function TotalBox({
-  label,
-  value,
-  strong = false,
-  format = "money",
-}: {
-  label: string;
-  value: number;
-  strong?: boolean;
-  format?: "money" | "percent" | "factor";
-}) {
-  return (
-    <div className={`rounded-2xl border p-4 ${strong ? "bg-[#003565] text-white" : "bg-slate-50 text-slate-700"}`}>
-      <p className={`text-xs font-black uppercase ${strong ? "text-white/70" : "text-slate-400"}`}>{label}</p>
-      <p className="mt-1 text-2xl font-black">
-        {format === "factor" ? value.toFixed(4) : format === "percent" ? `${money(value)}%` : `$${money(value)}`}
-      </p>
-    </div>
-  );
-}
-
-function SummaryRow({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
+function SummaryText({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className={`flex items-center justify-between border-b py-3 ${strong ? "font-black text-[#003565]" : "font-bold text-slate-700"}`}>
       <span>{label}</span>
-      <span>${money(value)}</span>
+      <span>{value}</span>
     </div>
-  );
-}
-
-function PaymentOption({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-black ${
-        active ? "border-[#003565] bg-blue-50 text-[#003565]" : "bg-white text-slate-600 hover:bg-slate-50"
-      }`}
-    >
-      {label}
-    </button>
   );
 }

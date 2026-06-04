@@ -6,6 +6,10 @@ function generarNumeroAdhesion() {
   return `ADH-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
 }
 
+function generarNumeroBorrador() {
+  return `BOR-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+}
+
 const mesesMap: Record<string, string> = {
   "01": "Enero",
   "02": "Febrero",
@@ -306,10 +310,112 @@ function drawFormulario104Pdf(params: {
 }) {
   const { doc, declaracion, ruc, razonSocial, casilleros } = params;
   const value = (key: string) => casilleros[key] ?? 0;
-
-  const section = (title: string, rows: Formulario104PdfRow[]) => {
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const textValue = (key: string) => (key === "563" ? formatFactor(value(key)) : formatMoney(value(key)));
+  const codeValue = (key?: string) => (key ? `${key}\n${textValue(key)}` : "-");
+  const drawTripletSection = (
+    title: string,
+    rows: Array<{ concepto: string; bruto?: string; neto?: string; impuesto?: string }>
+  ) => {
     drawSectionTitle(doc, title);
-    drawCasilleroTable(doc, rows);
+    const conceptWidth = 294;
+    const cellWidth = (pageWidth - conceptWidth) / 3;
+    const x = doc.page.margins.left;
+    const rowHeight = 28;
+
+    ensureSpace(doc, 18 + rowHeight);
+    doc
+      .rect(x, doc.y, pageWidth, 18)
+      .fill("#e8eef6")
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .fillColor("#0f172a")
+      .text("CONCEPTO", x + 5, doc.y + 5, { width: conceptWidth - 10 })
+      .text("VALOR BRUTO", x + conceptWidth + 5, doc.y + 5, { width: cellWidth - 10, align: "right" })
+      .text("VALOR NETO", x + conceptWidth + cellWidth + 5, doc.y + 5, { width: cellWidth - 10, align: "right" })
+      .text("IMPUESTO GENERADO", x + conceptWidth + cellWidth * 2 + 5, doc.y + 5, {
+        width: cellWidth - 10,
+        align: "right",
+      });
+    doc.y += 18;
+
+    rows.forEach((row, index) => {
+      ensureSpace(doc, rowHeight);
+      const y = doc.y;
+      doc
+        .rect(x, y, pageWidth, rowHeight)
+        .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+        .strokeColor("#d7dde6")
+        .rect(x, y, pageWidth, rowHeight)
+        .stroke();
+
+      doc
+        .font("Helvetica")
+        .fontSize(6.8)
+        .fillColor("#111827")
+        .text(row.concepto, x + 5, y + 5, { width: conceptWidth - 10 })
+        .font("Helvetica-Bold")
+        .text(codeValue(row.bruto), x + conceptWidth + 5, y + 4, { width: cellWidth - 10, align: "right" })
+        .text(codeValue(row.neto), x + conceptWidth + cellWidth + 5, y + 4, { width: cellWidth - 10, align: "right" })
+        .text(codeValue(row.impuesto), x + conceptWidth + cellWidth * 2 + 5, y + 4, {
+          width: cellWidth - 10,
+          align: "right",
+        });
+      doc.y = y + rowHeight;
+    });
+
+    doc.moveDown(0.25);
+  };
+
+  const drawSimpleSection = (title: string, rows: Array<{ code: string; concepto: string; valor?: string }>) => {
+    drawSectionTitle(doc, title);
+    const codeWidth = 58;
+    const valueWidth = 92;
+    const conceptWidth = pageWidth - codeWidth - valueWidth;
+    const x = doc.page.margins.left;
+    const headerHeight = 18;
+    const rowHeight = 20;
+
+    ensureSpace(doc, headerHeight + rowHeight);
+    doc
+      .rect(x, doc.y, pageWidth, headerHeight)
+      .fill("#e8eef6")
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .fillColor("#0f172a")
+      .text("CASILLERO", x + 5, doc.y + 5, { width: codeWidth - 10, align: "center" })
+      .text("CONCEPTO", x + codeWidth + 5, doc.y + 5, { width: conceptWidth - 10 })
+      .text("VALOR", x + codeWidth + conceptWidth + 5, doc.y + 5, { width: valueWidth - 10, align: "right" });
+    doc.y += headerHeight;
+
+    rows.forEach((row, index) => {
+      ensureSpace(doc, rowHeight);
+      const y = doc.y;
+      doc
+        .rect(x, y, pageWidth, rowHeight)
+        .fill(index % 2 === 0 ? "#f8fafc" : "#ffffff")
+        .strokeColor("#d7dde6")
+        .rect(x, y, pageWidth, rowHeight)
+        .stroke();
+
+      doc
+        .fontSize(7)
+        .font("Helvetica-Bold")
+        .fillColor("#111827")
+        .text(row.code, x + 5, y + 5, { width: codeWidth - 10, align: "center" })
+        .font("Helvetica")
+        .fillColor("#334155")
+        .text(row.concepto, x + codeWidth + 5, y + 5, { width: conceptWidth - 10 })
+        .font("Helvetica-Bold")
+        .fillColor("#111827")
+        .text(row.valor ?? textValue(row.code), x + codeWidth + conceptWidth + 5, y + 5, {
+          width: valueWidth - 10,
+          align: "right",
+        });
+      doc.y = y + rowHeight;
+    });
+
+    doc.moveDown(0.25);
   };
 
   pdfTitle(doc, "FORMULARIO 104", "Declaración del Impuesto al Valor Agregado");
@@ -320,98 +426,134 @@ function drawFormulario104Pdf(params: {
   pdfKV(doc, "Fecha generación", fechaLocal(new Date()));
   pdfKV(doc, "Número de adhesión", declaracion.numeroAdhesion);
 
-  section("Identificación", [
-    { casillero: "201", descripcion: "RUC", valor: ruc, format: "text" },
-    { casillero: "202", descripcion: "Razón social", valor: razonSocial, format: "text" },
+  drawSimpleSection("Identificación", [
+    { code: "101", concepto: "Mes", valor: declaracion.mes || declaracion.semestre || "-" },
+    { code: "102", concepto: "Año", valor: String(declaracion.anio) },
+    { code: "201", concepto: "RUC", valor: ruc },
+    { code: "202", concepto: "Razón social", valor: razonSocial },
   ]);
 
-  section("Ventas y otras operaciones", [
-    { casillero: "401", descripcion: "Ventas tarifa diferente de 0%", valor: value("401") },
-    { casillero: "411", descripcion: "Total ventas tarifa diferente de 0%", valor: value("411") },
-    { casillero: "421", descripcion: "IVA generado en ventas", valor: value("421") },
-    { casillero: "429", descripcion: "Total IVA generado", valor: value("429") },
-    { casillero: "480", descripcion: "Total transferencias", valor: value("480") },
-    { casillero: "481", descripcion: "Notas de crédito en ventas", valor: value("481") },
-    { casillero: "482", descripcion: "IVA total generado", valor: value("482") },
-    { casillero: "483", descripcion: "IVA notas de crédito", valor: value("483") },
-    { casillero: "484", descripcion: "IVA en ventas", valor: value("484") },
-    { casillero: "485", descripcion: "Ajuste por redondeo", valor: value("485") },
-    { casillero: "499", descripcion: "Impuesto generado", valor: value("499") },
-    { casillero: "111", descripcion: "Comprobantes de venta", valor: value("111"), format: "integer" },
-    { casillero: "113", descripcion: "Notas de crédito emitidas", valor: value("113"), format: "integer" },
+  drawTripletSection("Ventas y otras operaciones", [
+    { concepto: "Ventas locales gravadas tarifa diferente de cero", bruto: "401", neto: "411", impuesto: "421" },
+    { concepto: "Ventas locales gravadas tarifa diferente de cero no objeto de retención", bruto: "402", neto: "412", impuesto: "422" },
+    { concepto: "Ventas tarifa diferente de cero especiales", bruto: "410", neto: "420", impuesto: "430" },
+    { concepto: "Ventas con liquidación posterior", bruto: "425", neto: "435", impuesto: "445" },
+    { concepto: "Ventas locales tarifa 0% sin derecho a crédito tributario", bruto: "403", neto: "413" },
+    { concepto: "Ventas locales tarifa 0% con derecho a crédito tributario", bruto: "404", neto: "414" },
+    { concepto: "Exportaciones de bienes", bruto: "405", neto: "415" },
+    { concepto: "Exportaciones de servicios", bruto: "406", neto: "416" },
+    { concepto: "Transferencias no objeto de IVA", bruto: "407", neto: "417" },
+    { concepto: "Transferencias exentas de IVA", bruto: "408", neto: "418" },
+    { concepto: "Total ventas y otras operaciones", bruto: "409", neto: "419", impuesto: "429" },
+    { concepto: "Transferencias no objeto o exentas adicionales", bruto: "431", neto: "441" },
+    { concepto: "Otras transferencias", neto: "442" },
+    { concepto: "Ajustes por ventas", bruto: "443", neto: "453" },
+    { concepto: "Otros ajustes gravados", bruto: "434", neto: "444", impuesto: "454" },
   ]);
 
-  section("Adquisiciones y pagos", [
-    { casillero: "500", descripcion: "Adquisiciones tarifa diferente de 0%", valor: value("500") },
-    { casillero: "510", descripcion: "Adquisiciones netas tarifa diferente de 0%", valor: value("510") },
-    { casillero: "520", descripcion: "IVA pagado en adquisiciones", valor: value("520") },
-    { casillero: "509", descripcion: "Total adquisiciones tarifa diferente de 0%", valor: value("509") },
-    { casillero: "519", descripcion: "Total adquisiciones netas", valor: value("519") },
-    { casillero: "529", descripcion: "Total IVA pagado", valor: value("529") },
-    { casillero: "507", descripcion: "Adquisiciones sin derecho a crédito tributario", valor: value("507") },
-    { casillero: "517", descripcion: "Total adquisiciones sin derecho a crédito", valor: value("517") },
-    { casillero: "531", descripcion: "Notas de crédito en adquisiciones", valor: value("531") },
-    { casillero: "541", descripcion: "IVA notas de crédito en adquisiciones", valor: value("541") },
-    { casillero: "532", descripcion: "Ajustes en adquisiciones", valor: value("532") },
-    { casillero: "542", descripcion: "IVA ajustes en adquisiciones", valor: value("542") },
-    { casillero: "563", descripcion: "Factor de proporcionalidad", valor: value("563"), format: "factor" },
-    { casillero: "564", descripcion: "Crédito tributario aplicable", valor: value("564") },
-    { casillero: "565", descripcion: "IVA no usado como crédito tributario", valor: value("565") },
-    { casillero: "115", descripcion: "Comprobantes de compra", valor: value("115"), format: "integer" },
-    { casillero: "117", descripcion: "Notas de crédito recibidas", valor: value("117"), format: "integer" },
-    { casillero: "119", descripcion: "Comprobantes anulados", valor: value("119"), format: "integer" },
+  drawSimpleSection("Liquidación del IVA en el mes", [
+    { code: "480", concepto: "Total transferencias gravadas" },
+    { code: "481", concepto: "IVA generado en ventas a crédito" },
+    { code: "482", concepto: "IVA generado total" },
+    { code: "483", concepto: "IVA a liquidar en mes anterior" },
+    { code: "484", concepto: "IVA a liquidar en este mes" },
+    { code: "485", concepto: "IVA a liquidar en el próximo mes" },
+    { code: "499", concepto: "Total impuesto generado" },
   ]);
 
-  section("Resumen impositivo", [
-    { casillero: "601", descripcion: "Impuesto causado", valor: value("601") },
-    { casillero: "602", descripcion: "Crédito tributario del mes", valor: value("602") },
-    { casillero: "603", descripcion: "Crédito tributario mes anterior", valor: value("603") },
-    { casillero: "604", descripcion: "Saldo crédito tributario mes anterior", valor: value("604") },
-    { casillero: "605", descripcion: "Saldo crédito tributario por adquisiciones", valor: value("605") },
-    { casillero: "606", descripcion: "Saldo retenciones mes anterior", valor: value("606") },
-    { casillero: "607", descripcion: "Ajustes por devolución", valor: value("607") },
-    { casillero: "608", descripcion: "Ajustes por compensación", valor: value("608") },
-    { casillero: "609", descripcion: "Retenciones IVA que le efectuaron", valor: value("609") },
-    { casillero: "610", descripcion: "Ajuste crédito tributario", valor: value("610") },
-    { casillero: "611", descripcion: "Ajuste por devoluciones", valor: value("611") },
-    { casillero: "612", descripcion: "Ajuste por compensaciones", valor: value("612") },
-    { casillero: "613", descripcion: "Ajuste por notas de crédito", valor: value("613") },
-    { casillero: "614", descripcion: "Otros ajustes", valor: value("614") },
-    { casillero: "615", descripcion: "Saldo crédito tributario próximo mes", valor: value("615") },
-    { casillero: "617", descripcion: "Saldo retenciones próximo mes", valor: value("617") },
-    { casillero: "618", descripcion: "Saldo crédito tributario a compensar", valor: value("618") },
-    { casillero: "619", descripcion: "Saldo retenciones a compensar", valor: value("619") },
-    { casillero: "620", descripcion: "Subtotal a pagar", valor: value("620") },
-    { casillero: "621", descripcion: "IVA presuntivo", valor: value("621") },
-    { casillero: "699", descripcion: "Impuesto a pagar", valor: value("699") },
+  drawSimpleSection("Comprobantes emitidos", [
+    { code: "111", concepto: "Comprobantes emitidos" },
+    { code: "113", concepto: "Comprobantes anulados o notas de crédito emitidas" },
   ]);
 
-  section("Retenciones IVA", [
-    { casillero: "721", descripcion: "Retención IVA 10%", valor: value("721") },
-    { casillero: "723", descripcion: "Retención IVA 20%", valor: value("723") },
-    { casillero: "725", descripcion: "Retención IVA 30%", valor: value("725") },
-    { casillero: "727", descripcion: "Retención IVA 50%", valor: value("727") },
-    { casillero: "729", descripcion: "Retención IVA 70%", valor: value("729") },
-    { casillero: "731", descripcion: "Retención IVA 100%", valor: value("731") },
-    { casillero: "799", descripcion: "Total retenciones IVA", valor: value("799") },
-    { casillero: "800", descripcion: "Retenciones IVA compensadas", valor: value("800") },
-    { casillero: "801", descripcion: "Retenciones IVA a pagar", valor: value("801") },
-    { casillero: "859", descripcion: "Total obligación IVA", valor: value("859") },
+  drawTripletSection("Adquisiciones y pagos", [
+    { concepto: "Adquisiciones gravadas con derecho a crédito tributario", bruto: "500", neto: "510", impuesto: "520" },
+    { concepto: "Adquisiciones gravadas sin derecho a crédito tributario", bruto: "501", neto: "511", impuesto: "521" },
+    { concepto: "Importaciones gravadas", bruto: "530", neto: "533", impuesto: "534" },
+    { concepto: "Importaciones especiales", bruto: "540", neto: "550", impuesto: "560" },
+    { concepto: "Adquisiciones tarifa 0%", bruto: "502", neto: "512", impuesto: "522" },
+    { concepto: "Adquisiciones no objeto de IVA", bruto: "503", neto: "513", impuesto: "523" },
+    { concepto: "Adquisiciones exentas de IVA", bruto: "504", neto: "514", impuesto: "524" },
+    { concepto: "Otras adquisiciones", bruto: "505", neto: "515", impuesto: "525" },
+    { concepto: "Ajustes IVA en compras", impuesto: "526" },
+    { concepto: "Otros ajustes IVA", impuesto: "527" },
+    { concepto: "Adquisiciones adicionales", bruto: "506", neto: "516" },
+    { concepto: "Adquisiciones tarifa 0% o no objeto", bruto: "507", neto: "517" },
+    { concepto: "Adquisiciones RISE / Régimen simplificado", bruto: "508", neto: "518" },
+    { concepto: "Total adquisiciones y pagos", bruto: "509", neto: "519", impuesto: "529" },
+    { concepto: "Notas de crédito en adquisiciones", bruto: "531", neto: "541" },
+    { concepto: "Ajustes en adquisiciones", bruto: "532", neto: "542" },
+    { concepto: "Ajuste impuesto generado", impuesto: "543" },
+    { concepto: "Otros ajustes", bruto: "544", neto: "554" },
+    { concepto: "Totales adicionales de adquisiciones", bruto: "535", neto: "545", impuesto: "555" },
   ]);
 
-  section("Valores a pagar", [
-    { casillero: "890", descripcion: "Pago previo", valor: value("890") },
-    { casillero: "897", descripcion: "Interés por mora previo", valor: value("897") },
-    { casillero: "898", descripcion: "Multa previa", valor: value("898") },
-    { casillero: "899", descripcion: "Total impuesto a pagar previo", valor: value("899") },
-    { casillero: "902", descripcion: "Impuesto causado a pagar", valor: value("902") },
-    { casillero: "903", descripcion: "Interés", valor: value("903") },
-    { casillero: "904", descripcion: "Multa", valor: value("904") },
-    { casillero: "905", descripcion: "Total pagado", valor: value("905") },
-    { casillero: "906", descripcion: "Pago con notas de crédito", valor: value("906") },
-    { casillero: "907", descripcion: "Pago con compensación", valor: value("907") },
-    { casillero: "925", descripcion: "Pago en exceso", valor: value("925") },
-    { casillero: "999", descripcion: "Total pagado", valor: value("999") },
+  drawSimpleSection("Crédito tributario", [
+    { code: "563", concepto: "Factor de proporcionalidad" },
+    { code: "564", concepto: "Crédito tributario aplicable" },
+    { code: "565", concepto: "IVA no usado como crédito tributario" },
+  ]);
+
+  drawSimpleSection("Comprobantes recibidos", [
+    { code: "115", concepto: "Comprobantes recibidos" },
+    { code: "117", concepto: "Notas de crédito recibidas" },
+    { code: "119", concepto: "Comprobantes anulados" },
+  ]);
+
+  drawSimpleSection("Resumen impositivo", [
+    { code: "601", concepto: "Impuesto causado" },
+    { code: "602", concepto: "Crédito tributario del mes" },
+    { code: "603", concepto: "Crédito tributario mes anterior" },
+    { code: "604", concepto: "Saldo crédito tributario mes anterior" },
+    { code: "605", concepto: "Saldo crédito tributario por adquisiciones" },
+    { code: "606", concepto: "Saldo retenciones mes anterior" },
+    { code: "607", concepto: "Ajustes por devolución" },
+    { code: "608", concepto: "Ajustes por compensación" },
+    { code: "609", concepto: "Retenciones IVA que le efectuaron" },
+    { code: "622", concepto: "Ajuste por devolución automática" },
+    { code: "610", concepto: "Ajuste crédito tributario" },
+    { code: "611", concepto: "Ajuste por devoluciones" },
+    { code: "612", concepto: "Ajuste por compensaciones" },
+    { code: "613", concepto: "Ajuste por notas de crédito" },
+    { code: "614", concepto: "Otros ajustes" },
+    { code: "615", concepto: "Saldo crédito tributario próximo mes" },
+    { code: "617", concepto: "Saldo retenciones próximo mes" },
+    { code: "618", concepto: "Saldo crédito tributario a compensar" },
+    { code: "619", concepto: "Saldo retenciones a compensar" },
+    { code: "625", concepto: "Saldo a favor" },
+    { code: "620", concepto: "Subtotal a pagar" },
+    { code: "621", concepto: "IVA presuntivo" },
+    { code: "699", concepto: "Impuesto a pagar" },
+  ]);
+
+  drawSimpleSection("Agente de retención IVA", [
+    { code: "721", concepto: "Retención IVA 10%" },
+    { code: "723", concepto: "Retención IVA 20%" },
+    { code: "725", concepto: "Retención IVA 30%" },
+    { code: "727", concepto: "Retención IVA 50%" },
+    { code: "729", concepto: "Retención IVA 70%" },
+    { code: "731", concepto: "Retención IVA 100%" },
+    { code: "799", concepto: "Total retenciones IVA" },
+    { code: "800", concepto: "Retenciones IVA compensadas" },
+    { code: "802", concepto: "Retenciones IVA pendientes" },
+    { code: "801", concepto: "Retenciones IVA a pagar" },
+    { code: "859", concepto: "Total obligación IVA" },
+  ]);
+
+  drawSimpleSection("Valores a pagar", [
+    { code: "890", concepto: "Pago previo" },
+    { code: "897", concepto: "Interés por mora previo" },
+    { code: "898", concepto: "Multa previa" },
+    { code: "899", concepto: "Total impuesto a pagar previo" },
+    { code: "880", concepto: "Valor pagado previamente" },
+    { code: "902", concepto: "Impuesto causado a pagar" },
+    { code: "903", concepto: "Interés" },
+    { code: "904", concepto: "Multa" },
+    { code: "999", concepto: "Total pagado" },
+    { code: "905", concepto: "Total pagado por débito u otros medios" },
+    { code: "906", concepto: "Pago con notas de crédito" },
+    { code: "907", concepto: "Pago con compensación" },
+    { code: "925", concepto: "Pago en exceso" },
   ]);
 
   doc
@@ -431,16 +573,86 @@ type Formulario103PdfRow = {
 
 const formulario103Sections: Array<{ title: string; rows: Formulario103PdfRow[] }> = [
   {
+    title: "Detalle de pagos y retención por impuesto a la renta",
+    rows: [
+      { concepto: "En relación de dependencia", baseCode: "302", retCode: "352" },
+      { concepto: "Honorarios profesionales", baseCode: "303", retCode: "353" },
+      { concepto: "Honorarios profesionales no residentes", baseCode: "3030" },
+    ],
+  },
+  {
     title: "Derivadas del trabajo y servicios prestados",
     rows: [
+      { concepto: "Servicios donde predomina el intelecto", baseCode: "304", retCode: "354" },
+      { concepto: "Servicios donde predomina la mano de obra", baseCode: "307", retCode: "357" },
+      { concepto: "Utilización o aprovechamiento de imagen o renombre", baseCode: "308", retCode: "358" },
       { concepto: "Publicidad y comunicación", baseCode: "309", retCode: "359" },
+      { concepto: "Servicios profesionales adicionales", baseCode: "310" },
+      { concepto: "Liquidaciones de compra por nivel cultural o rusticidad", baseCode: "311", retCode: "361" },
     ],
   },
   {
     title: "Por bienes y servicios",
     rows: [
       { concepto: "Transferencia de bienes muebles de naturaleza corporal", baseCode: "312", retCode: "362" },
+      { concepto: "Seguros y reaseguros", baseCode: "322", retCode: "372" },
+      { concepto: "Transferencias especiales de bienes", baseCode: "3120" },
+      { concepto: "Transferencias especiales de bienes", baseCode: "3121" },
+      { concepto: "Pagos aplicables tarifa 1%", baseCode: "3430" },
+      { concepto: "Pagos aplicables tarifa 1%", baseCode: "343", retCode: "393" },
+      { concepto: "Pagos aplicables tarifa 2%", baseCode: "344", retCode: "394" },
       { concepto: "Otras compras de bienes y servicios no sujetas a retención", baseCode: "332" },
+    ],
+  },
+  {
+    title: "Por regalías, comisiones, arrendamientos y otros",
+    rows: [
+      { concepto: "Regalías, derechos de autor, marcas y patentes", baseCode: "314", retCode: "364" },
+      { concepto: "Regalías y similares", baseCode: "3140" },
+      { concepto: "Arrendamientos mercantiles", baseCode: "319" },
+      { concepto: "Arrendamientos de bienes inmuebles", baseCode: "320" },
+      { concepto: "Rendimientos financieros", baseCode: "323", retCode: "373" },
+      { concepto: "Otros rendimientos financieros", baseCode: "324" },
+      { concepto: "Rendimientos financieros especiales", baseCode: "3230" },
+    ],
+  },
+  {
+    title: "Relacionadas con el capital",
+    rows: [
+      { concepto: "Dividendos", baseCode: "325", retCode: "375" },
+      { concepto: "Dividendos anticipados", baseCode: "3250" },
+      { concepto: "Ganancias de capital", baseCode: "326" },
+      { concepto: "Utilidades por enajenación", baseCode: "327" },
+      { concepto: "Rendimientos en fideicomisos", baseCode: "328" },
+      { concepto: "Cesión de derechos", baseCode: "329" },
+      { concepto: "Otros conceptos de capital", baseCode: "330" },
+      { concepto: "Otros pagos relacionados con capital", baseCode: "331" },
+    ],
+  },
+  {
+    title: "Autorretenciones y otras retenciones",
+    rows: [
+      { concepto: "Otros pagos no sujetos", baseCode: "333" },
+      { concepto: "Otros pagos locales", baseCode: "334" },
+      { concepto: "Otros pagos sujetos a retención", baseCode: "335" },
+      { concepto: "Concepto especial", baseCode: "3481" },
+      { concepto: "Otros conceptos", baseCode: "336" },
+      { concepto: "Otros conceptos especiales", baseCode: "337" },
+      { concepto: "Otros conceptos especiales", baseCode: "3370" },
+      { concepto: "Autorretenciones", baseCode: "350" },
+      { concepto: "Pagos aplicables tarifa 2% especiales", baseCode: "3440" },
+      { concepto: "Otras retenciones aplicables 8%", baseCode: "345", retCode: "395" },
+      { concepto: "Otras retenciones aplicables a otros porcentajes", baseCode: "346", retCode: "396" },
+      { concepto: "Otros conceptos de cierre", baseCode: "348" },
+    ],
+  },
+  {
+    title: "Pagos al exterior",
+    rows: [
+      ...["402", "403", "404", "405", "406", "407", "408", "409", "410", "411", "412", "413", "414", "415", "416", "417", "418", "419", "420", "421", "422", "423", "424", "425", "426", "427", "428", "429", "430", "431", "432", "433"].map((code) => ({
+        concepto: `Pago al exterior casillero ${code}`,
+        baseCode: code,
+      })),
     ],
   },
   {
@@ -1096,6 +1308,7 @@ function buildFormulario103Resumen(lote: {
     "352",
     "303",
     "353",
+    "3030",
     "304",
     "354",
     "307",
@@ -1104,29 +1317,87 @@ function buildFormulario103Resumen(lote: {
     "358",
     "309",
     "359",
+    "310",
     "311",
     "361",
     "312",
     "362",
+    "3120",
+    "3121",
     "314",
     "364",
+    "3140",
+    "319",
+    "320",
     "322",
     "372",
     "323",
     "373",
+    "3230",
+    "324",
     "325",
     "375",
+    "3250",
+    "326",
+    "327",
+    "328",
+    "329",
+    "330",
+    "331",
     "332",
+    "333",
+    "334",
+    "335",
+    "336",
+    "337",
+    "3370",
     "343",
+    "3430",
     "393",
     "344",
+    "3440",
     "394",
     "345",
     "395",
     "346",
     "396",
+    "348",
+    "3481",
     "349",
+    "350",
     "399",
+    "402",
+    "403",
+    "404",
+    "405",
+    "406",
+    "407",
+    "408",
+    "409",
+    "410",
+    "411",
+    "412",
+    "413",
+    "414",
+    "415",
+    "416",
+    "417",
+    "418",
+    "419",
+    "420",
+    "421",
+    "422",
+    "423",
+    "424",
+    "425",
+    "426",
+    "427",
+    "428",
+    "429",
+    "430",
+    "431",
+    "432",
+    "433",
     "497",
     "498",
     "499",
@@ -1439,6 +1710,10 @@ export const crearDeclaracion = async (req: Request, res: Response) => {
     const { ruc } = req.params;
     const anio = Number(req.body.anio);
     const mesCodigo = mesCodigoFromValue(req.body.mes || asObject(req.body.datosJSON).identificacion?.mes);
+    const estadoSolicitado = String(req.body.estado || "PRESENTADA").toUpperCase();
+    const esBorrador = estadoSolicitado === "BORRADOR";
+    const estadoFinal = esBorrador ? "BORRADOR" : "PRESENTADA";
+    const declaracionId = String(req.body.declaracionId || "").trim();
     const usaContribuyenteOperativo =
       String(req.body.formulario || "").includes("103") ||
       String(req.body.formulario || "").includes("104");
@@ -1455,8 +1730,14 @@ export const crearDeclaracion = async (req: Request, res: Response) => {
       });
     }
 
-    const declaracion = await prisma.declaracion.create({
-      data: {
+    const payload = {
+      ...req.body,
+      estado: estadoFinal,
+      fechaGuardado: new Date().toISOString(),
+      ...(esBorrador ? {} : { fechaPresentacion: new Date().toISOString() }),
+    };
+
+    const data = {
         formulario: req.body.formulario,
         tipoImpuesto: req.body.tipoImpuesto,
         periodoFiscal: req.body.periodoFiscal,
@@ -1478,21 +1759,31 @@ export const crearDeclaracion = async (req: Request, res: Response) => {
         tipoCuenta: req.body.tipoCuenta || null,
         numeroCuenta: req.body.numeroCuenta || null,
 
-        numeroAdhesion: generarNumeroAdhesion(),
+        numeroAdhesion: req.body.numeroAdhesion || (esBorrador ? generarNumeroBorrador() : generarNumeroAdhesion()),
         tipoDeclaracion: req.body.tipoDeclaracion || "Original",
-        estado: "Procesada",
+        estado: estadoFinal,
 
         linkFormulario: null,
         linkTalonResumen: null,
 
-        datosJSON: req.body,
+        datosJSON: payload,
 
         contribuyenteId: contribuyente.id,
-      },
-    });
+      };
+
+    const declaracion =
+      declaracionId
+        ? await prisma.declaracion.update({
+            where: { id: declaracionId },
+            data: {
+              ...data,
+              numeroAdhesion: esBorrador ? data.numeroAdhesion : generarNumeroAdhesion(),
+            },
+          })
+        : await prisma.declaracion.create({ data });
 
     return res.status(201).json({
-      message: "Declaración registrada correctamente.",
+      message: esBorrador ? "Borrador guardado correctamente." : "Declaración presentada correctamente.",
       declaracion,
     });
   } catch (error) {
@@ -1928,11 +2219,11 @@ export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
       );
     }
 
-    return sendPdf(
-      res,
-      `Formulario_${formulario || "Declaracion"}_${ruc}_${declaracion.id}.pdf`,
-      (doc) => {
-        if (formulario === "104") {
+    if (formulario === "104") {
+      return sendPdfLandscape(
+        res,
+        `Formulario_104_${ruc}_${declaracion.id}.pdf`,
+        (doc) => {
           drawFormulario104Pdf({
             doc,
             declaracion,
@@ -1940,9 +2231,14 @@ export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
             razonSocial,
             casilleros,
           });
-          return;
         }
+      );
+    }
 
+    return sendPdf(
+      res,
+      `Formulario_${formulario || "Declaracion"}_${ruc}_${declaracion.id}.pdf`,
+      (doc) => {
         pdfTitle(
           doc,
           `FORMULARIO ${formulario || ""}`.trim(),
@@ -1989,6 +2285,54 @@ export const descargarDeclaracionPdf = async (req: Request, res: Response) => {
     console.error(error);
     return res.status(500).json({
       message: "Error generando PDF de declaración.",
+    });
+  }
+};
+
+export const descargarComprobanteDeclaracion = async (req: Request, res: Response) => {
+  try {
+    const { declaracionId } = req.params;
+
+    const declaracion = await prisma.declaracion.findUnique({
+      where: { id: declaracionId },
+      include: { contribuyente: true },
+    });
+
+    if (!declaracion) {
+      return res.status(404).json({ message: "Declaración no encontrada." });
+    }
+
+    const root = asObject(declaracion.datosJSON);
+    const nested = asObject(root.datosJSON);
+    const identificacion = asObject(root.identificacion || nested.identificacion);
+    const ruc = String(identificacion.ruc || declaracion.contribuyente.ruc);
+    const razonSocial = String(identificacion.razonSocial || declaracion.contribuyente.razonSocial);
+    const formulario = declaracion.formulario.includes("103") ? "Formulario 103" : declaracion.formulario;
+    const fechaPresentacion = String(root.fechaPresentacion || nested.fechaPresentacion || declaracion.fechaEnvio);
+
+    return sendPdf(res, `Comprobante_${filenameSafe(formulario)}_${ruc}_${declaracion.id}.pdf`, (doc) => {
+      pdfTitle(doc, "COMPROBANTE DE PRESENTACIÓN", formulario);
+      pdfTable(doc, "DATOS DE LA DECLARACIÓN", [
+        ["Número de adhesión", declaracion.numeroAdhesion],
+        ["Formulario", formulario],
+        ["RUC", ruc],
+        ["Razón social", razonSocial],
+        ["Período", periodoTalon(declaracion)],
+        ["Fecha presentación", fechaHoraLocal(fechaPresentacion)],
+        ["Estado", declaracion.estado],
+        ["Valor pagado", money(declaracion.valorCancelado)],
+      ]);
+
+      doc
+        .moveDown(1.2)
+        .fontSize(8)
+        .fillColor("#475569")
+        .text("Este comprobante resume la declaración registrada en el sistema.", { align: "center" });
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Error generando comprobante de declaración.",
     });
   }
 };

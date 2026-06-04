@@ -5,6 +5,7 @@ import {
   consultarFormulario103,
   consultarFormulario104,
   consultarFormulario107,
+  descargarComprobanteDeclaracion,
   descargarDeclaracionPdf,
 } from "../controllers/declaracion.controller";
 
@@ -16,5 +17,6 @@ router.get("/:ruc/formulario103", consultarFormulario103);
 router.get("/:ruc/formulario104", consultarFormulario104);
 router.get("/:ruc/formulario107", consultarFormulario107);
 router.get("/:ruc/declaracion/:declaracionId/pdf", descargarDeclaracionPdf);
+router.get("/:ruc/declaracion/:declaracionId/comprobante", descargarComprobanteDeclaracion);
 
 export default router;

@@ -229,12 +229,13 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
     }
   };
 
-  const descargarDeclaracionPdf = async (declaracion: Declaracion, tipo: "formulario" | "resumen" = "formulario") => {
+  const descargarDeclaracionPdf = async (declaracion: Declaracion, tipo: "formulario" | "resumen" | "comprobante" = "formulario") => {
     try {
       setMensaje("");
+      const suffix = tipo === "comprobante" ? "comprobante" : "pdf";
       const query = tipo === "resumen" ? "?tipo=resumen" : "";
       const response = await fetch(
-        `${apiUrl}/api/declaraciones/${rucUsuario}/declaracion/${declaracion.id}/pdf${query}`
+        `${apiUrl}/api/declaraciones/${rucUsuario}/declaracion/${declaracion.id}/${suffix}${query}`
       );
 
       if (!response.ok) {
@@ -246,7 +247,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      const prefijo = tipo === "resumen" ? "Resumen" : "Formulario";
+      const prefijo = tipo === "resumen" ? "Resumen" : tipo === "comprobante" ? "Comprobante" : "Formulario";
       link.download = `${prefijo}_${declaracion.formulario.replace(/[^\w.-]+/g, "_")}_${declaracion.anio}.pdf`;
       document.body.appendChild(link);
       link.click();
@@ -445,6 +446,8 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                 <Field label="Estado de la declaración">
                   <select className="input" value={filtros.estado} onChange={(e) => setFiltros({ ...filtros, estado: e.target.value })}>
                     <option>Todas</option>
+                    <option>BORRADOR</option>
+                    <option>PRESENTADA</option>
                     <option>Borrador</option>
                     <option>Procesada</option>
                     <option>Enviada</option>
@@ -471,7 +474,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                       <th>Valor</th>
                       <th>Estado</th>
                       <th>Formulario</th>
-                      <th>Talón</th>
+                      <th>Comprobante</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -505,6 +508,15 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
                           >
                             Resumen
                           </button>
+                          {(d.formulario.includes("103") || d.formulario.includes("104")) && (
+                            <button
+                              type="button"
+                              onClick={() => descargarDeclaracionPdf(d, "comprobante")}
+                              className="ml-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100"
+                            >
+                              Comprobante
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -5,9 +5,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CreditCard,
+  Download,
   FileText,
   Loader2,
+  ReceiptText,
   Save,
   Send,
 } from "lucide-react";
@@ -41,6 +42,14 @@ type Formulario103Response = {
   casilleros: Record<string, number>;
 };
 
+type DeclaracionGuardada = {
+  id: string;
+  numeroAdhesion: string;
+  estado: string;
+  valorCancelado: string | number;
+  fechaEnvio: string;
+};
+
 type FormRow = {
   concepto: string;
   baseCode?: string;
@@ -72,29 +81,88 @@ const meses = [
 
 const years = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - i);
 
-const editableRows: FormSection[] = [
+const formularioSections: FormSection[] = [
+  {
+    title: "Detalle de pagos y retención por impuesto a la renta",
+    rows: [
+      { concepto: "En relación de dependencia", baseCode: "302", retCode: "352" },
+      { concepto: "Honorarios profesionales", baseCode: "303", retCode: "353" },
+      { concepto: "Honorarios profesionales no residentes", baseCode: "3030" },
+    ],
+  },
   {
     title: "Derivadas del trabajo y servicios prestados",
     rows: [
-      {
-        concepto: "Publicidad y comunicación",
-        baseCode: "309",
-        retCode: "359",
-      },
+      { concepto: "Servicios donde predomina el intelecto", baseCode: "304", retCode: "354" },
+      { concepto: "Servicios donde predomina la mano de obra", baseCode: "307", retCode: "357" },
+      { concepto: "Utilización o aprovechamiento de imagen o renombre", baseCode: "308", retCode: "358" },
+      { concepto: "Publicidad y comunicación", baseCode: "309", retCode: "359" },
+      { concepto: "Servicios profesionales adicionales", baseCode: "310" },
+      { concepto: "Liquidaciones de compra por nivel cultural o rusticidad", baseCode: "311", retCode: "361" },
     ],
   },
   {
     title: "Por bienes y servicios",
     rows: [
-      {
-        concepto: "Transferencia de bienes muebles de naturaleza corporal",
-        baseCode: "312",
-        retCode: "362",
-      },
-      {
-        concepto: "Otras compras de bienes y servicios no sujetas a retención",
-        baseCode: "332",
-      },
+      { concepto: "Transferencia de bienes muebles de naturaleza corporal", baseCode: "312", retCode: "362" },
+      { concepto: "Seguros y reaseguros", baseCode: "322", retCode: "372" },
+      { concepto: "Transferencias especiales de bienes", baseCode: "3120" },
+      { concepto: "Transferencias especiales de bienes", baseCode: "3121" },
+      { concepto: "Pagos aplicables tarifa 1%", baseCode: "3430" },
+      { concepto: "Pagos aplicables tarifa 1%", baseCode: "343", retCode: "393" },
+      { concepto: "Pagos aplicables tarifa 2%", baseCode: "344", retCode: "394" },
+      { concepto: "Otras compras de bienes y servicios no sujetas a retención", baseCode: "332" },
+    ],
+  },
+  {
+    title: "Por regalías, comisiones, arrendamientos y otros",
+    rows: [
+      { concepto: "Regalías, derechos de autor, marcas y patentes", baseCode: "314", retCode: "364" },
+      { concepto: "Regalías y similares", baseCode: "3140" },
+      { concepto: "Arrendamientos mercantiles", baseCode: "319" },
+      { concepto: "Arrendamientos de bienes inmuebles", baseCode: "320" },
+      { concepto: "Rendimientos financieros", baseCode: "323", retCode: "373" },
+      { concepto: "Otros rendimientos financieros", baseCode: "324" },
+      { concepto: "Rendimientos financieros especiales", baseCode: "3230" },
+    ],
+  },
+  {
+    title: "Relacionadas con el capital",
+    rows: [
+      { concepto: "Dividendos", baseCode: "325", retCode: "375" },
+      { concepto: "Dividendos anticipados", baseCode: "3250" },
+      { concepto: "Ganancias de capital", baseCode: "326" },
+      { concepto: "Utilidades por enajenación", baseCode: "327" },
+      { concepto: "Rendimientos en fideicomisos", baseCode: "328" },
+      { concepto: "Cesión de derechos", baseCode: "329" },
+      { concepto: "Otros conceptos de capital", baseCode: "330" },
+      { concepto: "Otros pagos relacionados con capital", baseCode: "331" },
+    ],
+  },
+  {
+    title: "Autorretenciones y otras retenciones",
+    rows: [
+      { concepto: "Otros pagos no sujetos", baseCode: "333" },
+      { concepto: "Otros pagos locales", baseCode: "334" },
+      { concepto: "Otros pagos sujetos a retención", baseCode: "335" },
+      { concepto: "Concepto especial", baseCode: "3481" },
+      { concepto: "Otros conceptos", baseCode: "336" },
+      { concepto: "Otros conceptos especiales", baseCode: "337" },
+      { concepto: "Otros conceptos especiales", baseCode: "3370" },
+      { concepto: "Autorretenciones", baseCode: "350" },
+      { concepto: "Pagos aplicables tarifa 2% especiales", baseCode: "3440" },
+      { concepto: "Otras retenciones aplicables 8%", baseCode: "345", retCode: "395" },
+      { concepto: "Otras retenciones aplicables a otros porcentajes", baseCode: "346", retCode: "396" },
+      { concepto: "Otros conceptos de cierre", baseCode: "348" },
+    ],
+  },
+  {
+    title: "Pagos al exterior",
+    rows: [
+      ...["402", "403", "404", "405", "406", "407", "408", "409", "410", "411", "412", "413", "414", "415", "416", "417", "418", "419", "420", "421", "422", "423", "424", "425", "426", "427", "428", "429", "430", "431", "432", "433"].map((code) => ({
+        concepto: `Pago al exterior casillero ${code}`,
+        baseCode: code,
+      })),
     ],
   },
 ];
@@ -104,6 +172,7 @@ const allNumericCasilleros = [
   "352",
   "303",
   "353",
+  "3030",
   "304",
   "354",
   "307",
@@ -112,29 +181,87 @@ const allNumericCasilleros = [
   "358",
   "309",
   "359",
+  "310",
   "311",
   "361",
   "312",
   "362",
+  "3120",
+  "3121",
   "314",
   "364",
+  "3140",
+  "319",
+  "320",
   "322",
   "372",
   "323",
   "373",
+  "3230",
+  "324",
   "325",
   "375",
+  "3250",
+  "326",
+  "327",
+  "328",
+  "329",
+  "330",
+  "331",
   "332",
+  "333",
+  "334",
+  "335",
+  "336",
+  "337",
+  "3370",
   "343",
+  "3430",
   "393",
   "344",
+  "3440",
   "394",
   "345",
   "395",
   "346",
   "396",
+  "348",
+  "3481",
   "349",
+  "350",
   "399",
+  "402",
+  "403",
+  "404",
+  "405",
+  "406",
+  "407",
+  "408",
+  "409",
+  "410",
+  "411",
+  "412",
+  "413",
+  "414",
+  "415",
+  "416",
+  "417",
+  "418",
+  "419",
+  "420",
+  "421",
+  "422",
+  "423",
+  "424",
+  "425",
+  "426",
+  "427",
+  "428",
+  "429",
+  "430",
+  "431",
+  "432",
+  "433",
   "497",
   "498",
   "499",
@@ -154,6 +281,72 @@ const zeroCasilleros: FormState = Object.fromEntries(
   allNumericCasilleros.map((key) => [key, "0.00"])
 );
 
+const basePaisCodes = [
+  "302",
+  "303",
+  "3030",
+  "304",
+  "307",
+  "308",
+  "309",
+  "310",
+  "311",
+  "312",
+  "3120",
+  "3121",
+  "314",
+  "3140",
+  "319",
+  "320",
+  "322",
+  "323",
+  "3230",
+  "324",
+  "325",
+  "3250",
+  "326",
+  "327",
+  "328",
+  "329",
+  "330",
+  "331",
+  "332",
+  "333",
+  "334",
+  "335",
+  "336",
+  "337",
+  "3370",
+  "343",
+  "3430",
+  "344",
+  "3440",
+  "345",
+  "346",
+  "348",
+  "3481",
+  "350",
+];
+
+const retenidoPaisCodes = [
+  "352",
+  "353",
+  "354",
+  "357",
+  "358",
+  "359",
+  "361",
+  "362",
+  "364",
+  "372",
+  "373",
+  "375",
+  "393",
+  "394",
+  "395",
+  "396",
+];
+
 const initialQuestions: Record<QuestionKey, "SI" | "NO"> = {
   informaValores: "SI",
   retencionesResidentes: "SI",
@@ -165,10 +358,6 @@ const initialForm: FormState = {
   "198": "",
   "199": "",
   contadorClave: "",
-  formaPago: "CONVENIO_DEBITO",
-  banco: "Banco Pichincha",
-  tipoCuenta: "Ahorros",
-  numeroCuenta: "",
 };
 
 function toNumber(value: string | number | undefined) {
@@ -200,20 +389,17 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
   const [loadingDatos, setLoadingDatos] = useState(false);
   const [loadingEnviar, setLoadingEnviar] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [confirmado, setConfirmado] = useState(false);
+  const [declaracionGuardada, setDeclaracionGuardada] = useState<DeclaracionGuardada | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [mensaje, setMensaje] = useState("");
 
   const totals = useMemo(() => {
     const basePais = round2(
-      allNumericCasilleros
-        .filter((key) => ["302", "303", "304", "307", "308", "309", "311", "312", "314", "322", "323", "325", "332", "343", "344", "345", "346"].includes(key))
-        .reduce((acc, key) => acc + toNumber(form[key]), 0)
+      basePaisCodes.reduce((acc, key) => acc + toNumber(form[key]), 0)
     );
     const retenidoPais = round2(
-      ["352", "353", "354", "357", "358", "359", "361", "362", "364", "372", "373", "375", "393", "394", "395", "396"].reduce(
-        (acc, key) => acc + toNumber(form[key]),
-        0
-      )
+      retenidoPaisCodes.reduce((acc, key) => acc + toNumber(form[key]), 0)
     );
     const totalRetencion = round2(retenidoPais + toNumber(form["498"]));
     const impuestoPagar = Math.max(round2(totalRetencion - toNumber(form["898"])), 0);
@@ -263,10 +449,6 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
       allNumericCasilleros.forEach((key) => {
         nextForm[key] = inputMoney(data.casilleros?.[key] ?? 0);
       });
-      nextForm.formaPago = form.formaPago || "CONVENIO_DEBITO";
-      nextForm.banco = form.banco || "Banco Pichincha";
-      nextForm.tipoCuenta = form.tipoCuenta || "Ahorros";
-      nextForm.numeroCuenta = form.numeroCuenta || "";
       nextForm["198"] = form["198"] || "";
       nextForm["199"] = form["199"] || "";
       nextForm.contadorClave = form.contadorClave || "";
@@ -301,7 +483,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     }
 
     if (step === 3) {
-      editableRows.flatMap((section) => section.rows).forEach((row) => {
+      formularioSections.flatMap((section) => section.rows).forEach((row) => {
         if (row.retCode && toNumber(form[row.retCode]) > 0 && row.baseCode && toNumber(form[row.baseCode]) <= 0) {
           nextErrors.push(`Casillero ${row.retCode}: existe retención sin base imponible.`);
         }
@@ -309,10 +491,6 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     }
 
     if (step === 4) {
-      if (form.formaPago === "CONVENIO_DEBITO" && totals["999"] > 0 && !form.numeroCuenta.trim()) {
-        nextErrors.push("Debe ingresar el número de cuenta para convenio de débito.");
-      }
-
       if (questions.obligadoContabilidad === "SI") {
         if (!form["199"].trim()) nextErrors.push("Debe ingresar el RUC del contador.");
         if (!form.contadorClave.trim()) nextErrors.push("Debe ingresar la clave del contador.");
@@ -334,24 +512,8 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     setStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const saveDraft = () => {
-    localStorage.setItem(
-      `formulario103-${rucUsuario}`,
-      JSON.stringify({ mes, anio, form, questions, totals, periodoData })
-    );
-    setDraftSaved(true);
-    setMensaje("Su declaración borrador ha sido guardada exitosamente.");
-    setTimeout(() => setDraftSaved(false), 3200);
-  };
-
-  const enviarDeclaracion = async () => {
-    if (!validateStep()) return;
-
-    try {
-      setLoadingEnviar(true);
-      setMensaje("");
-
-      const casilleros = {
+  const buildPayload = (estado: "BORRADOR" | "PRESENTADA") => {
+    const casilleros = {
         ...Object.fromEntries(
           Object.entries(form)
             .filter(([key]) => /^\d+$/.test(key))
@@ -360,18 +522,20 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
         ...totals,
       };
 
-      const payload = {
+    return {
+        declaracionId: declaracionGuardada?.id,
+        estado,
         tipoImpuesto: "Formulario de Retenciones en la Fuente del Impuesto a la Renta",
         formulario: "Formulario 103 - Retenciones en la Fuente",
         periodoFiscal: "Mensual",
         anio: Number(anio),
         mes: mesTexto,
         tipoDeclaracion: "Original",
+        baseImponible: totals["349"],
+        impuestoGenerado: 0,
+        valorRetenido: totals["499"],
         valorCancelado: totals["999"],
-        tipoPago: form.formaPago,
-        banco: form.banco,
-        tipoCuenta: form.tipoCuenta,
-        numeroCuenta: form.numeroCuenta,
+        tipoPago: "SIN_CAPTURA_BANCARIA",
         datosJSON: {
           paso: "Formulario 103 Wizard",
           resumen: periodoData?.resumen || null,
@@ -384,26 +548,59 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
           },
           preguntas: questions,
           casilleros,
-          formaPago: {
-            tipo: form.formaPago,
-            banco: form.banco,
-            tipoCuenta: form.tipoCuenta,
-            numeroCuenta: form.numeroCuenta,
-          },
+          confirmacion: confirmado,
         },
       };
+  };
 
-      const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+  const guardarDeclaracion = async (estado: "BORRADOR" | "PRESENTADA") => {
+    const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildPayload(estado)),
+    });
+    const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.message || "Error enviando Formulario 103.");
-      }
+    if (!res.ok) {
+      throw new Error(data.message || "Error guardando Formulario 103.");
+    }
 
+    setDeclaracionGuardada(data.declaracion);
+    return data.declaracion as DeclaracionGuardada;
+  };
+
+  const saveDraft = async () => {
+    try {
+      setLoadingEnviar(true);
+      setMensaje("");
+      const declaracion = await guardarDeclaracion("BORRADOR");
+      localStorage.setItem(
+        `formulario103-${rucUsuario}`,
+        JSON.stringify({ declaracionId: declaracion.id, mes, anio, form, questions, totals, periodoData })
+      );
+      setDraftSaved(true);
+      setMensaje("Borrador guardado correctamente.");
+      setTimeout(() => setDraftSaved(false), 3200);
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : "Error guardando borrador.");
+    } finally {
+      setLoadingEnviar(false);
+    }
+  };
+
+  const enviarDeclaracion = async () => {
+    if (!validateStep()) return;
+
+    if (!confirmado) {
+      setErrors(["Debe confirmar que los valores declarados son correctos."]);
+      return;
+    }
+
+    try {
+      setLoadingEnviar(true);
+      setMensaje("");
+
+      await guardarDeclaracion("PRESENTADA");
       setMensaje("Su declaración ha sido procesada satisfactoriamente.");
       localStorage.removeItem(`formulario103-${rucUsuario}`);
     } catch (err) {
@@ -413,8 +610,30 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     }
   };
 
+  const descargarArchivo = async (tipo: "pdf" | "comprobante") => {
+    if (!declaracionGuardada) return;
+    const path =
+      tipo === "pdf"
+        ? `/api/declaraciones/${rucUsuario}/declaracion/${declaracionGuardada.id}/pdf`
+        : `/api/declaraciones/${rucUsuario}/declaracion/${declaracionGuardada.id}/comprobante`;
+    const response = await fetch(`${apiUrl}${path}`);
+    if (!response.ok) {
+      setMensaje("No fue posible descargar el documento.");
+      return;
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${tipo === "pdf" ? "Formulario103" : "Comprobante103"}_${rucUsuario}_${anio}_${mes}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   const summarySections: FormSection[] = [
-    ...editableRows,
+    ...formularioSections,
     {
       title: "Subtotal operaciones efectuadas en el país",
       rows: [
@@ -603,52 +822,19 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
 
           <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
             <section className="rounded-xl border bg-slate-50 p-5">
-              <h3 className="mb-4 flex items-center gap-2 font-black text-[#003565]">
-                <CreditCard size={18} />
-                Forma de pago
-              </h3>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {[
-                  ["CONVENIO_DEBITO", "Convenio de débito"],
-                  ["TBC", "Títulos de Banco Central"],
-                  ["NOTAS_CREDITO", "Notas de crédito"],
-                  ["OTRAS", "Otras formas de pago"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => updateForm("formaPago", value)}
-                    className={`rounded-xl border px-4 py-3 text-left text-sm font-black ${
-                      form.formaPago === value
-                        ? "border-[#003565] bg-blue-50 text-[#003565]"
-                        : "bg-white text-slate-600"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {form.formaPago === "CONVENIO_DEBITO" && (
-                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <Field label="Banco">
-                    <input className="input" value={form.banco} onChange={(e) => updateForm("banco", e.target.value)} />
-                  </Field>
-                  <Field label="Tipo cuenta">
-                    <select className="input" value={form.tipoCuenta} onChange={(e) => updateForm("tipoCuenta", e.target.value)}>
-                      <option>Ahorros</option>
-                      <option>Corriente</option>
-                    </select>
-                  </Field>
-                  <Field label="Número cuenta">
-                    <input
-                      className="input"
-                      value={form.numeroCuenta}
-                      onChange={(e) => updateForm("numeroCuenta", e.target.value.replace(/\D/g, ""))}
-                    />
-                  </Field>
-                </div>
-              )}
+              <h3 className="mb-4 font-black text-[#003565]">Resumen de declaración</h3>
+              <SummaryLine label="RUC" value={rucFinal} />
+              <SummaryLine label="Período" value={`${mesTexto} / ${anio}`} />
+              <SummaryLine label="Total a pagar" value={`$${money(totals["999"])}`} strong />
+              <label className="mt-5 flex items-start gap-3 rounded-xl border bg-white p-4 text-sm font-bold text-slate-700">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={confirmado}
+                  onChange={(event) => setConfirmado(event.target.checked)}
+                />
+                <span>Confirmo que los valores declarados son correctos y acepto enviar esta declaración.</span>
+              </label>
             </section>
 
             <section className="rounded-xl border bg-white p-5">
@@ -670,6 +856,33 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
               )}
             </section>
           </div>
+
+          {declaracionGuardada && (
+            <section className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+              <h3 className="mb-3 font-black text-emerald-800">Declaración registrada</h3>
+              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-5">
+                <ReadBox label="Adhesión" value={declaracionGuardada.numeroAdhesion} />
+                <ReadBox label="RUC" value={rucFinal} />
+                <ReadBox label="Período" value={`${mesTexto} / ${anio}`} />
+                <ReadBox label="Valor" value={`$${money(totals["999"])}`} />
+                <ReadBox label="Estado" value={declaracionGuardada.estado} />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <ActionButton onClick={() => descargarArchivo("pdf")}>
+                  <Download size={16} />
+                  Descargar PDF
+                </ActionButton>
+                <ActionButton onClick={() => descargarArchivo("comprobante")}>
+                  <ReceiptText size={16} />
+                  Descargar comprobante
+                </ActionButton>
+                <ActionButton onClick={() => window.dispatchEvent(new CustomEvent("sri:navigate", { detail: "declaracion_consulta" }))}>
+                  <FileText size={16} />
+                  Ver Consulta de Declaraciones
+                </ActionButton>
+              </div>
+            </section>
+          )}
         </Panel>
       )}
 
@@ -705,7 +918,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
           ) : (
             <button
               onClick={enviarDeclaracion}
-              disabled={loadingEnviar}
+              disabled={loadingEnviar || !confirmado}
               className="inline-flex items-center gap-2 rounded-xl bg-[#003565] px-5 py-3 font-black text-white disabled:opacity-60"
             >
               {loadingEnviar ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
@@ -953,5 +1166,26 @@ function ReadMoney({ value }: { value: string }) {
     <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-right font-black text-slate-700">
       {value}
     </div>
+  );
+}
+
+function SummaryLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between border-b py-3 ${strong ? "font-black text-[#003565]" : "font-bold text-slate-700"}`}>
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function ActionButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#003565] ring-1 ring-blue-100 hover:bg-blue-50"
+    >
+      {children}
+    </button>
   );
 }
