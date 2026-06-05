@@ -54,9 +54,9 @@ const formatTipoContribuyente = (value: RegisterForm["tipoContribuyente"]) =>
 
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [ruc, setRuc] = useState("0602539041001");
+  const [ruc, setRuc] = useState("");
   const [ciAdicional, setCiAdicional] = useState("");
-  const [clave, setClave] = useState("sripassword2026");
+  const [clave, setClave] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,13 +67,6 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     useState<RegisterForm>(initialRegisterForm);
   const [registeredCredentials, setRegisteredCredentials] =
     useState<RegisteredCredentials | null>(null);
-
-  const cargarDemo = () => {
-    setRuc("0602539041001");
-    setCiAdicional("");
-    setClave("sripassword2026");
-    setError("");
-  };
 
   const updateRegisterField = <K extends keyof RegisterForm>(
     field: K,
@@ -286,19 +279,11 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-md"
+            className="w-full max-w-md my-auto"
           >
             {mode === "login" ? (
               <>
-                <button
-                  onClick={cargarDemo}
-                  type="button"
-                  className="w-full mb-6 bg-[#f5a400] hover:bg-[#ffb321] text-black font-bold py-3 rounded transition"
-                >
-                  CARGAR DEMO
-                </button>
-
-                <div className="flex justify-center mb-8">
+                <div className="flex justify-center mb-10">
                   <div className="bg-white/10 border border-white/10 rounded-xl px-8 py-5 text-xl font-bold">
                     SRI en Línea
                   </div>
