@@ -21,10 +21,21 @@ type AccountingResponse = {
     estado: string;
   };
   libroDiario: unknown[];
+  libroDiarioFilas: JournalVisualRow[];
   libroMayor: unknown[];
   balanceComprobacion: unknown[];
   estadoResultados: unknown[];
   issues: unknown[];
+};
+
+export type JournalVisualRow = {
+  asiento: number;
+  fecha: string;
+  codigoCuenta: string;
+  nombreCuenta: string;
+  descripcion: string;
+  debe: string;
+  haber: string;
 };
 
 type ActiveTab =
@@ -158,7 +169,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
               </TabButton>
             </div>
 
-            {activeTab === "diario" && <LibroDiarioTab rows={response.libroDiario} />}
+            {activeTab === "diario" && <LibroDiarioTab rows={response.libroDiarioFilas} />}
             {activeTab === "mayor" && <LibroMayorTab rows={response.libroMayor} />}
             {activeTab === "balance" && (
               <BalanceComprobacionTab rows={response.balanceComprobacion} />

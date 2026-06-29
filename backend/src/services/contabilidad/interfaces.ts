@@ -1,5 +1,7 @@
 import type {
   AccountingAtsInput,
+  AccountingDocumentAnalysis,
+  AccountingRuleResult,
   AccountingEngineResult,
   AccountingLogEntry,
   IncomeStatementRow,
@@ -19,7 +21,19 @@ export interface AtsAdapterContract {
 }
 
 export interface JournalGeneratorContract {
-  generate(input: AccountingAtsInput): JournalEntry[];
+  generate(ruleResults: AccountingRuleResult[]): JournalEntry[];
+}
+
+export interface DocumentAnalyzerContract {
+  analyze(input: AccountingAtsInput): AccountingDocumentAnalysis[];
+}
+
+export interface AccountingRulesEngineContract {
+  resolve(documents: AccountingDocumentAnalysis[]): AccountingRuleResult[];
+}
+
+export interface AccountingJournalValidatorContract {
+  validate(entry: JournalEntry): string[];
 }
 
 export interface LedgerGeneratorContract {

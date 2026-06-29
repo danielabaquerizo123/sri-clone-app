@@ -1,8 +1,13 @@
 import { readAtsWorkbook, type AtsWorkbookData } from "../ats/excel-reader";
 import { normalizeAtsWorkbook } from "../ats/normalizer";
 import { validateAtsForXml } from "../ats/validator";
+import { AccountingRules } from "./accounting-rules";
 import { ATSAdapter } from "./ats-adapter";
+import { DocumentAnalyzer } from "./document-analyzer";
 import type {
+  AccountingJournalValidatorContract,
+  AccountingRulesEngineContract,
+  DocumentAnalyzerContract,
   AccountingEngineContract,
   AccountingLogger,
   IncomeStatementGeneratorContract,
@@ -12,13 +17,17 @@ import type {
 } from "./interfaces";
 import { IncomeStatementGenerator } from "./income-statement-generator";
 import { JournalGenerator } from "./journal-generator";
+import { AccountingJournalValidator } from "./journal-validator";
 import { LedgerGenerator } from "./ledger-generator";
 import { InMemoryAccountingLogger } from "./logger";
 import { TrialBalanceGenerator } from "./trial-balance-generator";
 import type {
+  AccountingValidationError,
   AccountingEngineResult,
   AccountingPeriod,
   AccountingProcessStatus,
+  JournalEntry,
+  JournalVisualRow,
 } from "./types";
 import { requireExcelBuffer, requireOriginalFilename } from "./validators";
 
@@ -76,7 +85,10 @@ function buildStatus(errorCount: number, issueCount: number): AccountingProcessS
 export class AccountingEngine implements AccountingEngineContract {
   constructor(
     private readonly logger: AccountingLogger = new InMemoryAccountingLogger(),
+    private readonly documentAnalyzer: DocumentAnalyzerContract = new DocumentAnalyzer(),
+    private readonly rulesEngine: AccountingRulesEngineContract = new AccountingRules(),
     private readonly journalGenerator: JournalGeneratorContract = new JournalGenerator(),
+    private readonly journalValidator: AccountingJournalValidatorContract = new AccountingJournalValidator(),
     private readonly ledgerGenerator: LedgerGeneratorContract = new LedgerGenerator(),
     private readonly trialBalanceGenerator: TrialBalanceGeneratorContract = new TrialBalanceGenerator(),
     private readonly incomeStatementGenerator: IncomeStatementGeneratorContract = new IncomeStatementGenerator()
@@ -111,11 +123,49 @@ export class AccountingEngine implements AccountingEngineContract {
         periodo
       ).adapt();
 
-      const libroDiario = this.journalGenerator.generate(accountingInput);
+      const documents = this.documentAnalyzer.analyze(accountingInput);
+      const ruleResults = this.rulesEngine.resolve(documents);
+      const ruleDocumentIds = new Set(ruleResults.map((result) => result.document.id));
+      const missingRuleIssues: AccountingValidationError[] = documents
+        .filter((document) => !ruleDocumentIds.has(document.id))
+        .map((document) => ({
+          tipo: "ERROR",
+          hoja: document.hoja,
+          fila: document.fila,
+          campo: "reglaContable",
+          mensaje: `No existe una regla contable definida para el comprobante ${document.tipoDocumento}.`,
+        }));
+      const candidateJournal = this.journalGenerator.generate(ruleResults);
+      const journalValidationIssues: AccountingValidationError[] = [];
+      const libroDiario = candidateJournal.filter((entry) => {
+        const errors = this.journalValidator.validate(entry);
+
+        if (errors.length === 0) {
+          return true;
+        }
+
+        errors.forEach((message) => {
+          journalValidationIssues.push({
+            tipo: "ERROR",
+            hoja: entry.trazabilidad.hoja,
+            fila: entry.trazabilidad.fila,
+            campo: "asiento",
+            mensaje: `${entry.documentoOrigen}: ${message}`,
+          });
+        });
+
+        return false;
+      });
+      const libroDiarioFilas = buildJournalRows(libroDiario);
       const libroMayor = this.ledgerGenerator.generate(libroDiario);
       const balanceComprobacion = this.trialBalanceGenerator.generate(libroMayor);
       const estadoResultados = this.incomeStatementGenerator.generate(balanceComprobacion);
-      const issues = [...accountingInput.atsIssues, ...accountingInput.validationIssues];
+      const issues = [
+        ...accountingInput.atsIssues,
+        ...accountingInput.validationIssues,
+        ...missingRuleIssues,
+        ...journalValidationIssues,
+      ];
       const errorCount = issues.filter((issue) => issue.tipo === "ERROR").length;
       const status = buildStatus(errorCount, issues.length);
 
@@ -136,6 +186,7 @@ export class AccountingEngine implements AccountingEngineContract {
           estado: status,
         },
         libroDiario,
+        libroDiarioFilas,
         libroMayor,
         balanceComprobacion,
         estadoResultados,
@@ -151,4 +202,18 @@ export class AccountingEngine implements AccountingEngineContract {
       throw error;
     }
   }
+}
+
+function buildJournalRows(entries: JournalEntry[]): JournalVisualRow[] {
+  return entries.flatMap((entry) =>
+    entry.movimientos.map((line) => ({
+      asiento: entry.numero,
+      fecha: entry.fecha,
+      codigoCuenta: line.codigoCuenta,
+      nombreCuenta: line.nombreCuenta,
+      descripcion: line.descripcion,
+      debe: line.debe === "0.00" ? "" : line.debe,
+      haber: line.haber === "0.00" ? "" : line.haber,
+    }))
+  );
 }
