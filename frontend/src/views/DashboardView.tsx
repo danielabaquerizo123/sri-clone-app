@@ -5,6 +5,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Building2,
+  Calculator,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -28,6 +29,7 @@ import {
 
 import DeclaracionesPanel from "../components/Declaraciones/DeclaracionesPanel";
 import AnexosPanel from "../components/Anexos/AnexosPanel";
+import ContabilidadPanel from "../components/Contabilidad/ContabilidadPanel";
 
 interface DashboardViewProps {
   rucUsuario: string;
@@ -474,6 +476,18 @@ export default function DashboardView({
     />
   </div>
 )}
+
+                <button
+                  onClick={() => setActiveTab("contabilidad")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-black transition mt-2 ${
+                    activeTab === "contabilidad"
+                      ? "bg-blue-50 text-[#006aa6]"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <Calculator size={18} className="text-[#0077b6]" />
+                  Contabilidad
+                </button>
               </div>
             )}
           </div>
@@ -742,6 +756,12 @@ export default function DashboardView({
     rucUsuario={rucUsuario}
     rucActivo={rucActivo}
     activeView={activeTab}
+  />
+)}
+
+{activeTab === "contabilidad" && (
+  <ContabilidadPanel
+    rucActivo={rucActivo}
   />
 )}
         </main>

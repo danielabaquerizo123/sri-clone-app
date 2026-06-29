@@ -10,6 +10,7 @@ import contribuyenteRoutes from './routes/contribuyente.routes';
 import declaracionRoutes from './routes/declaracion.routes';
 import anexoRoutes from './routes/anexo.routes';
 import atsRoutes from './routes/ats.routes';
+import contabilidadRoutes from './routes/contabilidad.routes';
 
 dotenv.config();
 
@@ -71,6 +72,9 @@ app.use('/api/anexos', anexoRoutes);
 /* RUTA ATS MASIVO */
 app.use('/api/ats', atsRoutes);
 
+/* RUTA CONTABILIDAD */
+app.use('/api/contabilidad', contabilidadRoutes);
+
 app.listen(PORT, () => {
   console.log(`
   ┌──────────────────────────────────────────────────────────────┐
@@ -82,6 +86,7 @@ app.listen(PORT, () => {
   │   📄 Declaraciones   : /api/declaraciones                    │
   │   📎 Anexos          : /api/anexos                           │
   │   📦 ATS Masivo      : /api/ats                              │
+  │   📘 Contabilidad    : /api/contabilidad                     │
   │   🩺 Health Check    : /api/health                           │
   │                                                              │
   │   ⚙️ Entorno         : ${process.env.NODE_ENV || 'development'}                       │
