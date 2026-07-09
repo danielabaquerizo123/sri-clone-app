@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { AccountingEngine } from "../services/contabilidad/accounting-engine";
+import { ExcelLibroDiarioService } from "../services/contabilidad/excel-libro-diario.service";
 import { JournalPersistenceService } from "../services/contabilidad/journal-persistence.service";
 import { JournalPreviewService } from "../services/contabilidad/journal-preview.service";
 
@@ -56,6 +57,24 @@ export const procesarAtsContabilidad = (req: Request, res: Response) => {
   } catch (error) {
     return res.status(500).json({
       message: "Error procesando ATS en Contabilidad.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const procesarExcelLibroDiario = (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Debe subir un archivo Excel ATS." });
+    }
+
+    const service = new ExcelLibroDiarioService();
+    const result = service.process(req.file.buffer, req.file.originalname);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error generando Libro Diario desde Excel ATS.",
       error: buildErrorMessage(error),
     });
   }
