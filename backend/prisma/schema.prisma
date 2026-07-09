@@ -66,6 +66,42 @@ enum TarifaIva {
   NO_OBJETO // Operaciones que no son objeto del Impuesto al Valor Agregado
 }
 
+enum EstadoPeriodo {
+  ABIERTO
+  CERRADO
+}
+
+enum EstadoAsiento {
+  BORRADOR
+  APROBADO
+  ANULADO
+}
+
+enum TipoCuenta {
+  ACTIVO
+  PASIVO
+  PATRIMONIO
+  INGRESO
+  GASTO
+  COSTO
+}
+
+enum NaturalezaCuenta {
+  DEUDORA
+  ACREEDORA
+}
+
+enum TipoOperacionContable {
+  COMPRA
+  VENTA
+  GASTO
+}
+
+enum LadoMovimiento {
+  DEBE
+  HABER
+}
+
 // 1. Modelo Principal de Usuarios / Contribuyentes
 model Contribuyente {
   id                String            @id @default(uuid())
@@ -125,7 +161,111 @@ model Contribuyente {
   gastosPersonales     GastoPersonal[]
   cargasFamiliares     CargaFamiliar[]
   beneficiariosPension BeneficiarioPension[]
+  periodosContables    PeriodoContable[]
+  asientosContables    AsientoContable[]
   createdAt            DateTime              @default(now())
+}
+
+model CuentaContable {
+  id           String           @id @default(uuid())
+  codigo       String           @unique
+  nombre       String
+  tipo         TipoCuenta
+  naturaleza   NaturalezaCuenta
+  nivel        Int              @default(1)
+  movimiento   Boolean          @default(true)
+  activa       Boolean          @default(true)
+  parentCodigo String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  reglasBase          ReglaContable[] @relation("ReglaCuentaBase")
+  reglasIva           ReglaContable[] @relation("ReglaCuentaIva")
+  reglasContrapartida ReglaContable[] @relation("ReglaCuentaContrapartida")
+  lineasAsiento       LineaAsiento[]
+}
+
+model ReglaContable {
+  id                    String                @id @default(uuid())
+  codigo                String                @unique
+  descripcion           String
+  tipoOperacion         TipoOperacionContable
+  tipoComprobante       String?
+  codigoSustento        String?
+  tarifaIva             Decimal?              @db.Decimal(5, 2)
+  formaPago             String?
+  prioridad             Int                   @default(100)
+  activa                Boolean               @default(true)
+  cuentaBaseId          String
+  ladoBase              LadoMovimiento
+  cuentaIvaId           String?
+  ladoIva               LadoMovimiento?
+  cuentaContrapartidaId String
+  ladoContrapartida     LadoMovimiento
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  cuentaBase          CuentaContable  @relation("ReglaCuentaBase", fields: [cuentaBaseId], references: [id])
+  cuentaIva           CuentaContable? @relation("ReglaCuentaIva", fields: [cuentaIvaId], references: [id])
+  cuentaContrapartida CuentaContable  @relation("ReglaCuentaContrapartida", fields: [cuentaContrapartidaId], references: [id])
+
+  @@index([tipoOperacion, tipoComprobante, codigoSustento, activa, prioridad])
+}
+
+model PeriodoContable {
+  id              String            @id @default(uuid())
+  anio            Int
+  mes             String
+  estado          EstadoPeriodo     @default(ABIERTO)
+  fechaApertura   DateTime          @default(now())
+  fechaCierre     DateTime?
+  contribuyenteId String
+  contribuyente   Contribuyente     @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  asientos        AsientoContable[]
+
+  @@unique([contribuyenteId, anio, mes])
+}
+
+model AsientoContable {
+  id              String        @id @default(uuid())
+  numero          Int
+  fecha           DateTime
+  descripcion     String
+  estado          EstadoAsiento @default(BORRADOR)
+  origen          String        @default("ATS")
+  documentoOrigen String?
+  hojaOrigen      String?
+  filaOrigen      Int?
+  reglaCodigo     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  contribuyenteId String
+  contribuyente   Contribuyente   @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  periodoId       String
+  periodo         PeriodoContable @relation(fields: [periodoId], references: [id], onDelete: Restrict)
+  atsLoteId       String?
+  atsLote         AtsLote?        @relation(fields: [atsLoteId], references: [id], onDelete: SetNull)
+  lineas          LineaAsiento[]
+
+  @@unique([contribuyenteId, atsLoteId, hojaOrigen, filaOrigen, documentoOrigen])
+  @@index([contribuyenteId, periodoId, estado])
+}
+
+model LineaAsiento {
+  id          String  @id @default(uuid())
+  descripcion String
+  debe        Decimal @default(0.0) @db.Decimal(14, 2)
+  haber       Decimal @default(0.0) @db.Decimal(14, 2)
+  orden       Int     @default(1)
+
+  asientoId String
+  asiento   AsientoContable @relation(fields: [asientoId], references: [id], onDelete: Cascade)
+  cuentaId  String
+  cuenta    CuentaContable  @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
+
+  @@index([asientoId])
+  @@index([cuentaId])
 }
 
 model AnexoTributario {
@@ -240,7 +380,8 @@ model Proveedor {
 
 // 4. Tabla de Ventas (Diseñada para importación masiva desde Excel)
 model Venta {
-  id String @id @default(uuid())
+  id        String @id @default(uuid())
+  filaExcel Int?
 
   // --- DATOS DEL COMPRADOR / CLIENTE ---
   noIdentificacion   String
@@ -362,7 +503,8 @@ model Venta {
 
 // 5. Tabla de Compras
 model Compra {
-  id String @id @default(uuid())
+  id        String @id @default(uuid())
+  filaExcel Int?
 
   // --- DATOS DEL PROVEEDOR ---
   noIdentificacion         String
@@ -601,4 +743,5 @@ model AtsLote {
   compras  Compra[]
   anulados ComprobanteAnulado[]
   guias    GuiaRemision[]
+  asientos AsientoContable[]
 }

@@ -243,6 +243,7 @@ function buildImportIssue(
 
 function sanitizeVenta(v: any, contribuyenteId: string, atsLoteId: string) {
   return {
+    filaExcel: safeNumber(v.filaExcel) || null,
     noIdentificacion: safeString(v.noIdentificacion, "9999999999999"),
     codigoIdentif: safeString(v.codigoIdentif, "07"),
     razonSocialCliente: safeString(v.razonSocialCliente, "CONSUMIDOR FINAL"),
@@ -346,6 +347,7 @@ function sanitizeVenta(v: any, contribuyenteId: string, atsLoteId: string) {
 
 function sanitizeCompra(c: any, contribuyenteId: string, atsLoteId: string) {
   return {
+    filaExcel: safeNumber(c.filaExcel) || null,
     noIdentificacion: safeString(c.noIdentificacion),
     razonSocialProveedor: safeString(c.razonSocialProveedor, "SIN RAZÓN SOCIAL"),
     tipoProveedor: safeNullableString(c.tipoProveedor),

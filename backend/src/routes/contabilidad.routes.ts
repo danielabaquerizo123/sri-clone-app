@@ -1,6 +1,13 @@
 import { Router } from "express";
 import multer from "multer";
-import { procesarAtsContabilidad } from "../controllers/contabilidad.controller";
+import {
+  consultarLibroDiario,
+  generarAsientosDesdeAts,
+  listarPlanCuentas,
+  listarReglasContables,
+  previsualizarLibroDiarioDesdeAts,
+  procesarAtsContabilidad,
+} from "../controllers/contabilidad.controller";
 
 const router = Router();
 
@@ -11,6 +18,13 @@ const upload = multer({
   },
 });
 
+router.get("/:ruc/plan-cuentas", listarPlanCuentas);
+router.get("/:ruc/reglas", listarReglasContables);
+router.post("/:ruc/ats/:loteId/previsualizar", previsualizarLibroDiarioDesdeAts);
+router.post("/:ruc/ats/:loteId/generar-asientos", generarAsientosDesdeAts);
+router.get("/:ruc/libro-diario", consultarLibroDiario);
+
+// Legacy: procesa un Excel en memoria sin persistir asientos.
 router.post("/:ruc/procesar-ats", upload.single("archivo"), procesarAtsContabilidad);
 
 export default router;
