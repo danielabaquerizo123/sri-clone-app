@@ -39,9 +39,20 @@ type SourceDocument = {
   tercero: string;
   identificacion: string;
   documento: string;
+  cuentaBase: {
+    codigo: string;
+    cuenta: string;
+  };
+  clasificacion: {
+    fuente: string;
+    valor: string;
+    fallback: boolean;
+  };
   base: number;
   iva: number;
   total: number;
+  retencionFuente: number;
+  retencionIva: number;
 };
 
 const ACCOUNTS = {
@@ -50,8 +61,17 @@ const ACCOUNTS = {
   ivaCompras: { codigo: "1.01.05.01", cuenta: "IVA Compras" },
   proveedores: { codigo: "2.01.01.01", cuenta: "Cuentas por Pagar Proveedores" },
   ivaVentas: { codigo: "2.01.07.01", cuenta: "IVA Ventas" },
+  retFuentePagar: { codigo: "2.01.08.01", cuenta: "Retenciones Fuente por Pagar" },
+  retIvaPagar: { codigo: "2.01.08.02", cuenta: "Retenciones IVA por Pagar" },
   ventas: { codigo: "4.01.01.01", cuenta: "Ventas Locales" },
   gastos: { codigo: "5.02.02.29", cuenta: "Gastos Administrativos" },
+  mantenimiento: { codigo: "5.02.02.08", cuenta: "Mantenimiento y Reparaciones" },
+  telecomunicaciones: { codigo: "5.02.02.12", cuenta: "Servicios de Telecomunicaciones" },
+  transporte: { codigo: "5.02.02.13", cuenta: "Transporte y Movilización" },
+  arriendos: { codigo: "5.02.02.14", cuenta: "Arriendos" },
+  alimentacion: { codigo: "5.02.02.15", cuenta: "Alimentación" },
+  salud: { codigo: "5.02.02.16", cuenta: "Salud" },
+  educacion: { codigo: "5.02.02.17", cuenta: "Educación" },
 };
 
 function normalizeText(value: any): string {
@@ -111,7 +131,14 @@ function money(value: any): number {
   }
 
   if (normalized.includes(",") && normalized.includes(".")) {
-    normalized = normalized.replace(/\./g, "").replace(",", ".");
+    const lastComma = normalized.lastIndexOf(",");
+    const lastDot = normalized.lastIndexOf(".");
+
+    if (lastDot > lastComma) {
+      normalized = normalized.replace(/,/g, "");
+    } else {
+      normalized = normalized.replace(/\./g, "").replace(",", ".");
+    }
   } else {
     normalized = normalized.replace(",", ".");
   }
@@ -377,6 +404,52 @@ function hasMovement(document: SourceDocument) {
   return document.base > 0 || document.iva > 0 || document.total > 0;
 }
 
+function classifyPurchase(row: Record<string, any>, hoja: "COMPRAS" | "GASTOS") {
+  const candidates = [
+    { fuente: "Concepto Contable", valor: get(row, ["Concepto Contable"]) },
+    { fuente: "Autocodigo COMPRAS", valor: get(row, ["Autocodigo COMPRAS", "Autocodigo"]) },
+    { fuente: "Tipo de ACTIVIDAD", valor: get(row, ["Tipo de ACTIVIDAD", "Tipo de ACTIVIDAD (Opcional)"]) },
+    { fuente: "Concepto de la Compra", valor: get(row, ["Concepto de la Compra", "Concepto"]) },
+  ].filter((item) => item.valor);
+  const joined = normalizeForMatch(candidates.map((item) => item.valor).join(" "));
+
+  const rules = [
+    { test: /MANTEN|REPAR|TALLER|REPUEST/.test(joined), account: ACCOUNTS.mantenimiento },
+    { test: /TELEF|INTERNET|TELECOM|CELULAR/.test(joined), account: ACCOUNTS.telecomunicaciones },
+    { test: /TRANSP|MOVIL|FLETE|COMBUST/.test(joined), account: ACCOUNTS.transporte },
+    { test: /ARRIEND|ALQUILER/.test(joined), account: ACCOUNTS.arriendos },
+    { test: /ALIMENT/.test(joined) || hoja === "GASTOS", account: ACCOUNTS.alimentacion },
+    { test: /SALUD|MEDIC|FARMAC/.test(joined), account: ACCOUNTS.salud },
+    { test: /EDUC|CAPACIT/.test(joined), account: ACCOUNTS.educacion },
+  ];
+  const match = rules.find((rule) => rule.test);
+
+  if (match) {
+    const source = candidates[0] || { fuente: hoja, valor: hoja };
+    return {
+      account: match.account,
+      clasificacion: {
+        fuente: source.fuente,
+        valor: source.valor,
+        fallback: false,
+      },
+    };
+  }
+
+  return {
+    account: ACCOUNTS.gastos,
+    clasificacion: {
+      fuente: candidates[0]?.fuente || "Sin clasificación",
+      valor: candidates[0]?.valor || "",
+      fallback: true,
+    },
+  };
+}
+
+function sumMoney(row: Record<string, any>, keys: string[]) {
+  return add(keys.map((key) => money(get(row, [key]))));
+}
+
 function compraFromRow(row: Record<string, any>, hoja: "COMPRAS" | "GASTOS"): SourceDocument {
   const tipoComprobante = firstCode(get(row, ["Tipo de Comprobante", "Comprobante"]), 2) || "01";
   const base = add([
@@ -395,9 +468,23 @@ function compraFromRow(row: Record<string, any>, hoja: "COMPRAS" | "GASTOS"): So
     money(get(row, ["Monto-3 de I.V.A.", "Monto-3 de IVA"])),
   ]);
   const total = money(get(row, ["Total del Documento", "Total Documento", "Total"])) || add([base, iva]);
+  const retencionFuente = sumMoney(row, [
+    "Valor Retenido 1",
+    "Valor Retenido 2",
+    "Valor Retenido 3",
+  ]);
+  const retencionIva = sumMoney(row, [
+    "Valor Retención IVA 10%",
+    "Valor Retención IVA 20%",
+    "Valor Retención IVA 30%",
+    "Valor Retención IVA 50%",
+    "Valor Retención IVA 70%",
+    "Valor Retención IVA 100%",
+  ]);
   const establecimiento = pad(get(row, ["Establecimiento", "Codigo Establecimiento"]), 3);
   const puntoEmision = pad(get(row, ["Punto Emisión", "Punto Emision"]), 3);
   const secuencial = pad(get(row, ["Numero Secuencial", "Número Secuencial", "No. Documento"]), 9);
+  const classification = classifyPurchase(row, hoja);
 
   return {
     hoja,
@@ -415,9 +502,13 @@ function compraFromRow(row: Record<string, any>, hoja: "COMPRAS" | "GASTOS"): So
       ]) || "SIN IDENTIFICAR",
     identificacion: onlyDigits(get(row, ["No. de Identificacion", "No. de Identificación", "Identificacion"])),
     documento: [establecimiento, puntoEmision, secuencial].filter(Boolean).join("-"),
+    cuentaBase: classification.account,
+    clasificacion: classification.clasificacion,
     base,
     iva,
     total,
+    retencionFuente,
+    retencionIva,
   };
 }
 
@@ -458,9 +549,17 @@ function ventaFromRow(row: Record<string, any>): SourceDocument {
       ]) || "CONSUMIDOR FINAL",
     identificacion: onlyDigits(get(row, ["No. de Identificacion", "No. de Identificación", "Identificacion"])) || "9999999999999",
     documento: [establecimiento, documento].filter(Boolean).join("-"),
+    cuentaBase: ACCOUNTS.ventas,
+    clasificacion: {
+      fuente: "VENTAS",
+      valor: "VENTAS",
+      fallback: false,
+    },
     base,
     iva,
     total,
+    retencionFuente: money(get(row, ["Valor Retenido en la Fuente"])),
+    retencionIva: money(get(row, ["Valor Retenido en IVA"])),
   };
 }
 
@@ -480,30 +579,51 @@ function glosa(document: SourceDocument, prefix: string) {
 }
 
 function compraEntries(document: SourceDocument, nextNumber: () => number): LibroDiarioEntry[] {
+  const totalRetenciones = add([document.retencionFuente, document.retencionIva]);
+  const pagoNeto = Math.max(add([document.total, -totalRetenciones]), 0);
   const compra = [
-    line(ACCOUNTS.gastos, "DEBE", document.base),
+    line(document.cuentaBase, "DEBE", document.base),
     line(ACCOUNTS.ivaCompras, "DEBE", document.iva),
     line(ACCOUNTS.proveedores, "HABER", document.total),
   ].filter((item): item is LibroDiarioLine => Boolean(item));
+  const retencion = [
+    line(ACCOUNTS.proveedores, "DEBE", totalRetenciones),
+    line(ACCOUNTS.retFuentePagar, "HABER", document.retencionFuente),
+    line(ACCOUNTS.retIvaPagar, "HABER", document.retencionIva),
+  ].filter((item): item is LibroDiarioLine => Boolean(item));
   const pago = [
-    line(ACCOUNTS.proveedores, "DEBE", document.total),
-    line(ACCOUNTS.bancos, "HABER", document.total),
+    line(ACCOUNTS.proveedores, "DEBE", pagoNeto),
+    line(ACCOUNTS.bancos, "HABER", pagoNeto),
   ].filter((item): item is LibroDiarioLine => Boolean(item));
 
-  return [
+  const entries: LibroDiarioEntry[] = [
     {
       numero: nextNumber(),
       fecha: document.fecha,
       glosa: glosa(document, document.hoja === "GASTOS" ? "Gasto" : "Compra"),
       lineas: compra,
     },
-    {
+  ];
+
+  if (totalRetenciones > 0) {
+    entries.push({
+      numero: nextNumber(),
+      fecha: document.fecha,
+      glosa: glosa(document, document.hoja === "GASTOS" ? "Retencion Gasto" : "Retencion Compra"),
+      lineas: retencion,
+    });
+  }
+
+  if (pagoNeto > 0) {
+    entries.push({
       numero: nextNumber(),
       fecha: document.fecha,
       glosa: glosa(document, document.hoja === "GASTOS" ? "Pago Gasto" : "Pago Compra"),
       lineas: pago,
-    },
-  ];
+    });
+  }
+
+  return entries;
 }
 
 function ventaEntry(document: SourceDocument, nextNumber: () => number): LibroDiarioEntry {
@@ -644,6 +764,21 @@ export class ExcelLibroDiarioService {
           return valid;
         });
     });
+
+    documents
+      .filter((document) => document.hoja !== "VENTAS" && document.clasificacion.fallback)
+      .forEach((document) => {
+        issues.push({
+          tipo: "WARNING",
+          hoja: document.hoja,
+          fila: document.fila,
+          campo: "Clasificación contable",
+          mensaje:
+            document.clasificacion.valor.trim().length > 0
+              ? `No se encontró regla válida para "${document.clasificacion.valor}". Se usó cuenta fallback provisional ${document.cuentaBase.codigo} ${document.cuentaBase.cuenta}.`
+              : `La fila no trae Concepto Contable, Autocodigo COMPRAS ni Tipo de ACTIVIDAD válido. Se usó cuenta fallback provisional ${document.cuentaBase.codigo} ${document.cuentaBase.cuenta}.`,
+        });
+      });
 
     let numero = 0;
     const nextNumber = () => {
