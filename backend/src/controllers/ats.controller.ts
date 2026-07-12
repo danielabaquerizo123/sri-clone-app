@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import PDFDocument from "pdfkit";
 import { prisma } from "../lib/prisma";
+import { calcularFechaExpiracion } from "../lib/acceso";
 import { readAtsWorkbook } from "../services/ats/excel-reader";
 import { normalizeAtsWorkbook, type AtsIssue } from "../services/ats/normalizer";
 import { buildAtsResumen } from "../services/ats/resumen";
@@ -155,6 +156,37 @@ function pdfInt(value: unknown) {
   return String(Number(value || 0));
 }
 
+function conceptoRetencionRenta(codigo: string) {
+  const conceptos: Record<string, string> = {
+    "303": "Honorarios profesionales y dietas",
+    "304": "Servicios predomina el intelecto",
+    "307": "Servicios predomina mano de obra",
+    "308": "Servicios entre sociedades",
+    "309": "Servicios prestados por medios de comunicacion y agencias de publicidad",
+    "310": "Transporte privado de pasajeros o servicio publico/privado de carga",
+    "312": "Transferencia de bienes muebles de naturaleza corporal",
+    "319": "Arrendamiento mercantil",
+    "320": "Arrendamiento bienes inmuebles",
+    "322": "Seguros y reaseguros",
+    "323": "Rendimientos financieros",
+    "332": "Otras compras de bienes y servicios no sujetas a retencion",
+  };
+
+  return conceptos[codigo] || "Otros conceptos de retencion";
+}
+
+type PdfTableColumn = {
+  label: string;
+  width: number;
+  align?: "left" | "center" | "right";
+};
+
+type PdfTableRow = {
+  cells: Array<string | number>;
+  bold?: boolean;
+  fill?: string;
+};
+
 function filenameSafe(value: string) {
   return value.replace(/[^\w.-]+/g, "_");
 }
@@ -220,6 +252,238 @@ function pdfTable(
 
 function jsonObject(value: any): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function pdfPageBottom(doc: PDFKit.PDFDocument) {
+  return doc.page.height - 44;
+}
+
+function ensurePageSpace(doc: PDFKit.PDFDocument, neededHeight: number) {
+  if (doc.y + neededHeight <= pdfPageBottom(doc)) return false;
+  doc.addPage();
+  doc.y = 38;
+  return true;
+}
+
+function drawOfficialHeader(
+  doc: PDFKit.PDFDocument,
+  params: {
+    ruc: string;
+    razonSocial: string;
+    periodo: string;
+    fechaGeneracion: string;
+  }
+) {
+  ensurePageSpace(doc, 92);
+  const startX = 42;
+  const top = doc.y;
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(48)
+    .fillColor("#0070b8")
+    .text("SRI", startX, top, { width: 120, align: "center" })
+    .fontSize(9)
+    .fillColor("#0070b8")
+    .text("...le hace bien al pais!", startX + 4, top + 52, {
+      width: 124,
+      align: "center",
+    });
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(8)
+    .fillColor("#111827")
+    .text("TALON RESUMEN", 172, top + 6, { width: 340, align: "center" })
+    .text("SERVICIO DE RENTAS INTERNAS", 172, top + 17, {
+      width: 340,
+      align: "center",
+    })
+    .text("ANEXO TRANSACCIONAL", 172, top + 28, {
+      width: 340,
+      align: "center",
+    })
+    .font("Helvetica")
+    .fontSize(7)
+    .text(params.razonSocial, 172, top + 42, { width: 340, align: "center" })
+    .text(`RUC: ${params.ruc}`, 172, top + 52, { width: 340, align: "center" })
+    .text(`Periodo: ${params.periodo}`, 172, top + 62, {
+      width: 340,
+      align: "center",
+    })
+    .text(`Fecha de Generacion: ${params.fechaGeneracion}`, 172, top + 72, {
+      width: 340,
+      align: "center",
+    });
+
+  doc.y = top + 94;
+}
+
+function drawCertificacion(doc: PDFKit.PDFDocument, periodo: string) {
+  ensurePageSpace(doc, 32);
+  doc
+    .font("Helvetica")
+    .fontSize(7)
+    .fillColor("#111827")
+    .text(
+      `Certifico que la informacion contenida en el medio magnetico del Anexo Transaccional para el periodo ${periodo}, es fiel reflejo del siguiente resumen:`,
+      42,
+      doc.y,
+      { width: 511, align: "justify" }
+    );
+  doc.moveDown(0.7);
+}
+
+function drawSectionBand(doc: PDFKit.PDFDocument, title: string) {
+  ensurePageSpace(doc, 18);
+  const x = 42;
+  const y = doc.y;
+  doc
+    .rect(x, y, 511, 16)
+    .fill("#f8fafc")
+    .strokeColor("#6b7280")
+    .rect(x, y, 511, 16)
+    .stroke()
+    .font("Helvetica-Bold")
+    .fontSize(6.8)
+    .fillColor("#111827")
+    .text(title, x + 4, y + 5, { width: 503, align: "center" });
+  doc.y = y + 19;
+}
+
+function assertTableWidth(columns: PdfTableColumn[], title: string) {
+  const total = columns.reduce((sum, column) => sum + column.width, 0);
+  if (total > 511) {
+    throw new Error(`La tabla ${title} excede el ancho disponible: ${total}pt.`);
+  }
+}
+
+function drawTableHeader(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  columns: PdfTableColumn[],
+  rowHeight: number
+) {
+  let currentX = x;
+  const y = doc.y;
+
+  doc.font("Helvetica-Bold").fontSize(5.7).fillColor("#111827");
+
+  for (const column of columns) {
+    doc
+      .rect(currentX, y, column.width, rowHeight)
+      .fill("#eef7fb")
+      .strokeColor("#8fb4c5")
+      .rect(currentX, y, column.width, rowHeight)
+      .stroke()
+      .fillColor("#111827")
+      .text(column.label, currentX + 2, y + 4, {
+        width: column.width - 4,
+        align: column.align || "center",
+      });
+    currentX += column.width;
+  }
+
+  doc.y = y + rowHeight;
+}
+
+function drawTableRow(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  columns: PdfTableColumn[],
+  row: PdfTableRow,
+  rowHeight: number
+) {
+  let currentX = x;
+  const y = doc.y;
+
+  doc.font(row.bold ? "Helvetica-Bold" : "Helvetica").fontSize(5.8).fillColor("#111827");
+
+  for (const [index, column] of columns.entries()) {
+    const value = row.cells[index] ?? "";
+    doc
+      .rect(currentX, y, column.width, rowHeight)
+      .fill(row.fill || "#ffffff")
+      .strokeColor("#8fb4c5")
+      .rect(currentX, y, column.width, rowHeight)
+      .stroke()
+      .fillColor("#111827")
+      .text(String(value), currentX + 2, y + 4, {
+        width: column.width - 4,
+        align: column.align || (index === 1 ? "left" : "right"),
+      });
+    currentX += column.width;
+  }
+
+  doc.y = y + rowHeight;
+}
+
+function drawHorizontalTable(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  columns: PdfTableColumn[],
+  rows: PdfTableRow[],
+  options: { rowHeight?: number; headerHeight?: number } = {}
+) {
+  assertTableWidth(columns, title);
+
+  const x = 42;
+  const rowHeight = options.rowHeight || 16;
+  const headerHeight = options.headerHeight || 20;
+  const titleHeight = 16;
+  const drawTitleAndHeader = () => {
+    drawSectionBand(doc, title);
+    ensurePageSpace(doc, headerHeight + rowHeight);
+    drawTableHeader(doc, x, columns, headerHeight);
+  };
+
+  ensurePageSpace(doc, titleHeight + headerHeight + rowHeight);
+  drawTitleAndHeader();
+
+  rows.forEach((row) => {
+    if (ensurePageSpace(doc, rowHeight)) {
+      drawTitleAndHeader();
+    }
+
+    drawTableRow(doc, x, columns, row, rowHeight);
+  });
+
+  doc.moveDown(0.2);
+}
+
+function drawLegalFooter(doc: PDFKit.PDFDocument) {
+  ensurePageSpace(doc, 62);
+  const top = doc.y;
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(6.2)
+    .fillColor("#111827")
+    .text(
+      "Declaro que los datos contenidos en este anexo son verdaderos, por lo que asumo la responsabilidad correspondiente, de acuerdo a lo establecido en el Art. 101 de la Codificacion de la Ley de Regimen Tributario Interno.",
+      54,
+      top,
+      { width: 487, align: "center" }
+    );
+
+  const y = top + 34;
+  doc
+    .strokeColor("#111827")
+    .moveTo(88, y)
+    .lineTo(245, y)
+    .stroke()
+    .moveTo(350, y)
+    .lineTo(507, y)
+    .stroke()
+    .font("Helvetica-Bold")
+    .fontSize(6.5)
+    .fillColor("#111827")
+    .text("Firma del Contador", 88, y + 8, { width: 157, align: "center" })
+    .text("Firma del Representante Legal", 350, y + 8, {
+      width: 157,
+      align: "center",
+    });
+  doc.y = y + 20;
 }
 
 function getIssuesFromLote(value: any): AtsIssue[] {
@@ -484,6 +748,7 @@ function sanitizeGuia(g: any, contribuyenteId: string, atsLoteId: string) {
 
 async function findOrCreateInformante(rucInformante: string, razonSocialInformante: string) {
   const temporalHash = await bcrypt.hash(`ats-${rucInformante}-${Date.now()}`, 10);
+  const fechaRegistro = new Date();
 
   return prisma.contribuyente.upsert({
     where: { ruc: rucInformante },
@@ -502,6 +767,10 @@ async function findOrCreateInformante(rucInformante: string, razonSocialInforman
       estadoTributario: "AL DÍA",
       tipoContribuyente: "PERSONA_NATURAL",
       rol: "CONTADOR",
+      activo: true,
+      emailVerified: true,
+      fechaRegistro,
+      fechaExpiracion: calcularFechaExpiracion(fechaRegistro),
     },
   });
 }
@@ -1021,110 +1290,208 @@ export const descargarTalonResumenAts = async (req: Request, res: Response) => {
     const periodo = `${String(lote.mes).padStart(2, "0")}/${lote.anio}`;
     const resumen = jsonObject(lote.resumenJSON);
     const acceso = jsonObject(resumen.contribuyenteAcceso);
+    const fechaGeneracion = fechaLocal(new Date());
+
+    const transaccionColumns: PdfTableColumn[] = [
+      { label: "Cod.", width: 28, align: "center" },
+      { label: "Transaccion", width: 112, align: "left" },
+      { label: "No. Registros", width: 55, align: "right" },
+      { label: "BI tarifa 0%", width: 75, align: "right" },
+      { label: "BI tarifa diferente 0%", width: 86, align: "right" },
+      { label: "BI No Objeto IVA", width: 75, align: "right" },
+      { label: "Valor IVA", width: 80, align: "right" },
+    ];
+
+    const comprasRows: PdfTableRow[] = [
+      {
+        cells: [
+          "01",
+          "FACTURA",
+          pdfInt(compras.facturas.count),
+          pdfMoney(compras.facturas.base0),
+          pdfMoney(compras.facturas.baseGravada),
+          pdfMoney(compras.facturas.baseNoObjeto),
+          pdfMoney(compras.facturas.iva),
+        ],
+      },
+      {
+        cells: [
+          "04",
+          "NOTAS DE CREDITO",
+          pdfInt(compras.notasCredito.count),
+          pdfMoney(compras.notasCredito.base0),
+          pdfMoney(compras.notasCredito.baseGravada),
+          pdfMoney(compras.notasCredito.baseNoObjeto),
+          pdfMoney(compras.notasCredito.iva),
+        ],
+      },
+      {
+        bold: true,
+        fill: "#f8fafc",
+        cells: [
+          "",
+          "TOTAL:",
+          pdfInt(compras.total.count),
+          pdfMoney(compras.total.base0),
+          pdfMoney(compras.total.baseGravada),
+          pdfMoney(compras.total.baseNoObjeto),
+          pdfMoney(compras.total.iva),
+        ],
+      },
+    ];
+
+    const ventasRows: PdfTableRow[] = [
+      {
+        cells: [
+          "18",
+          "DOCUMENTOS AUTORIZADOS EN VENTAS EXCEPTO ND Y NC",
+          pdfInt(ventas.documentos),
+          pdfMoney(ventas.base0),
+          pdfMoney(ventas.baseGravada),
+          pdfMoney(ventas.baseNoObjeto),
+          pdfMoney(ventas.iva),
+        ],
+      },
+      {
+        bold: true,
+        fill: "#f8fafc",
+        cells: [
+          "",
+          "TOTAL:",
+          pdfInt(ventas.documentos),
+          pdfMoney(ventas.base0),
+          pdfMoney(ventas.baseGravada),
+          pdfMoney(ventas.baseNoObjeto),
+          pdfMoney(ventas.iva),
+        ],
+      },
+    ];
+
+    const rentaColumns: PdfTableColumn[] = [
+      { label: "Cod.", width: 35, align: "center" },
+      { label: "Concepto de Retencion", width: 225, align: "left" },
+      { label: "No. Registros", width: 55, align: "right" },
+      { label: "Base Imponible", width: 95, align: "right" },
+      { label: "Valor Retenido", width: 101, align: "right" },
+    ];
+
+    const rentaRows: PdfTableRow[] = [
+      ...retencionesFuenteCompras.detalle.map((item) => ({
+        cells: [
+          item.codigo,
+          conceptoRetencionRenta(item.codigo),
+          pdfInt(item.registros),
+          pdfMoney(item.base),
+          pdfMoney(item.valor),
+        ],
+      })),
+      {
+        bold: true,
+        fill: "#f8fafc",
+        cells: [
+          "",
+          "TOTAL:",
+          pdfInt(
+            retencionesFuenteCompras.detalle.reduce(
+              (acc, item) => acc + Number(item.registros || 0),
+              0
+            )
+          ),
+          pdfMoney(retencionesFuenteCompras.total.base),
+          pdfMoney(retencionesFuenteCompras.total.valor),
+        ],
+      },
+    ];
+
+    const retencionColumns: PdfTableColumn[] = [
+      { label: "Operacion", width: 85, align: "center" },
+      { label: "Concepto de Retencion", width: 300, align: "left" },
+      { label: "Valor Retenido", width: 126, align: "right" },
+    ];
+
+    const ivaRows: PdfTableRow[] = [
+      ["Retencion IVA 10%", retencionesIvaCompras.iva10],
+      ["Retencion IVA 20%", retencionesIvaCompras.iva20],
+      ["Retencion IVA 30%", retencionesIvaCompras.iva30],
+      ["Retencion IVA 50%", retencionesIvaCompras.iva50],
+      ["Retencion IVA 70%", retencionesIvaCompras.iva70],
+      ["Retencion IVA 100%", retencionesIvaCompras.iva100],
+      ["Retencion IVA NC", retencionesIvaCompras.ivaNc],
+    ].map(([concepto, valor]) => ({
+      cells: ["COMPRA", concepto, pdfMoney(valor)],
+    }));
+
+    ivaRows.push({
+      bold: true,
+      fill: "#f8fafc",
+      cells: ["", "TOTAL:", pdfMoney(retencionesIvaCompras.total)],
+    });
+
+    const retencionesPeriodoRows: PdfTableRow[] = [
+      {
+        cells: ["VENTA", "Valor de IVA que le han retenido", pdfMoney(ventas.retIva)],
+      },
+      {
+        cells: [
+          "VENTA",
+          "Valor de Renta que le han retenido",
+          pdfMoney(ventas.retFuente),
+        ],
+      },
+      {
+        bold: true,
+        fill: "#f8fafc",
+        cells: [
+          "",
+          "TOTAL:",
+          pdfMoney(Number(ventas.retIva || 0) + Number(ventas.retFuente || 0)),
+        ],
+      },
+    ];
 
     return sendPdf(res, `Talon_Resumen_ATS_${lote.rucInformante}_${periodo.replace("/", "")}.pdf`, (doc) => {
-      doc
-        .roundedRect(42, 34, 64, 34, 4)
-        .fill("#003565")
-        .fillColor("#ffffff")
-        .fontSize(17)
-        .text("SRI", 42, 42, { width: 64, align: "center" });
+      drawOfficialHeader(doc, {
+        ruc: lote.rucInformante,
+        razonSocial: lote.razonSocial,
+        periodo,
+        fechaGeneracion,
+      });
+      drawCertificacion(doc, periodo);
+      drawHorizontalTable(doc, "COMPRAS", transaccionColumns, comprasRows);
+      drawHorizontalTable(doc, "VENTAS", transaccionColumns, ventasRows);
+      drawSectionBand(doc, "RESUMEN DE RETENCIONES - AGENTE DE RETENCION");
+      drawHorizontalTable(
+        doc,
+        "RETENCION EN LA FUENTE DE IMPUESTO A LA RENTA",
+        rentaColumns,
+        rentaRows
+      );
+      drawHorizontalTable(
+        doc,
+        "RETENCION EN LA FUENTE DE IVA",
+        retencionColumns,
+        ivaRows
+      );
+      drawHorizontalTable(
+        doc,
+        "RESUMEN DE RETENCIONES QUE SE EFECTUARON EN EL PERIODO",
+        retencionColumns,
+        retencionesPeriodoRows
+      );
 
-      doc
-        .fontSize(10)
-        .fillColor("#003565")
-        .text("SERVICIO DE RENTAS INTERNAS", 118, 36, { align: "center" })
-        .moveDown(0.2)
-        .fontSize(18)
-        .text("TALÓN RESUMEN", { align: "center" })
-        .fontSize(12)
-        .fillColor("#111827")
-        .text("ANEXO TRANSACCIONAL", { align: "center" });
+      if (acceso.ruc) {
+        ensurePageSpace(doc, 14);
+        doc
+          .font("Helvetica")
+          .fontSize(6.5)
+          .fillColor("#334155")
+          .text(`Usuario de acceso: ${acceso.ruc} - ${acceso.razonSocial || ""}`, 42, doc.y, {
+            width: 511,
+          });
+        doc.moveDown(0.5);
+      }
 
-      doc.moveDown(1.2);
-      pdfTable(doc, "DATOS DEL CONTRIBUYENTE", [
-        ["Nombre contribuyente", lote.razonSocial],
-        ["RUC", lote.rucInformante],
-        ["Período", periodo],
-        ["Fecha de generación", fechaLocal(new Date())],
-        ["Lote ATS", lote.id],
-        ["Usuario de acceso", acceso.ruc ? `${acceso.ruc} - ${acceso.razonSocial || ""}` : "-"],
-      ]);
-
-      pdfTable(doc, "COMPRAS", [
-        ["01 FACTURA - Cantidad", pdfInt(compras.facturas.count)],
-        ["01 FACTURA - BI tarifa 0%", pdfMoney(compras.facturas.base0)],
-        ["01 FACTURA - BI tarifa diferente 0%", pdfMoney(compras.facturas.baseGravada)],
-        ["01 FACTURA - BI No Objeto IVA", pdfMoney(compras.facturas.baseNoObjeto)],
-        ["01 FACTURA - Valor IVA", pdfMoney(compras.facturas.iva)],
-        ["04 NOTAS DE CREDITO - Cantidad", pdfInt(compras.notasCredito.count)],
-        ["04 NOTAS DE CREDITO - BI tarifa 0%", pdfMoney(compras.notasCredito.base0)],
-        ["04 NOTAS DE CREDITO - BI tarifa diferente 0%", pdfMoney(compras.notasCredito.baseGravada)],
-        ["04 NOTAS DE CREDITO - BI No Objeto IVA", pdfMoney(compras.notasCredito.baseNoObjeto)],
-        ["04 NOTAS DE CREDITO - Valor IVA", pdfMoney(compras.notasCredito.iva)],
-        ["TOTAL - BI tarifa 0%", pdfMoney(compras.total.base0)],
-        ["TOTAL - BI tarifa diferente 0%", pdfMoney(compras.total.baseGravada)],
-        ["TOTAL - BI No Objeto IVA", pdfMoney(compras.total.baseNoObjeto)],
-        ["TOTAL - Valor IVA", pdfMoney(compras.total.iva)],
-      ]);
-
-      pdfTable(doc, "VENTAS", [
-        ["Documentos autorizados", pdfInt(ventas.documentos)],
-        ["BI tarifa 0%", pdfMoney(ventas.base0)],
-        ["BI tarifa diferente 0%", pdfMoney(ventas.baseGravada)],
-        ["BI No Objeto IVA", pdfMoney(ventas.baseNoObjeto)],
-        ["Valor IVA", pdfMoney(ventas.iva)],
-      ]);
-
-      pdfTable(doc, "RESUMEN DE RETENCIONES - AGENTE DE RETENCION", [
-        ["RETENCION EN LA FUENTE DE IMPUESTO A LA RENTA", ""],
-        ...retencionesFuenteCompras.detalle.flatMap((item) => [
-          [`${item.codigo} - No. registros`, pdfInt(item.registros)] as [string, string | number],
-          [`${item.codigo} - Base imponible`, pdfMoney(item.base)] as [string, string | number],
-          [`${item.codigo} - Valor retenido`, pdfMoney(item.valor)] as [string, string | number],
-        ]),
-        ["TOTAL - Base imponible", pdfMoney(retencionesFuenteCompras.total.base)],
-        ["TOTAL - Valor retenido", pdfMoney(retencionesFuenteCompras.total.valor)],
-      ]);
-
-      pdfTable(doc, "RETENCION EN LA FUENTE DE IVA", [
-        ["Retención IVA 10%", pdfMoney(retencionesIvaCompras.iva10)],
-        ["Retención IVA 20%", pdfMoney(retencionesIvaCompras.iva20)],
-        ["Retención IVA 30%", pdfMoney(retencionesIvaCompras.iva30)],
-        ["Retención IVA 50%", pdfMoney(retencionesIvaCompras.iva50)],
-        ["Retención IVA 70%", pdfMoney(retencionesIvaCompras.iva70)],
-        ["Retención IVA 100%", pdfMoney(retencionesIvaCompras.iva100)],
-        ["Retención IVA NC", pdfMoney(retencionesIvaCompras.ivaNc)],
-        ["TOTAL", pdfMoney(retencionesIvaCompras.total)],
-      ]);
-
-      pdfTable(doc, "RESUMEN DE RETENCIONES QUE LE EFECTUARON EN EL PERIODO", [
-        ["VENTA Valor de IVA que le han retenido", pdfMoney(ventas.retIva)],
-        ["VENTA Valor de Renta que le han retenido", pdfMoney(ventas.retFuente)],
-      ]);
-
-      doc
-        .moveDown(0.8)
-        .fontSize(8.2)
-        .fillColor("#334155")
-        .text(
-          "Declaro que la información contenida en este anexo corresponde a los datos transaccionales registrados para el período indicado y fue generada desde el lote ATS importado en el sistema.",
-          { align: "justify" }
-        );
-
-      const y = Math.max(doc.y + 34, 700);
-      doc
-        .strokeColor("#111827")
-        .moveTo(88, y)
-        .lineTo(245, y)
-        .stroke()
-        .moveTo(350, y)
-        .lineTo(507, y)
-        .stroke()
-        .fontSize(8.5)
-        .fillColor("#111827")
-        .text("Firma del contador", 88, y + 8, { width: 157, align: "center" })
-        .text("Firma del representante legal", 350, y + 8, { width: 157, align: "center" });
+      drawLegalFooter(doc);
     });
   } catch (error) {
     console.error(error);

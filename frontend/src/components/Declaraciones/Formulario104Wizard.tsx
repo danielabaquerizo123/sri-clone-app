@@ -11,6 +11,7 @@ import {
   Send,
 } from "lucide-react";
 import { getLastAtsContribuyenteForPeriod } from "../../utils/atsSession";
+import { authFetch } from "../../api/authApi";
 
 type Props = {
   rucUsuario: string;
@@ -529,7 +530,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
         params.set("semestre", semestre);
       }
 
-      const response = await fetch(
+      const response = await authFetch(
         `${apiUrl}/api/declaraciones/${rucDeclaracion}/formulario104?${params}`
       );
       const data = await response.json();
@@ -708,7 +709,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     try {
       setLoadingEnviar(true);
       setMensaje("");
-      const res = await fetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
+      const res = await authFetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload("BORRADOR")),
@@ -737,7 +738,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
       setLoadingEnviar(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
+      const res = await authFetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload("PRESENTADA")),

@@ -8,6 +8,12 @@ const prisma = new PrismaClient();
 const sriDate = (day: number, month: number, year: number) =>
   new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
 
+const calcularFechaExpiracion = (fechaBase = new Date()) => {
+  const fechaExpiracion = new Date(fechaBase);
+  fechaExpiracion.setMonth(fechaExpiracion.getMonth() + 4);
+  return fechaExpiracion;
+};
+
 function readSeedJson<T>(filename: string): T {
   const fullPath = path.join(__dirname, "seeds", filename);
   return JSON.parse(fs.readFileSync(fullPath, "utf8")) as T;
@@ -136,19 +142,47 @@ async function main() {
   // Generamos el hash real de la clave demo
   const saltRounds = 10;
   const hashClaveDemo = await bcrypt.hash("sripassword2026", saltRounds);
+  const fechaAccesoSeed = new Date();
+  const adminIdentificacion = "1250531510";
+  const adminIdentificacionAnterior = "1723456789001";
+  const adminSeedData = {
+    ruc: adminIdentificacion,
+    ciAdicional: null,
+    clave: hashClaveDemo,
+    razonSocial: "Daniela Baquerizo",
+    tipoContribuyente: "PERSONA_NATURAL" as const,
+    estadoTributario: "AL DÍA",
+    rol: "ADMIN" as const,
+    activo: true,
+    fechaExpiracion: calcularFechaExpiracion(fechaAccesoSeed),
+    emailVerified: true,
+  };
 
-  // Insertar el usuario demo respetando fielmente tu modelo Contribuyente
-  const usuarioDemo = await prisma.contribuyente.upsert({
-    where: { ruc: "1723456789001" },
-    update: {},
+  const adminConNuevaIdentificacion = await prisma.contribuyente.findUnique({
+    where: { ruc: adminIdentificacion },
+    select: { id: true },
+  });
+
+  if (!adminConNuevaIdentificacion) {
+    const adminAnterior = await prisma.contribuyente.findUnique({
+      where: { ruc: adminIdentificacionAnterior },
+      select: { id: true },
+    });
+
+    if (adminAnterior) {
+      await prisma.contribuyente.update({
+        where: { ruc: adminIdentificacionAnterior },
+        data: adminSeedData,
+      });
+    }
+  }
+
+  // Insertar/actualizar el usuario administrador respetando el modelo Contribuyente.
+  const usuarioAdmin = await prisma.contribuyente.upsert({
+    where: { ruc: adminIdentificacion },
+    update: adminSeedData,
     create: {
-      ruc: "1723456789001",
-      ciAdicional: null,
-      clave: hashClaveDemo,
-      razonSocial: "CONTRIBUYENTE DEMO SISTEMA S.A.",
-      tipoContribuyente: "SOCIEDAD",
-      estadoTributario: "AL DÍA",
-      rol: "ADMIN"
+      ...adminSeedData,
     },
   });
 
@@ -178,6 +212,9 @@ async function main() {
       tipoContribuyente: "PERSONA_NATURAL",
       estadoTributario: "AL DÍA",
       estadoRuc: "ACTIVO",
+      activo: true,
+      fechaExpiracion: calcularFechaExpiracion(fechaAccesoSeed),
+      emailVerified: true,
       regimen: "GENERAL",
       obligaciones: obligacionesCalixto,
       actividadesEconomicas: actividadesCalixto,
@@ -217,6 +254,9 @@ async function main() {
       tipoContribuyente: "PERSONA_NATURAL",
       estadoTributario: "AL DÍA",
       rol: "CONTADOR",
+      activo: true,
+      fechaExpiracion: calcularFechaExpiracion(fechaAccesoSeed),
+      emailVerified: true,
       estadoRuc: "ACTIVO",
       regimen: "GENERAL",
       obligaciones: obligacionesCalixto,
@@ -255,7 +295,7 @@ async function main() {
   await seedReglasContables();
 
   console.log("¡Base de datos poblada con éxito!");
-  console.log("Usuario Demo Creado:", usuarioDemo.ruc);
+  console.log("Usuario ADMIN listo:", usuarioAdmin.ruc);
   console.log("Usuario RUC CALIXTO listo:", usuarioCalixto.ruc);
 }
 

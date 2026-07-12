@@ -5,6 +5,7 @@ import {
   Upload,
   Loader2,
 } from "lucide-react";
+import { authFetch } from "../../api/authApi";
 
 interface Props {
   rucUsuario: string;
@@ -79,7 +80,7 @@ export default function AnexosPanel({
   });
 
   const cargarAnexos = async () => {
-    const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/consultar`);
+    const res = await authFetch(`${apiUrl}/api/anexos/${rucActivo}/consultar`);
     const data = await res.json();
     setAnexos(Array.isArray(data) ? data : []);
   };
@@ -93,7 +94,7 @@ export default function AnexosPanel({
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/enviar`, {
+      const res = await authFetch(`${apiUrl}/api/anexos/${rucActivo}/enviar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...anexoForm, datosJSON: anexoForm }),
@@ -116,7 +117,7 @@ export default function AnexosPanel({
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/beneficiario-pension`, {
+      const res = await authFetch(`${apiUrl}/api/anexos/${rucActivo}/beneficiario-pension`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(beneficiarioForm),
@@ -138,7 +139,7 @@ export default function AnexosPanel({
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/cargas-familiares`, {
+      const res = await authFetch(`${apiUrl}/api/anexos/${rucActivo}/cargas-familiares`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166,7 +167,7 @@ export default function AnexosPanel({
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/anexos/${rucActivo}/cargas-familiares`, {
+      const res = await authFetch(`${apiUrl}/api/anexos/${rucActivo}/cargas-familiares`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cargaForm),

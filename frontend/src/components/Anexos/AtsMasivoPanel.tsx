@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { saveLastAtsContribuyente } from "../../utils/atsSession";
+import { authFetch } from "../../api/authApi";
 
 type Props = {
   rucAcceso: string;
@@ -104,7 +105,7 @@ export default function AtsMasivoPanel({
       const formData = new FormData();
       formData.append("archivo", archivo);
 
-      const res = await fetch(`${API_BASE}/ats/${rucAcceso}/importar`, {
+      const res = await authFetch(`${API_BASE}/ats/${rucAcceso}/importar`, {
         method: "POST",
         body: formData,
       });
@@ -144,7 +145,7 @@ export default function AtsMasivoPanel({
       setError("");
       setDownloading(true);
 
-      const res = await fetch(`${API_BASE}/ats/lote/${lote.id}/xml`);
+      const res = await authFetch(`${API_BASE}/ats/lote/${lote.id}/xml`);
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -181,7 +182,7 @@ export default function AtsMasivoPanel({
       setError("");
       setDownloading(true);
 
-      const res = await fetch(`${API_BASE}/ats/lote/${lote.id}/talon-resumen`);
+      const res = await authFetch(`${API_BASE}/ats/lote/${lote.id}/talon-resumen`);
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);

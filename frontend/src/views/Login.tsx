@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Download,
   Eye,
@@ -53,16 +53,33 @@ const formatTipoContribuyente = (value: RegisterForm["tipoContribuyente"]) =>
   value === "PERSONA_NATURAL" ? "PERSONA NATURAL" : "SOCIEDAD";
 
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">(
+    "login"
+  );
   const [ruc, setRuc] = useState("");
   const [ciAdicional, setCiAdicional] = useState("");
   const [clave, setClave] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState("");
   const [registerError, setRegisterError] = useState("");
+  const [forgotError, setForgotError] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [registerSuccessMessage, setRegisterSuccessMessage] = useState("");
+  const [forgotMessage, setForgotMessage] = useState("");
+  const [verificationMessage, setVerificationMessage] = useState("");
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const [resendIdentifier, setResendIdentifier] = useState("");
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [nuevaClave, setNuevaClave] = useState("");
+  const [confirmarNuevaClave, setConfirmarNuevaClave] = useState("");
   const [registerForm, setRegisterForm] =
     useState<RegisterForm>(initialRegisterForm);
   const [registeredCredentials, setRegisteredCredentials] =
@@ -75,6 +92,58 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     setRegisterForm((current) => ({ ...current, [field]: value }));
     setRegisterError("");
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verificationToken = params.get("verifyEmailToken");
+    const passwordResetToken = params.get("token");
+
+    if (
+      window.location.pathname.includes("reset-password") &&
+      passwordResetToken
+    ) {
+      setResetToken(passwordResetToken);
+      setMode("reset");
+      params.delete("token");
+      const query = params.toString();
+      const nextUrl = `/${query ? `?${query}` : ""}`;
+      window.history.replaceState({}, "", nextUrl);
+      return;
+    }
+
+    if (!verificationToken) return;
+
+    const verifyEmail = async () => {
+      try {
+        setError("");
+        setVerificationMessage("Verificando correo electrónico...");
+
+        const response = await fetch(
+          `${apiBaseUrl}/api/auth/verify-email?token=${encodeURIComponent(
+            verificationToken
+          )}`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "No se pudo verificar el correo.");
+        }
+
+        setVerificationMessage(data.message || "Correo verificado correctamente.");
+        setMode("login");
+      } catch (err: any) {
+        setVerificationMessage("");
+        setError(err.message || "No se pudo verificar el correo.");
+      } finally {
+        params.delete("verifyEmailToken");
+        const query = params.toString();
+        const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}`;
+        window.history.replaceState({}, "", nextUrl);
+      }
+    };
+
+    verifyEmail();
+  }, []);
 
   const credentialsTxt = (credentials: RegisteredCredentials) => `SRI CLONE APP - CREDENCIALES DE ACCESO
 Fecha de registro: ${credentials.fechaRegistro}
@@ -118,6 +187,7 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
     e.preventDefault();
 
     setError("");
+    setShowResendVerification(false);
 
     if (!ruc.trim()) {
       setError("Ingrese su RUC, C.I. o Pasaporte.");
@@ -147,6 +217,10 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
       const data = await response.json();
 
       if (!response.ok) {
+        if (data.code === "EMAIL_NOT_VERIFIED") {
+          setShowResendVerification(true);
+          setResendIdentifier(data.email || data.ruc || ruc.trim());
+        }
         throw new Error(data.message || "Credenciales incorrectas.");
       }
 
@@ -161,9 +235,133 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
     }
   };
 
+  const handleResendVerification = async () => {
+    const identifier = resendIdentifier || ruc.trim();
+
+    if (!identifier) {
+      setError("Ingrese su RUC o correo para reenviar la verificación.");
+      return;
+    }
+
+    try {
+      setResendLoading(true);
+      setError("");
+      setVerificationMessage("");
+
+      const isEmail = identifier.includes("@");
+      const response = await fetch(`${apiBaseUrl}/api/auth/resend-verification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(isEmail ? { email: identifier } : { ruc: identifier }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "No se pudo reenviar el correo.");
+      }
+
+      setVerificationMessage(data.message || "Correo de verificación reenviado.");
+      setShowResendVerification(false);
+    } catch (err: any) {
+      setError(err.message || "No se pudo reenviar el correo.");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const identifier = forgotIdentifier.trim();
+
+    setForgotError("");
+    setForgotMessage("");
+
+    if (!identifier) {
+      setForgotError("Ingrese su correo electrónico o RUC.");
+      return;
+    }
+
+    try {
+      setForgotLoading(true);
+      const isEmail = identifier.includes("@");
+      const response = await fetch(`${apiBaseUrl}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(isEmail ? { email: identifier } : { ruc: identifier }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "No se pudo procesar la solicitud.");
+      }
+
+      setForgotMessage(
+        data.message ||
+          "Si existe una cuenta asociada, enviaremos un correo con instrucciones."
+      );
+    } catch (err: any) {
+      setForgotError(err.message || "No se pudo conectar con el servidor.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError("");
+
+    if (!resetToken) {
+      setResetError("El enlace de recuperación no contiene un token válido.");
+      return;
+    }
+
+    if (nuevaClave.length < 8) {
+      setResetError("La nueva contraseña debe tener mínimo 8 caracteres.");
+      return;
+    }
+
+    if (nuevaClave !== confirmarNuevaClave) {
+      setResetError("La confirmación no coincide con la nueva contraseña.");
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      const response = await fetch(`${apiBaseUrl}/api/auth/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token: resetToken, nuevaClave }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "No se pudo actualizar la contraseña.");
+      }
+
+      setNuevaClave("");
+      setConfirmarNuevaClave("");
+      setResetToken("");
+      setVerificationMessage(
+        data.message || "Contraseña actualizada correctamente."
+      );
+      setMode("login");
+    } catch (err: any) {
+      setResetError(err.message || "No se pudo conectar con el servidor.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError("");
+    setRegisterSuccessMessage("");
     setRegisteredCredentials(null);
 
     const identificacion = registerForm.identificacion.trim();
@@ -220,6 +418,10 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
       };
 
       setRegisteredCredentials(credentials);
+      setRegisterSuccessMessage(
+        data.message ||
+          "Registro creado correctamente. Revise su correo para verificar la cuenta antes de iniciar sesión."
+      );
       setRuc(credentials.identificacion);
       setClave("");
       setCiAdicional("");
@@ -292,6 +494,28 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                 {error && (
                   <div className="mb-5 bg-red-600 border border-red-500 rounded-lg p-4 text-sm">
                     {error}
+                  </div>
+                )}
+
+                {verificationMessage && (
+                  <div className="mb-5 bg-emerald-600 border border-emerald-500 rounded-lg p-4 text-sm">
+                    {verificationMessage}
+                  </div>
+                )}
+
+                {showResendVerification && (
+                  <div className="mb-5 bg-white/5 border border-white/10 rounded-lg p-4 text-sm">
+                    <p className="text-white/80">
+                      Si no recibió el correo, puede solicitar un nuevo enlace de verificación.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resendLoading}
+                      className="mt-3 w-full bg-[#f5a400] hover:bg-[#ffb321] text-black font-bold py-3 rounded transition disabled:opacity-60"
+                    >
+                      {resendLoading ? "Reenviando..." : "Reenviar correo de verificación"}
+                    </button>
                   </div>
                 )}
 
@@ -388,6 +612,176 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                 >
                   ¿No tiene acceso? Solicitar acceso
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("forgot");
+                    setForgotIdentifier(ruc.trim());
+                    setError("");
+                    setForgotError("");
+                    setForgotMessage("");
+                  }}
+                  className="w-full mt-3 text-sm font-semibold text-white/80 hover:text-white underline-offset-4 hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </>
+            ) : mode === "forgot" ? (
+              <>
+                <div className="mb-5">
+                  <div className="flex items-center gap-3 text-xl font-bold">
+                    <Mail size={22} />
+                    Recuperar contraseña
+                  </div>
+                </div>
+
+                {forgotError && (
+                  <div className="mb-5 bg-red-600 border border-red-500 rounded-lg p-4 text-sm">
+                    {forgotError}
+                  </div>
+                )}
+
+                {forgotMessage && (
+                  <div className="mb-5 bg-emerald-600 border border-emerald-500 rounded-lg p-4 text-sm">
+                    {forgotMessage}
+                  </div>
+                )}
+
+                <form onSubmit={handleForgotPassword} className="space-y-5">
+                  <div>
+                    <label className="text-xs font-bold uppercase">
+                      Correo electrónico o RUC
+                    </label>
+
+                    <div className="mt-2 flex bg-white rounded overflow-hidden">
+                      <div className="bg-slate-100 px-4 flex items-center text-slate-600">
+                        <User size={18} />
+                      </div>
+
+                      <input
+                        value={forgotIdentifier}
+                        onChange={(e) => {
+                          setForgotIdentifier(e.target.value);
+                          setForgotError("");
+                          setForgotMessage("");
+                        }}
+                        className="flex-1 px-4 py-3 text-black outline-none min-w-0"
+                        autoComplete="username"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    disabled={forgotLoading}
+                    className="w-full bg-white text-[#003565] font-bold py-4 rounded hover:bg-slate-100 transition disabled:opacity-60"
+                  >
+                    {forgotLoading ? "Enviando..." : "Enviar correo de recuperación"}
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setForgotError("");
+                  }}
+                  className="w-full mt-5 text-sm font-semibold text-white/90 hover:text-white underline-offset-4 hover:underline"
+                >
+                  Volver al ingreso
+                </button>
+              </>
+            ) : mode === "reset" ? (
+              <>
+                <div className="mb-5">
+                  <div className="flex items-center gap-3 text-xl font-bold">
+                    <KeyRound size={22} />
+                    Nueva contraseña
+                  </div>
+                </div>
+
+                {resetError && (
+                  <div className="mb-5 bg-red-600 border border-red-500 rounded-lg p-4 text-sm">
+                    {resetError}
+                  </div>
+                )}
+
+                <form onSubmit={handleResetPassword} className="space-y-5">
+                  <div>
+                    <label className="text-xs font-bold uppercase">
+                      Nueva contraseña
+                    </label>
+
+                    <div className="mt-2 flex bg-white rounded overflow-hidden">
+                      <div className="bg-slate-100 px-4 flex items-center text-slate-600">
+                        <KeyRound size={18} />
+                      </div>
+
+                      <input
+                        type={showResetPassword ? "text" : "password"}
+                        value={nuevaClave}
+                        onChange={(e) => {
+                          setNuevaClave(e.target.value);
+                          setResetError("");
+                        }}
+                        className="flex-1 px-4 py-3 text-black outline-none min-w-0"
+                        minLength={8}
+                        autoComplete="new-password"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowResetPassword(!showResetPassword)}
+                        className="bg-slate-100 px-4 text-slate-600"
+                        aria-label="Mostrar u ocultar nueva contraseña"
+                      >
+                        {showResetPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase">
+                      Confirmar nueva contraseña
+                    </label>
+
+                    <div className="mt-2 flex bg-white rounded overflow-hidden">
+                      <div className="bg-slate-100 px-4 flex items-center text-slate-600">
+                        <KeyRound size={18} />
+                      </div>
+
+                      <input
+                        type={showResetPassword ? "text" : "password"}
+                        value={confirmarNuevaClave}
+                        onChange={(e) => {
+                          setConfirmarNuevaClave(e.target.value);
+                          setResetError("");
+                        }}
+                        className="flex-1 px-4 py-3 text-black outline-none min-w-0"
+                        minLength={8}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    disabled={resetLoading}
+                    className="w-full bg-white text-[#003565] font-bold py-4 rounded hover:bg-slate-100 transition disabled:opacity-60"
+                  >
+                    {resetLoading ? "Actualizando..." : "Actualizar contraseña"}
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setResetError("");
+                  }}
+                  className="w-full mt-5 text-sm font-semibold text-white/90 hover:text-white underline-offset-4 hover:underline"
+                >
+                  Volver al ingreso
+                </button>
               </>
             ) : (
               <>
@@ -406,8 +800,7 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
 
                 {registeredCredentials && (
                   <div className="mb-5 bg-emerald-600 border border-emerald-500 rounded-lg p-4 text-sm">
-                    Registro creado correctamente. Descargue y conserve sus
-                    credenciales.
+                    {registerSuccessMessage} Descargue y conserve sus credenciales.
                   </div>
                 )}
 

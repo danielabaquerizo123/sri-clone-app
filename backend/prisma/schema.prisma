@@ -112,6 +112,8 @@ model Contribuyente {
   tipoContribuyente TipoContribuyente @default(PERSONA_NATURAL)
   estadoTributario  String            @default("AL DÍA")
   rol               Rol               @default(CONTADOR)
+  activo            Boolean           @default(true)
+  fechaExpiracion   DateTime
 
   // --- Datos del Certificado RUC (Agregados para PDF y Dashboard) ---
   estadoRuc                String    @default("ACTIVO")
@@ -137,6 +139,11 @@ model Contribuyente {
   jurisdiccion String?
 
   email             String?
+  emailVerified     Boolean   @default(false)
+  verificationToken String?
+  verificationExpires DateTime?
+  resetToken        String?
+  resetTokenExpires DateTime?
   telefonoDomicilio String?
   celular           String?
 

@@ -11,6 +11,8 @@ import declaracionRoutes from './routes/declaracion.routes';
 import anexoRoutes from './routes/anexo.routes';
 import atsRoutes from './routes/ats.routes';
 import contabilidadRoutes from './routes/contabilidad.routes';
+import adminRoutes from './routes/admin.routes';
+import { requireAuth } from './middlewares/auth.middleware';
 
 dotenv.config();
 
@@ -63,17 +65,18 @@ app.get('/api/health', (_req, res) => {
 
 /* RUTAS PRINCIPALES */
 app.use('/api/auth', authRoutes);
-app.use('/api/contribuyentes', contribuyenteRoutes);
+app.use('/api/contribuyentes', requireAuth, contribuyenteRoutes);
+app.use('/api/admin', requireAuth, adminRoutes);
 
 /* RUTAS TRANSACCIONALES */
-app.use('/api/declaraciones', declaracionRoutes);
-app.use('/api/anexos', anexoRoutes);
+app.use('/api/declaraciones', requireAuth, declaracionRoutes);
+app.use('/api/anexos', requireAuth, anexoRoutes);
 
 /* RUTA ATS MASIVO */
-app.use('/api/ats', atsRoutes);
+app.use('/api/ats', requireAuth, atsRoutes);
 
 /* RUTA CONTABILIDAD */
-app.use('/api/contabilidad', contabilidadRoutes);
+app.use('/api/contabilidad', requireAuth, contabilidadRoutes);
 
 app.listen(PORT, () => {
   console.log(`

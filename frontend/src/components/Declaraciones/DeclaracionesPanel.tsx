@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import Formulario103Wizard from "./Formulario103Wizard";
 import Formulario104Wizard from "./Formulario104Wizard";
+import { authFetch } from "../../api/authApi";
 
 interface Props {
   rucUsuario: string;
@@ -117,7 +118,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
         estado: filtros.estado,
       });
 
-      const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/consultar?${params}`);
+      const res = await authFetch(`${apiUrl}/api/declaraciones/${rucUsuario}/consultar?${params}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -180,7 +181,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
+      const res = await authFetch(`${apiUrl}/api/declaraciones/${rucUsuario}/crear`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -208,7 +209,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
       setLoading(true);
       setMensaje("");
 
-      const res = await fetch(
+      const res = await authFetch(
         `${apiUrl}/api/declaraciones/${rucUsuario}/formulario107?anio=${form107.anio}`
       );
 
@@ -234,7 +235,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
       setMensaje("");
       const suffix = tipo === "comprobante" ? "comprobante" : "pdf";
       const query = tipo === "resumen" ? "?tipo=resumen" : "";
-      const response = await fetch(
+      const response = await authFetch(
         `${apiUrl}/api/declaraciones/${rucUsuario}/declaracion/${declaracion.id}/${suffix}${query}`
       );
 

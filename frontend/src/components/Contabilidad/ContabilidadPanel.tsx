@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import LibroDiarioTab from "./LibroDiarioTab";
+import { authFetch } from "../../api/authApi";
 
 type Props = {
   rucActivo: string;
@@ -71,7 +72,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
       const formData = new FormData();
       formData.append("archivo", archivo);
 
-      const res = await fetch(
+      const res = await authFetch(
         `${apiUrl}/api/contabilidad/${rucActivo}/procesar-excel-libro-diario`,
         {
           method: "POST",

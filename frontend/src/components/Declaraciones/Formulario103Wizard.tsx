@@ -13,6 +13,7 @@ import {
   Send,
 } from "lucide-react";
 import { getLastAtsContribuyenteForPeriod } from "../../utils/atsSession";
+import { authFetch } from "../../api/authApi";
 
 type Props = {
   rucUsuario: string;
@@ -440,7 +441,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
       setMensaje("");
       setErrors([]);
 
-      const response = await fetch(
+      const response = await authFetch(
         `${apiUrl}/api/declaraciones/${rucDeclaracion}/formulario103?anio=${anio}&mes=${mes}`
       );
       const data = await response.json();
@@ -558,7 +559,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
   };
 
   const guardarDeclaracion = async (estado: "BORRADOR" | "PRESENTADA") => {
-    const res = await fetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
+    const res = await authFetch(`${apiUrl}/api/declaraciones/${rucDeclaracion}/crear`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildPayload(estado)),
@@ -620,7 +621,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
       tipo === "pdf"
         ? `/api/declaraciones/${rucDeclaracion}/declaracion/${declaracionGuardada.id}/pdf`
         : `/api/declaraciones/${rucDeclaracion}/declaracion/${declaracionGuardada.id}/comprobante`;
-    const response = await fetch(`${apiUrl}${path}`);
+    const response = await authFetch(`${apiUrl}${path}`);
     if (!response.ok) {
       setMensaje("No fue posible descargar el documento.");
       return;

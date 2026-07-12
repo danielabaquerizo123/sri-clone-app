@@ -1,35 +1,26 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
-  Activity,
   AlertCircle,
   ArrowRight,
-  BadgeCheck,
-  Building2,
-  Calculator,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
   Download,
-  FileText,
-  FileSpreadsheet,
-  FolderKanban,
-  Home,
-  Layers,
   Loader2,
-  LogOut,
   Pencil,
   Printer,
   RefreshCcw,
   Save,
   Search,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 
 import DeclaracionesPanel from "../components/Declaraciones/DeclaracionesPanel";
 import AnexosPanel from "../components/Anexos/AnexosPanel";
 import ContabilidadPanel from "../components/Contabilidad/ContabilidadPanel";
+import DashboardHeader from "../components/Dashboard/DashboardHeader";
+import DashboardHome from "../components/Dashboard/DashboardHome";
+import DashboardSidebar from "../components/Dashboard/DashboardSidebar";
+import { authFetch } from "../api/authApi";
+import { calcularDiasRestantes } from "../utils/acceso";
 
 interface DashboardViewProps {
   rucUsuario: string;
@@ -50,7 +41,7 @@ interface Conteos {
   proveedores: number;
 }
 
-interface ContribuyenteData {
+export interface ContribuyenteData {
   id: string;
   ruc: string;
   ciAdicional?: string | null;
@@ -58,7 +49,9 @@ interface ContribuyenteData {
   razonSocial: string;
   tipoContribuyente: "PERSONA_NATURAL" | "SOCIEDAD";
   estadoTributario: string;
-  rol: "ADMIN" | "CONTADOR";
+  rol: "ADMIN" | "CONTADOR" | "CONTRIBUYENTE";
+  activo: boolean;
+  fechaExpiracion: string;
   estadoRuc: string;
   regimen: string;
   obligaciones: string;
@@ -94,7 +87,7 @@ interface ContribuyenteData {
   _count?: Conteos;
 }
 
-interface OpcionesRuc {
+export interface OpcionesRuc {
   inscripcion: boolean;
   actualizacion: boolean;
   reapertura: boolean;
@@ -110,11 +103,6 @@ export default function DashboardView({
   onLogout,
 }: DashboardViewProps) {
   const [activeTab, setActiveTab] = useState("inicio");
-  const [funcOpen, setFuncOpen] = useState(true);
-  const [rucOpen, setRucOpen] = useState(true);
-  const [declaracionesOpen, setDeclaracionesOpen] = useState(false);
-  const [anexosOpen, setAnexosOpen] = useState(false);
-
   const [data, setData] = useState<ContribuyenteData | null>(null);
   const [form, setForm] = useState<Partial<ContribuyenteData>>({});
   const [opcionesRuc, setOpcionesRuc] = useState<OpcionesRuc | null>(null);
@@ -126,6 +114,7 @@ export default function DashboardView({
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fechaActual, setFechaActual] = useState(() => new Date());
 
   const [reaperturaMotivo, setReaperturaMotivo] = useState("");
   const [reaperturaObs, setReaperturaObs] = useState("");
@@ -137,6 +126,10 @@ export default function DashboardView({
   );
 
   const rucActivo = activeContribuyente.ruc || rucUsuario;
+  const diasRestantesAcceso = useMemo(
+    () => calcularDiasRestantes(data?.fechaExpiracion, fechaActual),
+    [data?.fechaExpiracion, fechaActual]
+  );
 
   const actividadesList = useMemo(
     () =>
@@ -159,8 +152,8 @@ export default function DashboardView({
       setError("");
 
       const [perfilRes, opcionesRes] = await Promise.all([
-        fetch(`${apiUrl}/api/contribuyentes/perfil/${rucActivo}`),
-        fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/opciones`),
+        authFetch(`${apiUrl}/api/contribuyentes/perfil/${rucActivo}`),
+        authFetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/opciones`),
       ]);
 
       if (!perfilRes.ok) throw new Error("No se pudo cargar el perfil.");
@@ -185,6 +178,14 @@ export default function DashboardView({
     cargarDatos();
   }, [rucActivo]);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setFechaActual(new Date());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const updateField = (name: keyof ContribuyenteData, value: string | number) => {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
@@ -197,7 +198,7 @@ export default function DashboardView({
       setError("");
       setSuccess("");
 
-      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/actualizar`, {
+      const response = await authFetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/actualizar`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -225,7 +226,7 @@ export default function DashboardView({
       setError("");
       setSuccess("");
 
-      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/reapertura`, {
+      const response = await authFetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/reapertura`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ motivo: reaperturaMotivo, observaciones: reaperturaObs }),
@@ -253,7 +254,7 @@ export default function DashboardView({
       setDownloadingPdf(true);
       setError("");
 
-      const response = await fetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/reimpresion/pdf`);
+      const response = await authFetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/reimpresion/pdf`);
 
       if (!response.ok) throw new Error("No se pudo descargar el PDF.");
 
@@ -305,285 +306,42 @@ export default function DashboardView({
   const displayRazonSocial = razonSocialUsuario || rucUsuario;
 
   return (
-    <div className="min-h-screen bg-[#eef3f8] text-slate-800 overflow-hidden">
-      <header className="fixed top-0 left-0 w-full h-16 bg-[#003565] text-white z-50 shadow-lg flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-14 bg-white rounded-xl text-[#003565] font-black flex items-center justify-center shadow">
-            SRI
-          </div>
-          <div className="border-l border-white/20 pl-4">
-            <h1 className="font-black leading-none">SRI en línea</h1>
-            <p className="text-[10px] text-white/60 uppercase tracking-widest">Portal transaccional</p>
-          </div>
-        </div>
+    <div className="flex h-screen overflow-hidden bg-[#eef4fb] text-slate-800">
+      <DashboardSidebar
+        activeTab={activeTab}
+        data={data}
+        diasRestantesAcceso={diasRestantesAcceso}
+        opcionesRuc={opcionesRuc}
+        onLogout={onLogout}
+        onNavigate={setActiveTab}
+      />
 
-        <div className="flex items-center gap-5">
-          {rucUsuario !== rucActivo && (
-            <div className="hidden lg:flex flex-col text-right leading-tight border-r border-white/20 pr-5">
-              <span className="text-[10px] text-white/50 uppercase font-black">Usuario logueado</span>
-              <span className="text-[11px] text-white/70 font-mono">RUC {rucUsuario}</span>
-            </div>
-          )}
-          <div className="hidden md:flex flex-col text-right leading-tight">
-            <span className="text-xs font-black uppercase">{displayRazonSocial}</span>
-            <span className="text-[11px] text-white/60 font-mono">RUC {displayRuc}</span>
-          </div>
-          <button onClick={onLogout} className="p-2 rounded-xl hover:bg-white/10 text-red-200 hover:text-red-100">
-            <LogOut size={18} />
-          </button>
-        </div>
-      </header>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <DashboardHeader
+          activeTab={activeTab}
+          nombreUsuario={displayRazonSocial}
+          rucUsuario={displayRuc}
+          tipoContribuyente={data.tipoContribuyente}
+          now={fechaActual}
+        />
 
-      <div className="flex pt-16 h-screen">
-        <aside className="w-80 bg-white/95 backdrop-blur border-r border-slate-200 shadow-sm overflow-y-auto">
-          <div className="p-4">
-            <button
-              onClick={() => setActiveTab("inicio")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-black transition ${
-                activeTab === "inicio" ? "bg-[#003565] text-white shadow-lg" : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <Home size={18} />
-              Inicio
-            </button>
-          </div>
-
-          <div className="px-4">
-            <button
-              onClick={() => setFuncOpen(!funcOpen)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-[11px] font-black text-slate-400 uppercase tracking-widest hover:bg-slate-50"
-            >
-              Funcionalidades
-              {funcOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-            </button>
-
-            {funcOpen && (
-              <div className="mt-2">
-                <ModuleButton
-                  label="RUC"
-                  icon={<FileText size={18} className="text-[#0077b6]" />}
-                  open={rucOpen}
-                  onClick={() => setRucOpen(!rucOpen)}
-                />
-
-                {rucOpen && (
-                  <div className="pl-5 mt-2 space-y-1 border-l-2 border-slate-100 ml-6">
-                    <NavItem active={activeTab === "ruc_inscripcion"} enabled={!!opcionesRuc?.inscripcion} onClick={() => setActiveTab("ruc_inscripcion")} icon={<Search size={15} />} label="Inscripción" />
-                    <NavItem active={activeTab === "ruc_actualizacion"} enabled={!!opcionesRuc?.actualizacion} onClick={() => setActiveTab("ruc_actualizacion")} icon={<Pencil size={15} />} label="Actualización" />
-                    <NavItem active={activeTab === "ruc_reapertura"} enabled={!!opcionesRuc?.reapertura} onClick={() => setActiveTab("ruc_reapertura")} icon={<RefreshCcw size={15} />} label="Reapertura" />
-                    <NavItem active={activeTab === "ruc_reimpresion"} enabled={!!opcionesRuc?.reimpresion} onClick={() => setActiveTab("ruc_reimpresion")} icon={<Printer size={15} />} label="Reimpresión" />
-                  </div>
-                )}
-
-                <ModuleButton
-                  label="Declaraciones"
-                  icon={<FileSpreadsheet size={18} className="text-[#0077b6]" />}
-                  open={declaracionesOpen}
-                  onClick={() => setDeclaracionesOpen(!declaracionesOpen)}
-                />
-
-                {declaracionesOpen && (
-  <div className="pl-5 mt-2 space-y-1 border-l-2 border-slate-100 ml-6">
-    <NavItem
-      active={activeTab === "declaracion_elaboracion"}
-      enabled={true}
-      onClick={() => setActiveTab("declaracion_elaboracion")}
-      icon={<FileSpreadsheet size={15} />}
-      label="Elaboración y envío"
-    />
-
-    <NavItem
-      active={activeTab === "declaracion_consulta"}
-      enabled={true}
-      onClick={() => setActiveTab("declaracion_consulta")}
-      icon={<Search size={15} />}
-      label="Consulta declaraciones"
-    />
-
-    <NavItem
-      active={activeTab === "declaracion_107"}
-      enabled={true}
-      onClick={() => setActiveTab("declaracion_107")}
-      icon={<Printer size={15} />}
-      label="Formulario 107 - RDEP"
-    />
-    <NavItem
-      active={activeTab === "declaracion_103"}
-      enabled={true}
-      onClick={() => setActiveTab("declaracion_103")}
-      icon={<FileText size={15} />}
-      label="Formulario 103"
-/>
-    <NavItem
-      active={activeTab === "declaracion_104"}
-      enabled={true}
-      onClick={() => setActiveTab("declaracion_104")}
-      icon={<FileSpreadsheet size={15} />}
-      label="Formulario 104"
-/>
-
-
-  </div>
-)}
-
-                <ModuleButton
-                  label="Anexos"
-                  icon={<FolderKanban size={18} className="text-[#0077b6]" />}
-                  open={anexosOpen}
-                  onClick={() => setAnexosOpen(!anexosOpen)}
-                />
-
-                {anexosOpen && (
-  <div className="pl-5 mt-2 space-y-1 border-l-2 border-slate-100 ml-6">
-    <NavItem
-      active={activeTab === "anexo_ats"}
-      enabled={true}
-      onClick={() => setActiveTab("anexo_ats")}
-      icon={<FileSpreadsheet size={15} />}
-      label="ATS"
-    />
-
-    <NavItem
-      active={activeTab === "anexo_envio"}
-      enabled={true}
-      onClick={() => setActiveTab("anexo_envio")}
-      icon={<Download size={15} />}
-      label="Envío y consulta"
-    />
-
-    <NavItem
-      active={activeTab === "anexo_beneficiario"}
-      enabled={true}
-      onClick={() => setActiveTab("anexo_beneficiario")}
-      icon={<BadgeCheck size={15} />}
-      label="Beneficiario pensión"
-    />
-
-    <NavItem
-      active={activeTab === "anexo_dependientes_2022"}
-      enabled={true}
-      onClick={() => setActiveTab("anexo_dependientes_2022")}
-      icon={<ClipboardList size={15} />}
-      label="Dependientes hasta 2022"
-    />
-
-    <NavItem
-      active={activeTab === "anexo_cargas_2023"}
-      enabled={true}
-      onClick={() => setActiveTab("anexo_cargas_2023")}
-      icon={<Layers size={15} />}
-      label="Cargas desde 2023"
-    />
-  </div>
-)}
-
-                <button
-                  onClick={() => setActiveTab("contabilidad")}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-black transition mt-2 ${
-                    activeTab === "contabilidad"
-                      ? "bg-blue-50 text-[#006aa6]"
-                      : "text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  <Calculator size={18} className="text-[#0077b6]" />
-                  Contabilidad
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="m-4 mt-8 rounded-3xl bg-gradient-to-br from-[#003565] to-[#0077b6] text-white p-5 shadow-lg">
-            <Sparkles size={24} className="mb-3 text-blue-100" />
-            <h3 className="font-black text-sm">Contribuyente activo</h3>
-            <p className="text-xs text-white/70 mt-1">{data.ruc} - {data.razonSocial}</p>
-          </div>
-        </aside>
-
-        <main className="flex-1 overflow-y-auto p-8 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] lg:p-5 2xl:p-6">
           {(error || success) && (
-            <div className="max-w-7xl mx-auto mb-5">
+            <div className="mx-auto mb-4 w-full max-w-[1800px]">
               {error && <Alert type="error" text={error} />}
               {success && <Alert type="success" text={success} />}
             </div>
           )}
 
           {activeTab === "inicio" && (
-            <div className="max-w-7xl mx-auto space-y-6">
-              <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#003565] via-[#005f9e] to-[#00a3c7] p-8 text-white shadow-2xl">
-                <div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-                <div className="absolute right-12 bottom-4 opacity-20">
-                  <ShieldCheck size={180} />
-                </div>
-
-                <div className="relative z-10 max-w-3xl">
-                  <div className="inline-flex items-center gap-2 bg-white/15 border border-white/20 rounded-full px-4 py-2 text-xs font-bold mb-5">
-                    <BadgeCheck size={15} />
-                    Sesión activa y verificada
-                  </div>
-
-                  <h1 className="text-4xl font-black leading-tight">Panel tributario del contribuyente</h1>
-                  <p className="mt-3 text-white/75 max-w-2xl">
-                    Consulta y gestiona información del RUC, declaraciones, anexos y certificados desde el portal transaccional.
-                  </p>
-
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    <button onClick={() => setActiveTab("ruc_actualizacion")} className="bg-white text-[#003565] px-5 py-3 rounded-2xl font-black text-sm shadow hover:scale-[1.01] transition">
-                      Actualizar datos
-                    </button>
-                   <button onClick={() => setActiveTab("declaracion_elaboracion")} className="bg-white/10 border border-white/20 px-5 py-3 rounded-2xl font-black text-sm hover:bg-white/15 transition">
-                      Declaraciones
-                    </button>
-                    <button onClick={() => setActiveTab("anexo_ats")} className="bg-white/10 border border-white/20 px-5 py-3 rounded-2xl font-black text-sm hover:bg-white/15 transition">
-                      Anexos
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Metric icon={<CheckCircle2 />} label="Estado RUC" value={data.estadoRuc} tone="green" />
-                <Metric icon={<Layers />} label="Régimen" value={data.regimen} tone="blue" />
-                <Metric icon={<Building2 />} label="Abiertos" value={String(data.establecimientosAbiertos)} tone="cyan" />
-                <Metric icon={<Activity />} label="Cerrados" value={String(data.establecimientosCerrados)} tone="amber" />
-              </section>
-
-              <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="xl:col-span-2 bg-white rounded-[2rem] border shadow-sm p-6">
-                  <h2 className="font-black text-[#003565] mb-5">Resumen del contribuyente</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Info label="RUC" value={displayRuc} />
-                    <Info label="Razón social" value={displayRazonSocial} />
-                    <Info label="Tipo contribuyente" value={data.tipoContribuyente} />
-                    <Info label="Estado tributario" value={data.estadoTributario} />
-                    <Info label="Provincia" value={data.provincia} />
-                    <Info label="Cantón" value={data.canton} />
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-[2rem] border shadow-sm p-6">
-                  <h2 className="font-black text-[#003565] mb-4">Obligaciones</h2>
-                  <div className="space-y-2">
-                    {obligacionesList.length ? obligacionesList.map((x, i) => (
-                      <div key={i} className="rounded-2xl bg-slate-50 border px-4 py-3 text-xs font-semibold text-slate-700">
-                        {x}
-                      </div>
-                    )) : <p className="text-sm text-slate-400">No registra</p>}
-                  </div>
-                </div>
-              </section>
-
-              <section className="bg-white rounded-[2rem] border shadow-sm p-6">
-                <h2 className="font-black text-[#003565] mb-4">Actividades económicas</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {actividadesList.length ? actividadesList.map((x, i) => (
-                    <div key={i} className="flex gap-3 rounded-2xl border bg-slate-50 p-4 text-sm">
-                      <ClipboardList className="text-[#0077b6] shrink-0" size={18} />
-                      <span>{x}</span>
-                    </div>
-                  )) : <p className="text-sm text-slate-400">No registra</p>}
-                </div>
-              </section>
-            </div>
+            <DashboardHome
+              data={data}
+              diasRestantesAcceso={diasRestantesAcceso}
+              obligacionesList={obligacionesList}
+              actividadesList={actividadesList}
+              onNavigate={setActiveTab}
+              onRefresh={cargarDatos}
+            />
           )}
 
           {activeTab === "ruc_inscripcion" && (
@@ -744,76 +502,26 @@ export default function DashboardView({
           )}
 
           {activeTab.startsWith("declaracion_") && (
-  <DeclaracionesPanel
-    rucUsuario={rucUsuario}
-    activeView={activeTab}
-    razonSocial={razonSocialUsuario}
-  />
-)}
+            <DeclaracionesPanel
+              rucUsuario={rucUsuario}
+              activeView={activeTab}
+              razonSocial={razonSocialUsuario}
+            />
+          )}
 
-{activeTab.startsWith("anexo_") && (
-  <AnexosPanel
-    rucUsuario={rucUsuario}
-    rucActivo={rucActivo}
-    activeView={activeTab}
-  />
-)}
+          {activeTab.startsWith("anexo_") && (
+            <AnexosPanel
+              rucUsuario={rucUsuario}
+              rucActivo={rucActivo}
+              activeView={activeTab}
+            />
+          )}
 
-{activeTab === "contabilidad" && (
-  <ContabilidadPanel
-    rucActivo={rucActivo}
-  />
-)}
+          {activeTab === "contabilidad" && (
+            <ContabilidadPanel rucActivo={rucActivo} />
+          )}
+
         </main>
-      </div>
-    </div>
-  );
-}
-
-function ModuleButton({ label, icon, open, onClick }: { label: string; icon: ReactNode; open: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-black text-slate-700 hover:bg-slate-50 mt-2"
-    >
-      <span className="flex items-center gap-3">
-        {icon}
-        {label}
-      </span>
-      {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-    </button>
-  );
-}
-
-function NavItem({ active, enabled, onClick, icon, label }: { active: boolean; enabled: boolean; onClick: () => void; icon: ReactNode; label: string }) {
-  return (
-    <button
-      disabled={!enabled}
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition ${
-        active ? "bg-blue-50 text-[#006aa6]" : enabled ? "text-slate-600 hover:bg-slate-50" : "text-slate-300 cursor-not-allowed"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function Metric({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: "green" | "blue" | "cyan" | "amber" }) {
-  const tones = {
-    green: "bg-emerald-50 text-emerald-700",
-    blue: "bg-blue-50 text-blue-700",
-    cyan: "bg-cyan-50 text-cyan-700",
-    amber: "bg-amber-50 text-amber-700",
-  };
-
-  return (
-    <div className="bg-white rounded-[1.5rem] border shadow-sm p-5 flex items-center gap-4">
-      <div className={`p-3 rounded-2xl ${tones[tone]}`}>{icon}</div>
-      <div>
-        <p className="text-[10px] uppercase font-black text-slate-400">{label}</p>
-        <p className="text-xl font-black text-slate-800">{value}</p>
       </div>
     </div>
   );
