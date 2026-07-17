@@ -601,8 +601,9 @@ function sanitizeVenta(v: any, contribuyenteId: string, atsLoteId: string) {
     campoBusqueda: safeNullableString(v.campoBusqueda),
     observaciones: safeNullableString(v.observaciones),
 
-    formaPago1: safeNullableString(v.formaPago1),
-    formaPago2: safeNullableString(v.formaPago2),
+    // Prisma mantiene los nombres heredados en Venta durante esta fase.
+    formaPago1: safeNullableString(v.formaCobro1 ?? v.formaPago1),
+    formaPago2: safeNullableString(v.formaCobro2 ?? v.formaPago2),
 
     contribuyenteId,
     atsLoteId,

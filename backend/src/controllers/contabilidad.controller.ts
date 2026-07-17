@@ -9,6 +9,13 @@ function buildErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isValidationErrorWithDetails(error: unknown): error is Error & {
+  errores: unknown[];
+  warnings?: unknown[];
+} {
+  return error instanceof Error && Array.isArray((error as any).errores);
+}
+
 function toMoneyNumber(value: unknown) {
   const numberValue = Number(value ?? 0);
   return Number.isFinite(numberValue) ? Number(numberValue.toFixed(2)) : 0;
@@ -41,14 +48,14 @@ async function findContribuyenteOrFail(ruc: string) {
   return contribuyente;
 }
 
-export const procesarAtsContabilidad = (req: Request, res: Response) => {
+export const procesarAtsContabilidad = async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "Debe subir un archivo ATS en formato Excel." });
     }
 
     const engine = new AccountingEngine();
-    const result = engine.process(req.file.buffer, req.file.originalname);
+    const result = await engine.process(req.file.buffer, req.file.originalname);
 
     return res.status(200).json({
       message: "ATS procesado por el módulo Contabilidad.",
@@ -62,14 +69,14 @@ export const procesarAtsContabilidad = (req: Request, res: Response) => {
   }
 };
 
-export const procesarExcelLibroDiario = (req: Request, res: Response) => {
+export const procesarExcelLibroDiario = async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "Debe subir un archivo Excel ATS." });
     }
 
     const service = new ExcelLibroDiarioService();
-    const result = service.process(req.file.buffer, req.file.originalname);
+    const result = await service.processAsync(req.file.buffer, req.file.originalname);
 
     return res.status(200).json(result);
   } catch (error) {
@@ -148,6 +155,14 @@ export const generarAsientosDesdeAts = async (req: Request, res: Response) => {
 
     return res.status(201).json(result);
   } catch (error) {
+    if (isValidationErrorWithDetails(error)) {
+      return res.status(400).json({
+        message: error.message,
+        errores: error.errores,
+        warnings: error.warnings || [],
+      });
+    }
+
     return res.status(500).json({
       message: "Error guardando asientos desde ATS.",
       error: buildErrorMessage(error),

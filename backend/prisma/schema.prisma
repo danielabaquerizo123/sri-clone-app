@@ -190,6 +190,7 @@ model CuentaContable {
   reglasIva           ReglaContable[] @relation("ReglaCuentaIva")
   reglasContrapartida ReglaContable[] @relation("ReglaCuentaContrapartida")
   lineasAsiento       LineaAsiento[]
+  configuraciones     ConfiguracionCuentaContable[] @relation("ConfiguracionesCuentaContable")
 }
 
 model ReglaContable {
@@ -273,6 +274,36 @@ model LineaAsiento {
 
   @@index([asientoId])
   @@index([cuentaId])
+}
+
+model ConfiguracionCuentaContable {
+  id          String         @id @default(uuid())
+  clave       String         @unique
+  descripcion String?
+  activa      Boolean        @default(true)
+  cuentaId    String
+  cuenta      CuentaContable @relation("ConfiguracionesCuentaContable", fields: [cuentaId], references: [id], onDelete: Restrict)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([cuentaId])
+  @@index([activa])
+}
+
+model ReglaClasificacionContable {
+  id            String                  @id @default(uuid())
+  codigo        String                  @unique
+  categoria     String
+  tipoOperacion TipoOperacionContable
+  prioridad     Int                     @default(100)
+  activa        Boolean                 @default(true)
+  condiciones   Json
+  descripcion   String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([categoria, activa, prioridad])
+  @@index([tipoOperacion, activa, prioridad])
 }
 
 model AnexoTributario {

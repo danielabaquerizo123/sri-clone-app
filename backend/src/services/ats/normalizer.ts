@@ -413,8 +413,8 @@ function normalizeVentas(rows: Record<string, any>[], issues: AtsIssue[]) {
       retIvaBase100: money(getByAny(row, ["Ret. IVA Base Imponible 100%"])),
       retIvaValor100: money(getByAny(row, ["Ret. IVA Valor Retenido 100%"])),
 
-      formaPago1: paymentCode(getByAny(row, ["Forma de COBRO 1"])),
-      formaPago2: paymentCode(getByAny(row, ["Forma de COBRO 2"])),
+      formaCobro1: paymentCode(getByAny(row, ["Forma de COBRO 1"])),
+      formaCobro2: paymentCode(getByAny(row, ["Forma de COBRO 2"])),
 
       mesDeclarado: getByAny(row, ["Mes declarado"]),
       periodoDeclaradoForm104: getByAny(row, ["Periodo Declarado Form. 104", "Periodo Declarado Form104"]),
@@ -447,12 +447,12 @@ function consolidateVentas(ventas: any[], issues: AtsIssue[]) {
     Number((Number(left || 0) + Number(right || 0)).toFixed(2));
 
   const mergeFormaPago = (target: any, source: any) => {
-    const current = [target.formaPago1, target.formaPago2].filter(Boolean);
-    const incoming = [source.formaPago1, source.formaPago2].filter(Boolean);
+    const current = [target.formaCobro1, target.formaCobro2].filter(Boolean);
+    const incoming = [source.formaCobro1, source.formaCobro2].filter(Boolean);
     const merged = Array.from(new Set([...current, ...incoming]));
 
-    target.formaPago1 = merged[0] || "";
-    target.formaPago2 = merged[1] || "";
+    target.formaCobro1 = merged[0] || "";
+    target.formaCobro2 = merged[1] || "";
   };
 
   ventas.forEach((venta) => {
@@ -577,6 +577,10 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
 
       fechaEmision: getByAny(row, ["Fecha de Emisión"]) || previousDoc?.fechaEmision || null,
       fechaRegistro: getByAny(row, ["Fecha de Registro"]) || previousDoc?.fechaRegistro || null,
+      conceptoCompra: getByAny(row, ["Concepto Compra", "Concepto", "Descripción", "Descripcion"]),
+      conceptoContableCompra: getByAny(row, ["Concepto Contable Compra", "Concepto Contable"]),
+      tipoActividad: getByAny(row, ["Tipo Actividad", "Actividad Económica", "Actividad Economica"]),
+      tipoPago: getByAny(row, ["Tipo de PAGO", "Tipo de Pago"]),
 
       codigoSustento: firstCode(getByAny(row, ["Codigo Sustento", "Código Sustento"]), 2) || "01",
       parteRelacionada: normalizeParteRelacionada(getByAny(row, ["Parte Relacionada"])),
@@ -672,6 +676,8 @@ function normalizeCompras(rows: Record<string, any>[], issues: AtsIssue[]) {
       valorRetencionIva30: compraMoney(
         getByAny(row, ["Ret. IVA Valor Retenido 30%", "Valor Retención IVA 30%"])
       ),
+      valorRetencionIva10: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 10%", "Valor Retención IVA 10%"])),
+      valorRetencionIva20: compraMoney(getByAny(row, ["Ret. IVA Valor Retenido 20%", "Valor Retención IVA 20%"])),
       valorRetencionIva50: compraMoney(
         getByAny(row, ["Ret. IVA Valor Retenido 50%", "Valor Retención IVA 50%"])
       ),

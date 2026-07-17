@@ -2,37 +2,14 @@ import { useMemo, useState } from "react";
 import { AlertCircle, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import LibroDiarioTab from "./LibroDiarioTab";
 import { authFetch } from "../../api/authApi";
+import {
+  normalizeLibroDiarioResponse,
+  type ContabilidadIssue,
+  type LibroDiarioResponse,
+} from "./contabilidadResponse";
 
 type Props = {
   rucActivo: string;
-};
-
-type ContabilidadIssue = {
-  tipo: "ERROR" | "WARNING" | "INFO";
-  hoja: string;
-  fila: number;
-  campo: string;
-  mensaje: string;
-};
-
-type LibroDiarioResponse = {
-  message: string;
-  resumen: {
-    archivo: string;
-    hojasLeidas: string[];
-    hojasIgnoradas: string[];
-    compras: number;
-    ventas: number;
-    gastos: number;
-    asientos: number;
-    totalDebe: number;
-    totalHaber: number;
-    errores: number;
-    advertencias: number;
-  };
-  libroDiario: unknown[];
-  asientos: unknown[];
-  issues: ContabilidadIssue[];
 };
 
 export type JournalVisualRow = {
@@ -85,7 +62,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
         throw new Error(data?.message || data?.error || "No se pudo generar el Libro Diario.");
       }
 
-      setResponse(data);
+      setResponse(normalizeLibroDiarioResponse(data));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error generando Libro Diario.");
     } finally {
@@ -159,24 +136,47 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
         <>
           <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <Info label="Archivo" value={response.resumen.archivo} />
-            <Info label="Hojas leídas" value={response.resumen.hojasLeidas.join(", ") || "-"} />
+            <Info
+              label="Hojas leídas"
+              value={
+                Array.isArray(response.resumen.hojasLeidas) && response.resumen.hojasLeidas.length > 0
+                  ? response.resumen.hojasLeidas.join(", ")
+                  : "-"
+              }
+            />
             <Info label="Compras" value={String(response.resumen.compras)} />
             <Info label="Ventas" value={String(response.resumen.ventas)} />
             <Info label="Gastos" value={String(response.resumen.gastos)} />
             <Info label="Asientos" value={String(response.resumen.asientos)} />
             <Info label="Errores" value={String(response.resumen.errores)} />
             <Info label="Advertencias" value={String(response.resumen.advertencias)} />
+            <Info label="Tipo de pago" value={formatCounter(response.resumen.tiposPagoCompras)} />
+            <Info label="Forma de pago" value={formatCounter(response.resumen.formasPagoCompras)} />
+            <Info label="Forma de cobro" value={formatCounter(response.resumen.formasCobroVentas)} />
           </section>
 
           {visibleIssues.length > 0 && <IssuesPanel issues={visibleIssues} />}
 
           <section className="rounded-[2rem] border bg-white p-7 shadow-sm">
-            <LibroDiarioTab entries={response.libroDiario || response.asientos} rows={[]} />
+            <LibroDiarioTab
+              entries={
+                Array.isArray(response.libroDiario) && response.libroDiario.length > 0
+                  ? response.libroDiario
+                  : response.asientos
+              }
+              rows={[]}
+            />
           </section>
         </>
       )}
     </div>
   );
+}
+
+function formatCounter(counter: Record<string, number>) {
+  const entries = Object.entries(counter || {});
+  if (entries.length === 0) return "-";
+  return entries.map(([code, amount]) => `${code}: ${amount}`).join(", ");
 }
 
 function Info({ label, value }: { label: string; value: string }) {
@@ -207,10 +207,10 @@ function IssuesPanel({ issues }: { issues: ContabilidadIssue[] }) {
           </thead>
           <tbody>
             {issues.map((issue, index) => (
-              <tr key={`${issue.hoja}-${issue.fila}-${issue.campo}-${index}`}>
-                <td className="border border-red-100 px-3 py-2">{issue.hoja}</td>
+              <tr key={`${issue.hoja || "sin-hoja"}-${issue.fila || 0}-${issue.campo || "general"}-${index}`}>
+                <td className="border border-red-100 px-3 py-2">{issue.hoja || "-"}</td>
                 <td className="border border-red-100 px-3 py-2 text-right">{issue.fila || "-"}</td>
-                <td className="border border-red-100 px-3 py-2">{issue.campo}</td>
+                <td className="border border-red-100 px-3 py-2">{issue.campo || "-"}</td>
                 <td className="border border-red-100 px-3 py-2">{issue.mensaje}</td>
               </tr>
             ))}

@@ -7,10 +7,17 @@ type LibroDiarioLine = {
   haber: number;
 };
 
+type LibroDiarioEvidence = {
+  campo: string;
+  valor: string | number | boolean | null;
+  descripcion?: string;
+};
+
 export type LibroDiarioEntry = {
   numero: number;
   fecha: string;
   glosa: string;
+  evidencias: LibroDiarioEvidence[];
   lineas: LibroDiarioLine[];
 };
 
@@ -54,6 +61,17 @@ function normalizeEntries(entries: unknown[] = [], rows: JournalVisualRow[] = []
         numero: Number(entry.numero || entry.asiento || 0),
         fecha: String(entry.fecha || "").slice(0, 10),
         glosa: String(entry.glosa || entry.descripcion || ""),
+        evidencias: Array.isArray(entry.evidencias)
+          ? entry.evidencias
+              .map((evidence: any) => ({
+                campo: String(evidence?.campo || ""),
+                valor: evidence?.valor ?? "",
+                descripcion: evidence?.descripcion ? String(evidence.descripcion) : undefined,
+              }))
+                .filter((evidence: LibroDiarioEvidence) =>
+                  ["tipoPago", "formaPago1", "formaPago2", "formaCobro1", "formaCobro2"].includes(evidence.campo)
+                )
+          : [],
         lineas: rawLines.map((line: any) => ({
           codigo: String(line.codigo || line.codigoCuenta || line.cuenta || ""),
           cuenta: String(line.cuenta || line.nombreCuenta || ""),
@@ -78,6 +96,7 @@ function normalizeEntries(entries: unknown[] = [], rows: JournalVisualRow[] = []
         numero: asiento,
         fecha: row.fecha,
         glosa: row.descripcion || "",
+        evidencias: [],
         lineas: [],
       } satisfies LibroDiarioEntry);
 
@@ -180,6 +199,19 @@ function JournalRows({ entry }: { entry: LibroDiarioEntry }) {
         <Td></Td>
         <td className="px-3 py-2 italic text-slate-600" colSpan={3}>
           {entry.glosa}
+          {entry.evidencias.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2 not-italic">
+              {entry.evidencias.map((evidence, index) => (
+                <span
+                  key={`${entry.numero}-${evidence.campo}-${index}`}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700"
+                  title={evidence.descripcion}
+                >
+                  {evidenceLabel(evidence.campo)}: {String(evidence.valor)}
+                </span>
+              ))}
+            </div>
+          )}
         </td>
       </tr>
       <tr className="h-3 bg-slate-50">
@@ -187,6 +219,17 @@ function JournalRows({ entry }: { entry: LibroDiarioEntry }) {
       </tr>
     </>
   );
+}
+
+function evidenceLabel(campo: string) {
+  const labels: Record<string, string> = {
+    tipoPago: "Tipo de pago",
+    formaPago1: "Forma de pago 1",
+    formaPago2: "Forma de pago 2",
+    formaCobro1: "Forma de cobro 1",
+    formaCobro2: "Forma de cobro 2",
+  };
+  return labels[campo] || campo;
 }
 
 function alignClass(align: "left" | "right") {
