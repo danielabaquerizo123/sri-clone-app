@@ -97,7 +97,7 @@ export class LibroMayorService {
 
     const allFolios = groups.map((group, index): LibroMayorFolio => {
       const saldoAnterior = params.previousBalances.get(group.cuentaId) || MONEY_ZERO;
-      const result = this.saldos.calculateMovements(group.movimientos, saldoAnterior);
+      const result = this.saldos.calculateMovements(group.movimientos, saldoAnterior, group.naturalezaCuenta);
       return {
         folio: index + 1,
         cuentaId: group.cuentaId,
@@ -119,8 +119,8 @@ export class LibroMayorService {
                 debe: "",
                 haber: "",
                 saldoAcumulado: money(saldoAnterior),
-                saldoDeudor: splitBalance(saldoAnterior).deudor,
-                saldoAcreedor: splitBalance(saldoAnterior).acreedor,
+                saldoDeudor: splitBalance(saldoAnterior, group.naturalezaCuenta).deudor,
+                saldoAcreedor: splitBalance(saldoAnterior, group.naturalezaCuenta).acreedor,
               }]
             : []),
           ...result.movimientos,

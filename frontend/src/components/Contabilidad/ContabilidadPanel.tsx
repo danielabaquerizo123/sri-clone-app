@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from "react";
 import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Info as InfoIcon, Loader2, Upload, UploadCloud, X } from "lucide-react";
 import LibroDiarioTab from "./LibroDiarioTab";
 import LibroMayorTab from "./LibroMayorTab";
+import BalanceComprobacionTab from "./BalanceComprobacionTab";
 import { authFetch } from "../../api/authApi";
 import {
   normalizeLibroDiarioResponse,
@@ -36,7 +37,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
   const [successNotice, setSuccessNotice] = useState("");
   const [showTechnicalDetail, setShowTechnicalDetail] = useState(false);
   const [showIncidenceDetail, setShowIncidenceDetail] = useState(false);
-  const [activeView, setActiveView] = useState<"ats" | "diario" | "mayor">("ats");
+  const [activeView, setActiveView] = useState<"ats" | "diario" | "mayor" | "balance">("ats");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const reviewRef = useRef<HTMLElement | null>(null);
@@ -149,6 +150,10 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
           <FileSpreadsheet size={18} />
           Libro Mayor
         </button>
+        <button type="button" onClick={() => setActiveView("balance")} className={`inline-flex h-16 items-center gap-3 rounded-t-2xl rounded-b-md border px-7 text-sm font-black shadow-sm transition ${activeView === "balance" ? "border-slate-200 border-b-[#0f66ff] bg-white text-[#005cff] shadow-[0_14px_30px_rgba(15,23,42,0.08)]" : "border-transparent bg-transparent text-[#344a78] hover:bg-white/70"}`}>
+          <FileSpreadsheet size={18} />
+          Balance de Comprobación
+        </button>
       </section>
 
       {activeView === "mayor" && (
@@ -156,6 +161,14 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
           rucActivo={rucActivo}
           preview={response}
           onExport={response ? () => void downloadJournalExcel(response, rucActivo).catch((err) => setError(err instanceof Error ? err.message : "No se pudo exportar el Libro Mayor.")) : undefined}
+        />
+      )}
+
+      {activeView === "balance" && (
+        <BalanceComprobacionTab
+          rucActivo={rucActivo}
+          preview={response}
+          onExport={response ? () => void downloadBalanceExcel(response, rucActivo).catch((err) => setError(err instanceof Error ? err.message : "No se pudo exportar el Balance de Comprobación.")) : undefined}
         />
       )}
 
@@ -768,6 +781,27 @@ async function downloadJournalExcel(response: LibroDiarioResponse, rucActivo: st
   const link = document.createElement("a");
   link.href = url;
   link.download = `Reporte_Contable_${rucActivo}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadBalanceExcel(response: LibroDiarioResponse, rucActivo: string) {
+  const res = await authFetch(`${apiUrl}/api/contabilidad/${rucActivo}/balance-comprobacion/preview/exportar/excel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preview: response }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message || data?.error || "No se pudo exportar el Balance de Comprobación.");
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `balance-comprobacion-${rucActivo}.xlsx`;
   link.click();
   URL.revokeObjectURL(url);
 }

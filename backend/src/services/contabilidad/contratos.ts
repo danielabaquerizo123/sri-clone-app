@@ -208,6 +208,8 @@ export type JournalLine = {
   cuentaId?: string;
   codigo: string;
   cuenta: string;
+  tipoCuenta?: string | null;
+  naturalezaCuenta?: string | null;
   descripcion: string;
   debe: number;
   haber: number;

@@ -5,6 +5,7 @@ import { LibroMayorService } from "../services/contabilidad/06-reportes/libro-ma
 import { LibroMayorExportExcelService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-excel.service";
 import { LibroMayorExportPdfService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-pdf.service";
 import { AccountingExcelExporter } from "../services/contabilidad/06-reportes/excel-exportador";
+import { BalanceComprobacionService } from "../services/contabilidad/06-reportes/balance-comprobacion.generator";
 
 function buildErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -324,6 +325,70 @@ export const consultarLibroMayorPreview = async (req: Request, res: Response) =>
   } catch (error) {
     return res.status(500).json({
       message: "Error generando Libro Mayor desde preview.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const consultarBalanceComprobacion = async (req: Request, res: Response) => {
+  try {
+    const result = await new BalanceComprobacionService().generar(libroMayorParams(req));
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error consultando Balance de Comprobación.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const consultarBalanceComprobacionPreview = async (req: Request, res: Response) => {
+  try {
+    const result = new BalanceComprobacionService().generarDesdePreview(previewBody(req), libroMayorParams(req));
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error generando Balance de Comprobación desde preview.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const exportarBalanceComprobacionExcel = async (req: Request, res: Response) => {
+  try {
+    const result = await new BalanceComprobacionService().generar({
+      ...libroMayorParams(req),
+      page: 1,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    const buffer = new AccountingExcelExporter().exportBalanceComprobacion(result);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="balance-comprobacion-${req.params.ruc}.xlsx"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error exportando Balance de Comprobación a Excel.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const exportarBalanceComprobacionPreviewExcel = async (req: Request, res: Response) => {
+  try {
+    const result = new BalanceComprobacionService().generarDesdePreview(previewBody(req), {
+      ...libroMayorParams(req),
+      page: 1,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    const buffer = new AccountingExcelExporter().exportBalanceComprobacion(result);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="balance-comprobacion-borrador-${req.params.ruc}.xlsx"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error exportando Balance de Comprobación preview a Excel.",
       error: buildErrorMessage(error),
     });
   }

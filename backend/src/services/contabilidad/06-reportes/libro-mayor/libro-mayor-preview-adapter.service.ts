@@ -29,6 +29,22 @@ function accountName(line: any) {
   return String(line.nombre || line.cuenta || line.nombreCuenta || line.codigo || line.cuentaId || "");
 }
 
+function accountMetadata(entry: PreviewEntry, line: any) {
+  const resolutions = Array.isArray((entry as any).rolesResueltos) ? (entry as any).rolesResueltos : [];
+  const found = resolutions.find((resolution: any) => {
+    const cuenta = resolution?.cuenta || {};
+    return (
+      String(cuenta.id || "") === String(line.cuentaId || "") ||
+      String(cuenta.codigo || "") === String(line.codigo || line.codigoCuenta || "")
+    );
+  });
+  const cuenta = found?.cuenta || {};
+  return {
+    tipoCuenta: String(line.tipoCuenta || cuenta.tipo || ""),
+    naturalezaCuenta: String(line.naturalezaCuenta || cuenta.naturaleza || ""),
+  };
+}
+
 function periodFromSummary(value: unknown) {
   const match = String(value || "").trim().match(/^(\d{4})-(\d{1,2})$/);
   if (!match) return { anio: null as number | null, mes: null as string | null };
@@ -66,27 +82,30 @@ export class LibroMayorPreviewAdapterService {
         const fecha = entryDate(entry);
         const numeroAsiento = Number(entry.numero || entryIndex + 1);
         const asientoId = String((entry as any).id || entry.idTemporalEvento || `preview-asiento-${entryIndex + 1}`);
-        return (entry.lineas || []).map((line: any, lineIndex: number): MovimientoMayorSource => ({
-          lineaId: String(line.id || `${asientoId}-linea-${lineIndex + 1}`),
-          asientoId,
-          cuentaId: String(line.cuentaId || line.codigo || `preview-cuenta-${lineIndex + 1}`),
-          codigoCuenta: String(line.codigo || line.codigoCuenta || ""),
-          nombreCuenta: accountName(line),
-          tipoCuenta: String(line.tipoCuenta || ""),
-          naturalezaCuenta: String(line.naturalezaCuenta || ""),
-          fecha,
-          numeroAsiento,
-          descripcion: String(entry.descripcion ?? entry.glosa ?? ""),
-          orden: Number(line.orden || lineIndex + 1),
-          debe: line.debe ?? 0,
-          haber: line.haber ?? 0,
-          estadoAsiento: "PREVIEW",
-          periodoId: preview.periodo?.id || "preview",
-          periodoAnio: periodoAnio || 0,
-          periodoMes: periodoMes || "",
-          empresaId: "preview",
-          asientoCreatedAt: fecha,
-        }));
+        return (entry.lineas || []).map((line: any, lineIndex: number): MovimientoMayorSource => {
+          const metadata = accountMetadata(entry, line);
+          return {
+            lineaId: String(line.id || `${asientoId}-linea-${lineIndex + 1}`),
+            asientoId,
+            cuentaId: String(line.cuentaId || line.codigo || `preview-cuenta-${lineIndex + 1}`),
+            codigoCuenta: String(line.codigo || line.codigoCuenta || ""),
+            nombreCuenta: accountName(line),
+            tipoCuenta: metadata.tipoCuenta,
+            naturalezaCuenta: metadata.naturalezaCuenta,
+            fecha,
+            numeroAsiento,
+            descripcion: String(entry.descripcion ?? entry.glosa ?? ""),
+            orden: Number(line.orden || lineIndex + 1),
+            debe: line.debe ?? 0,
+            haber: line.haber ?? 0,
+            estadoAsiento: "PREVIEW",
+            periodoId: preview.periodo?.id || "preview",
+            periodoAnio: periodoAnio || 0,
+            periodoMes: periodoMes || "",
+            empresaId: "preview",
+            asientoCreatedAt: fecha,
+          };
+        });
       }),
     };
   }

@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../../../lib/prisma";
 import { compareAccountCode } from "./libro-mayor-agrupador.service";
-import { decimal, MONEY_ZERO } from "./libro-mayor-saldos.service";
+import { decimal, MONEY_ZERO, movementBalanceEffect } from "./libro-mayor-saldos.service";
 import type { LibroMayorParams, LibroMayorRawMovement } from "./libro-mayor.types";
 
 type DbClient = PrismaClient | typeof defaultPrisma;
@@ -160,13 +160,18 @@ export class LibroMayorQueryService {
         cuentaId: true,
         debe: true,
         haber: true,
+        cuenta: {
+          select: {
+            naturaleza: true,
+          },
+        },
       },
     });
 
     const balances = new Map<string, Prisma.Decimal>();
     for (const row of rows) {
       const current = balances.get(row.cuentaId) || MONEY_ZERO;
-      balances.set(row.cuentaId, current.plus(decimal(row.debe)).minus(decimal(row.haber)));
+      balances.set(row.cuentaId, current.plus(movementBalanceEffect(row.debe, row.haber, row.cuenta.naturaleza)));
     }
     return balances;
   }

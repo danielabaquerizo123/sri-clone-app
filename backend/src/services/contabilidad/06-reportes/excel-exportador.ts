@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import type { AccountingEngineResult } from "../contratos";
 import type { PreviewEntry } from "../04-asientos/constructor-asiento.service";
 import type { LibroMayorFolio, LibroMayorResponse } from "./libro-mayor/libro-mayor.types";
+import type { BalanceComprobacionResponse } from "./balance-comprobacion.generator";
 
 export class AccountingExcelExporter {
   prepare(_result: AccountingEngineResult): Buffer | null {
@@ -28,6 +29,7 @@ export class AccountingExcelExporter {
     periodo?: string;
     asientos: PreviewEntry[];
     libroMayor?: LibroMayorResponse;
+    balanceComprobacion?: BalanceComprobacionResponse;
     warnings?: string[];
   }): Buffer {
     const workbook = XLSX.utils.book_new();
@@ -38,6 +40,15 @@ export class AccountingExcelExporter {
     } else {
       appendEmptyLibroMayorSheet(workbook, params);
     }
+    if (params.balanceComprobacion) {
+      appendBalanceComprobacionSheet(workbook, params.balanceComprobacion);
+    }
+    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  }
+
+  exportBalanceComprobacion(result: BalanceComprobacionResponse): Buffer {
+    const workbook = XLSX.utils.book_new();
+    appendBalanceComprobacionSheet(workbook, result);
     return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
   }
 }
@@ -177,6 +188,58 @@ function appendEmptyLibroMayorSheet(workbook: XLSX.WorkBook, params: { ruc?: str
   XLSX.utils.book_append_sheet(workbook, sheet, "Libro Mayor");
 }
 
+function appendBalanceComprobacionSheet(workbook: XLSX.WorkBook, result: BalanceComprobacionResponse) {
+  const rows: Array<Array<string | number>> = [
+    [result.empresa.razonSocial || "No disponible", "", "", "", "", "", ""],
+    [`RUC: ${result.empresa.ruc || ""}`, "", "", "", "", "", ""],
+    ["Balance de Comprobación", "", "", "", "", "", ""],
+    [`Periodo: ${periodLabelFromBalance(result)}`, "", "", "", "", "", ""],
+    ["Expresado en Dólares", "", "", "", "", "", ""],
+    [],
+    ["N°", "Cuenta", "Código", "Sumas", "", "Saldos", ""],
+    ["", "", "", "Debe", "Haber", "Deudor", "Acreedor"],
+  ];
+
+  result.filas.forEach((row) => {
+    rows.push([
+      row.numero,
+      row.cuenta,
+      row.codigo,
+      moneyOrBlank(row.debe),
+      moneyOrBlank(row.haber),
+      moneyOrBlank(row.deudor),
+      moneyOrBlank(row.acreedor),
+    ]);
+  });
+
+  rows.push([
+    "",
+    "TOTALES",
+    "",
+    money(result.resumen.totalDebe),
+    money(result.resumen.totalHaber),
+    money(result.resumen.totalDeudor),
+    money(result.resumen.totalAcreedor),
+  ]);
+  rows.push([]);
+  rows.push(["Verificación sumas", result.resumen.cuadradoSumas ? "CUADRADO" : "NO CUADRADO", "", "", "", "", ""]);
+  rows.push(["Verificación saldos", result.resumen.cuadradoSaldos ? "CUADRADO" : "NO CUADRADO", "", "", "", "", ""]);
+
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  sheet["!cols"] = [
+    { wch: 8 },
+    { wch: 52 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+  ];
+  sheet["!autofilter"] = { ref: `A8:G${Math.max(rows.length - 4, 8)}` };
+  sheet["!freeze"] = { xSplit: 0, ySplit: 8 };
+  XLSX.utils.book_append_sheet(workbook, sheet, "Balance Comprobacion");
+}
+
 function appendFolioRows(rows: Array<Array<string | number>>, folio: LibroMayorFolio) {
   rows.push([`CÓDIGO Y DENOMINACIÓN DE LA CUENTA CONTABLE: ${folio.codigoCuenta} — ${folio.nombreCuenta}`]);
   rows.push([]);
@@ -209,6 +272,11 @@ function money(value: unknown) {
   return Number.isFinite(numberValue) ? Math.round((numberValue + Number.EPSILON) * 100) / 100 : 0;
 }
 
+function moneyOrBlank(value: unknown) {
+  const amount = money(value);
+  return amount > 0 ? amount : "";
+}
+
 function journalTotalsFromEntries(asientos: PreviewEntry[]) {
   return asientos.reduce(
     (acc, entry) => {
@@ -226,6 +294,10 @@ function journalTotalsFromEntries(asientos: PreviewEntry[]) {
 
 function periodLabel(result?: LibroMayorResponse) {
   if (!result) return "";
+  return [result.periodo.mes, result.periodo.anio].filter(Boolean).join("/");
+}
+
+function periodLabelFromBalance(result: BalanceComprobacionResponse) {
   return [result.periodo.mes, result.periodo.anio].filter(Boolean).join("/");
 }
 

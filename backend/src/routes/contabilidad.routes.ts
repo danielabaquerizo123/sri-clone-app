@@ -3,8 +3,12 @@ import multer from "multer";
 import {
   consultarLibroDiario,
   consultarFolioLibroMayor,
+  consultarBalanceComprobacion,
+  consultarBalanceComprobacionPreview,
   consultarLibroMayor,
   consultarLibroMayorPreview,
+  exportarBalanceComprobacionExcel,
+  exportarBalanceComprobacionPreviewExcel,
   exportarLibroDiarioPreviewExcel,
   exportarLibroMayorExcel,
   exportarLibroMayorPdf,
@@ -42,6 +46,10 @@ router.get("/:ruc/libro-mayor/exportar/pdf", exportarLibroMayorPdf);
 router.post("/:ruc/libro-mayor/preview/exportar/excel", exportarLibroMayorPreviewExcel);
 router.post("/:ruc/libro-mayor/preview/exportar/pdf", exportarLibroMayorPreviewPdf);
 router.get("/:ruc/libro-mayor/cuentas/:cuentaId", consultarFolioLibroMayor);
+router.get("/:ruc/balance-comprobacion", consultarBalanceComprobacion);
+router.post("/:ruc/balance-comprobacion/preview", consultarBalanceComprobacionPreview);
+router.get("/:ruc/balance-comprobacion/exportar/excel", exportarBalanceComprobacionExcel);
+router.post("/:ruc/balance-comprobacion/preview/exportar/excel", exportarBalanceComprobacionPreviewExcel);
 
 router.post(
   "/:ruc/procesar-excel-libro-diario",

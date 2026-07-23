@@ -1195,7 +1195,8 @@ export class ExcelLibroDiarioService {
     }
 
     const uniqueIssues = deduplicateIssues(issues);
-    const warnings = uniqueIssues.filter((issue) => issue.tipo === "WARNING");
+    const warningIssues = uniqueIssues.filter((issue) => issue.tipo === "WARNING");
+    const warnings = uniqueIssues.filter((issue) => issue.tipo === "WARNING" || issue.codigo === "FORMA_PAGO_NO_PRUEBA_PAGO");
     const errors = uniqueIssues.filter((issue) => issue.tipo === "ERROR");
     const filasPorHoja = new Map(hojas.map((hoja) => [normalizeSheetName(hoja.nombre), hoja.filas]));
     const purchaseEntryByRow = new Map(
@@ -1228,7 +1229,7 @@ export class ExcelLibroDiarioService {
         totalDebe,
         totalHaber,
         errores: errors.length,
-        advertencias: warnings.length,
+        advertencias: warningIssues.length,
         documentosLeidos: documents.length,
         documentosPendientes: countPendingDocuments(uniqueIssues),
         tiposPagoCompras,
