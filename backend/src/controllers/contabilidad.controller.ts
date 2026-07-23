@@ -1,9 +1,10 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
-import { AccountingEngine } from "../services/contabilidad/accounting-engine";
-import { ExcelLibroDiarioService } from "../services/contabilidad/excel-libro-diario.service";
-import { JournalPersistenceService } from "../services/contabilidad/journal-persistence.service";
-import { JournalPreviewService } from "../services/contabilidad/journal-preview.service";
+import { AccountingEngine, ExcelLibroDiarioService, JournalPersistenceService, JournalPreviewService } from "../services/contabilidad/motor-contable";
+import { LibroMayorService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor.service";
+import { LibroMayorExportExcelService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-excel.service";
+import { LibroMayorExportPdfService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-pdf.service";
+import { AccountingExcelExporter } from "../services/contabilidad/06-reportes/excel-exportador";
 
 function buildErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -19,6 +20,37 @@ function isValidationErrorWithDetails(error: unknown): error is Error & {
 function toMoneyNumber(value: unknown) {
   const numberValue = Number(value ?? 0);
   return Number.isFinite(numberValue) ? Number(numberValue.toFixed(2)) : 0;
+}
+
+function numberQuery(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function booleanQuery(value: unknown) {
+  return value === true || value === "true" || value === "1" || value === "SI";
+}
+
+function libroMayorParams(req: Request) {
+  return {
+    ruc: req.params.ruc,
+    periodoId: typeof req.query.periodoId === "string" ? req.query.periodoId : undefined,
+    fechaDesde: typeof req.query.fechaDesde === "string" ? req.query.fechaDesde : undefined,
+    fechaHasta: typeof req.query.fechaHasta === "string" ? req.query.fechaHasta : undefined,
+    cuentaDesde: typeof req.query.cuentaDesde === "string" ? req.query.cuentaDesde : undefined,
+    cuentaHasta: typeof req.query.cuentaHasta === "string" ? req.query.cuentaHasta : undefined,
+    cuentaId: typeof req.query.cuentaId === "string" ? req.query.cuentaId : undefined,
+    busqueda: typeof req.query.busqueda === "string" ? req.query.busqueda : undefined,
+    incluirSaldoAnterior: booleanQuery(req.query.incluirSaldoAnterior),
+    incluirCuentasSinMovimiento: booleanQuery(req.query.incluirCuentasSinMovimiento),
+    page: numberQuery(req.query.page),
+    limit: numberQuery(req.query.limit),
+  };
+}
+
+function previewBody(req: Request) {
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  return (body as any).preview || body;
 }
 
 function formatLibroDiarioAsientos(asientos: any[]) {
@@ -78,7 +110,14 @@ export const procesarExcelLibroDiario = async (req: Request, res: Response) => {
     const service = new ExcelLibroDiarioService();
     const result = await service.processAsync(req.file.buffer, req.file.originalname);
 
-    return res.status(200).json(result);
+    return res.status(200).json({
+      ...result,
+      resumen: {
+        ...result.resumen,
+        ruc: result.resumen.ruc || "",
+        razonSocial: result.resumen.razonSocial || "No disponible",
+      },
+    });
   } catch (error) {
     return res.status(500).json({
       message: "Error generando Libro Diario desde Excel ATS.",
@@ -220,6 +259,178 @@ export const consultarLibroDiario = async (req: Request, res: Response) => {
   } catch (error) {
     return res.status(500).json({
       message: "Error consultando Libro Diario.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const exportarLibroDiarioPreviewExcel = async (req: Request, res: Response) => {
+  try {
+    const preview = previewBody(req) as any;
+    const asientos = Array.isArray(preview?.libroDiario)
+      ? preview.libroDiario
+      : Array.isArray(preview?.asientos)
+        ? preview.asientos
+        : [];
+    const libroMayor = new LibroMayorService().generarDesdePreview(
+      {
+        ...preview,
+        asientos,
+      },
+      {
+        page: 1,
+        limit: Number.MAX_SAFE_INTEGER,
+      }
+    );
+    const buffer = new AccountingExcelExporter().exportReporteContable({
+      ruc: preview?.resumen?.ruc || preview?.ruc || "",
+      razonSocial: preview?.resumen?.razonSocial || preview?.razonSocial,
+      periodo: preview?.resumen?.periodo || preview?.periodo,
+      asientos,
+      libroMayor,
+      warnings: Array.isArray(preview?.warnings)
+        ? preview.warnings.map((warning: any) => String(warning?.mensaje || warning)).filter(Boolean)
+        : [],
+    });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="Reporte_Contable_${req.params.ruc}.xlsx"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error exportando Libro Diario preview a Excel.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const consultarLibroMayor = async (req: Request, res: Response) => {
+  try {
+    const result = await new LibroMayorService().generar(libroMayorParams(req));
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error consultando Libro Mayor.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const consultarLibroMayorPreview = async (req: Request, res: Response) => {
+  try {
+    const result = new LibroMayorService().generarDesdePreview(previewBody(req), libroMayorParams(req));
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error generando Libro Mayor desde preview.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const consultarFolioLibroMayor = async (req: Request, res: Response) => {
+  try {
+    const result = await new LibroMayorService().generarFolio({
+      ...libroMayorParams(req),
+      cuentaId: req.params.cuentaId,
+    });
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error consultando folio de Libro Mayor.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const validarLibroMayor = async (req: Request, res: Response) => {
+  try {
+    const result = await new LibroMayorService().validar(libroMayorParams(req));
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error validando Libro Mayor.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const exportarLibroMayorExcel = async (req: Request, res: Response) => {
+  try {
+    const result = await new LibroMayorService().generar({
+      ...libroMayorParams(req),
+      page: 1,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    const buffer = new LibroMayorExportExcelService().export(result);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="libro-mayor-${req.params.ruc}.xlsx"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error exportando Libro Mayor a Excel.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const exportarLibroMayorPreviewExcel = async (req: Request, res: Response) => {
+  try {
+    const result = new LibroMayorService().generarDesdePreview(previewBody(req), {
+      ...libroMayorParams(req),
+      page: 1,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    const buffer = new LibroMayorExportExcelService().export(result);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="libro-mayor-borrador-${req.params.ruc}.xlsx"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error exportando Libro Mayor preview a Excel.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const exportarLibroMayorPdf = async (req: Request, res: Response) => {
+  try {
+    const result = await new LibroMayorService().generar({
+      ...libroMayorParams(req),
+      page: 1,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    const buffer = await new LibroMayorExportPdfService().export(result);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="libro-mayor-${req.params.ruc}.pdf"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error exportando Libro Mayor a PDF.",
+      error: buildErrorMessage(error),
+    });
+  }
+};
+
+export const exportarLibroMayorPreviewPdf = async (req: Request, res: Response) => {
+  try {
+    const result = new LibroMayorService().generarDesdePreview(previewBody(req), {
+      ...libroMayorParams(req),
+      page: 1,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    const buffer = await new LibroMayorExportPdfService().export(result);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="libro-mayor-borrador-${req.params.ruc}.pdf"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error exportando Libro Mayor preview a PDF.",
       error: buildErrorMessage(error),
     });
   }

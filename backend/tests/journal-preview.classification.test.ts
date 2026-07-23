@@ -4,7 +4,7 @@ import {
   validatePreviewEntryForTest,
   validateResolvedRuleAccounts,
   type PreviewEntry,
-} from "../src/services/contabilidad/journal-preview.service";
+} from "../src/services/contabilidad/motor-contable";
 
 function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
   return {
@@ -20,7 +20,7 @@ function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
     lineas: [
       {
         cuentaId: "cuenta-base",
-        codigo: "5.02.02.08",
+        codigo: "5020208",
         cuenta: "Mantenimiento",
         descripcion: "Base",
         debe: 100,
@@ -29,7 +29,7 @@ function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
       },
       {
         cuentaId: "cuenta-contrapartida",
-        codigo: "2.01.01.01",
+        codigo: "2010102",
         cuenta: "Proveedores",
         descripcion: "Contrapartida",
         debe: 0,
@@ -106,7 +106,7 @@ function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
   const errors = validateResolvedRuleAccounts({
     codigo: "REG_AGRUPADORA",
     cuentaBase: { codigo: "5", activa: true, movimiento: false },
-    cuentaContrapartida: { codigo: "2.01.01.01", activa: true, movimiento: true },
+    cuentaContrapartida: { codigo: "2010102", activa: true, movimiento: true },
   });
 
   assert.ok(errors.some((message) => message.includes("agrupadora")));
@@ -115,8 +115,8 @@ function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
 {
   const errors = validateResolvedRuleAccounts({
     codigo: "REG_INACTIVA",
-    cuentaBase: { codigo: "5.02.02.08", activa: false, movimiento: true },
-    cuentaContrapartida: { codigo: "2.01.01.01", activa: true, movimiento: true },
+    cuentaBase: { codigo: "5020208", activa: false, movimiento: true },
+    cuentaContrapartida: { codigo: "2010102", activa: true, movimiento: true },
   });
 
   assert.ok(errors.some((message) => message.includes("inactiva")));
@@ -126,7 +126,7 @@ function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
   const errors = validateResolvedRuleAccounts({
     codigo: "REG_SIN_CUENTA",
     cuentaBase: null,
-    cuentaContrapartida: { codigo: "2.01.01.01", activa: true, movimiento: true },
+    cuentaContrapartida: { codigo: "2010102", activa: true, movimiento: true },
   });
 
   assert.ok(errors.some((message) => message.includes("no existe")));
@@ -138,7 +138,7 @@ function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
       lineas: [
         {
           cuentaId: "cuenta-base",
-          codigo: "5.02.02.08",
+          codigo: "5020208",
           cuenta: "Mantenimiento",
           descripcion: "Base",
           debe: 100,
@@ -147,7 +147,7 @@ function validEntry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
         },
         {
           cuentaId: "cuenta-contrapartida",
-          codigo: "2.01.01.01",
+          codigo: "2010102",
           cuenta: "Proveedores",
           descripcion: "Contrapartida",
           debe: 0,

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AccountingEngine } from "../src/services/contabilidad/accounting-engine";
-import { ExcelLibroDiarioService } from "../src/services/contabilidad/excel-libro-diario.service";
-import { adaptCompra } from "../src/services/contabilidad/adapters/compra.adapter";
+import { AccountingEngine } from "../src/services/contabilidad/motor-contable";
+import { ExcelLibroDiarioService } from "../src/services/contabilidad/motor-contable";
+import { adaptCompra } from "../src/services/contabilidad/01-lectura/compra.adapter";
 import {
   classifyAccountingDocument,
-} from "../src/services/contabilidad/application/accounting-classification.service";
-import { AccountingJournalValidatorService } from "../src/services/contabilidad/application/accounting-journal-validator.service";
-import { AccountingRoleResolver } from "../src/services/contabilidad/application/accounting-role-resolver.service";
-import type { JournalEntry } from "../src/services/contabilidad/domain/journal-entry";
+} from "../src/services/contabilidad/02-clasificacion/clasificador.service";
+import { AccountingJournalValidatorService } from "../src/services/contabilidad/04-asientos/validador-cuadre.service";
+import { AccountingRoleResolver } from "../src/services/contabilidad/03-cuentas/resolver-cuentas.service";
+import type { JournalEntry } from "../src/services/contabilidad/contratos";
 
 const root = join(__dirname, "..", "src", "services", "contabilidad");
 
@@ -18,7 +18,7 @@ function read(relative: string) {
 }
 
 {
-  const facade = read("facades/journal-preview.facade.ts");
+  const facade = read("04-asientos/preview-asientos.service.ts");
   assert.equal(facade.includes("../accounting-rule-map"), false);
   assert.equal(facade.includes("../accounting-rules"), false);
   assert.equal(facade.includes("../accounting-rule-resolver"), false);
@@ -27,7 +27,7 @@ function read(relative: string) {
 }
 
 {
-  const applicationClassification = read("application/accounting-classification.service.ts");
+  const applicationClassification = read("02-clasificacion/clasificador.service.ts");
   assert.equal(applicationClassification.includes("accounting-known-providers"), false);
   assert.equal(applicationClassification.includes("0921638813001"), false);
   assert.equal(applicationClassification.includes("1790012345001"), false);
@@ -47,27 +47,31 @@ function read(relative: string) {
     tipoComprobante: "01",
     concepto: "Servicio profesional de asesoria",
   });
-  assert.equal(first.categoria, "SERVICIOS_PROFESIONALES");
   assert.equal(first.categoria, second.categoria);
-  assert.equal(first.origen, "REGLA_CONCEPTO");
+  assert.equal(first.origen, second.origen);
+  assert.equal(first.requiereRevision, second.requiereRevision);
 }
 
 {
   const event = {
     tipo: "DEVENGO_COMPRA" as const,
     rolesRequeridos: ["GASTO_COSTO_ACTIVO" as const],
+    clasificacion: { categoria: "MANTENIMIENTO_REPARACIONES" },
   };
-  const resolution = new AccountingRoleResolver().resolve({
+  const cuenta = { id: "cuenta-1", codigo: "5020208", nombre: "Cuenta inyectada", activa: true, movimiento: true };
+  const resolution = new AccountingRoleResolver({
+    configuraciones: [{ clave: "CATEGORIA:MANTENIMIENTO_REPARACIONES", activa: true, cuenta }],
+  }).resolve({
     event: event as any,
     role: "GASTO_COSTO_ACTIVO",
     reglaContable: {
       codigo: "TEST",
       descripcion: "Regla inyectada",
-      cuentaBase: { id: "cuenta-1", codigo: "5.01", nombre: "Cuenta inyectada", activa: true, movimiento: true },
+      cuentaBase: cuenta,
     },
   });
   assert.equal(resolution.resolved, true);
-  assert.equal(resolution.cuenta?.codigo, "5.01");
+  assert.equal(resolution.cuenta?.codigo, "5020208");
 }
 
 {
@@ -106,8 +110,8 @@ function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
     hojaOrigen: "COMPRAS",
     filaOrigen: 1,
     lineas: [
-      { cuentaId: "cuenta-gasto", codigo: "5.01", cuenta: "Gasto", descripcion: "Debe", debe: 100, haber: 0, orden: 1 },
-      { cuentaId: "cuenta-cxp", codigo: "2.01", cuenta: "Cxp", descripcion: "Haber", debe: 0, haber: 100, orden: 2 },
+      { cuentaId: "cuenta-gasto", codigo: "5020208", cuenta: "Gasto", descripcion: "Debe", debe: 100, haber: 0, orden: 1 },
+      { cuentaId: "cuenta-cxp", codigo: "2010102", cuenta: "Cxp", descripcion: "Haber", debe: 0, haber: 100, orden: 2 },
     ],
     totalDebe: 100,
     totalHaber: 100,
@@ -126,8 +130,8 @@ function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
 {
   const validator = new AccountingJournalValidatorService({
     accounts: [
-      { id: "cuenta-gasto", codigo: "5.01", activa: true, movimiento: false },
-      { id: "cuenta-cxp", codigo: "2.01", activa: true, movimiento: true },
+      { id: "cuenta-gasto", codigo: "5020208", activa: true, movimiento: false },
+      { id: "cuenta-cxp", codigo: "2010102", activa: true, movimiento: true },
     ],
   });
   const issues = validator.validate(entry());

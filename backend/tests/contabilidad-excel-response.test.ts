@@ -2,20 +2,26 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import * as XLSX from "xlsx";
-import { ExcelLibroDiarioService } from "../src/services/contabilidad/excel-libro-diario.service";
+import { ExcelLibroDiarioService } from "../src/services/contabilidad/motor-contable";
 
 type RowPatch = Record<number, unknown>;
 
 const accounts = {
-  gasto: { id: "5.01.01.01", codigo: "5.01.01.01", nombre: "COMPRAS INVENTARIO", activa: true, movimiento: true },
-  gastoAgrupadora: { id: "5.01", codigo: "5.01", nombre: "GASTOS AGRUPADORA", activa: true, movimiento: false },
-  ivaCompra: { id: "1.01.05.01", codigo: "1.01.05.01", nombre: "IVA COMPRAS", activa: true, movimiento: true },
-  cxp: { id: "2.01.01.01", codigo: "2.01.01.01", nombre: "CUENTAS POR PAGAR PROVEEDORES", activa: true, movimiento: true },
-  retFuentePagar: { id: "2.01.07.02", codigo: "2.01.07.02", nombre: "RETENCIONES FUENTE POR PAGAR", activa: true, movimiento: true },
-  retIvaPagar: { id: "2.01.07.03", codigo: "2.01.07.03", nombre: "RETENCIONES IVA POR PAGAR", activa: true, movimiento: true },
-  ingreso: { id: "4.01.01.01", codigo: "4.01.01.01", nombre: "VENTAS LOCALES", activa: true, movimiento: true },
-  ivaVenta: { id: "2.01.07.01", codigo: "2.01.07.01", nombre: "IVA VENTAS", activa: true, movimiento: true },
-  cxc: { id: "1.01.02.01", codigo: "1.01.02.01", nombre: "CUENTAS POR COBRAR CLIENTES", activa: true, movimiento: true },
+  gasto: { id: "5020228", codigo: "5020228", nombre: "SUMINISTROS Y MATERIALES", activa: true, movimiento: true },
+  mantenimiento: { id: "5020208", codigo: "5020208", nombre: "MANTENIMIENTO Y REPARACIONES", activa: true, movimiento: true },
+  combustible: { id: "5020212", codigo: "5020212", nombre: "COMBUSTIBLE", activa: true, movimiento: true },
+  gastoAgrupadora: { id: "502", codigo: "502", nombre: "GASTOS AGRUPADORA", activa: true, movimiento: false },
+  ivaCompra: { id: "1010501", codigo: "1010501", nombre: "IVA CREDITO TRIBUTARIO", activa: true, movimiento: true },
+  cxp: { id: "2010102", codigo: "2010102", nombre: "CUENTAS POR PAGAR PROVEEDORES", activa: true, movimiento: true },
+  retFuentePagar: { id: "2010702", codigo: "2010702", nombre: "RETENCIONES FUENTE POR PAGAR", activa: true, movimiento: true },
+  retIvaPagar: { id: "2010703", codigo: "2010703", nombre: "RETENCIONES IVA POR PAGAR", activa: true, movimiento: true },
+  ingreso: { id: "4010101", codigo: "4010101", nombre: "VENTAS LOCALES", activa: true, movimiento: true },
+  ivaVenta: { id: "2010701", codigo: "2010701", nombre: "IVA VENTAS", activa: true, movimiento: true },
+  cxc: { id: "1010201", codigo: "1010201", nombre: "CUENTAS POR COBRAR CLIENTES", activa: true, movimiento: true },
+  retFuenteCobrar: { id: "1010502", codigo: "1010502", nombre: "RETENCION FUENTE POR COBRAR", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
+  retIvaCobrar: { id: "1010504", codigo: "1010504", nombre: "RETENCION IVA POR COBRAR", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
+  caja: { id: "1010101", codigo: "1010101", nombre: "CAJA", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
+  banco: { id: "1010103", codigo: "1010103", nombre: "INSTITUCIONES FINANCIERAS PRIVADAS", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
 };
 
 function rules(baseAccount = accounts.gasto) {
@@ -132,40 +138,73 @@ function workbookBuffer(sheets: Record<string, unknown[][]>) {
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }
 
+function classificationConfig() {
+  return {
+    reglasConcepto: [
+      {
+        id: "TEST_MANTENIMIENTO",
+        categoria: "MANTENIMIENTO_REPARACIONES",
+        confianza: "ALTA" as const,
+        origen: "REGLA_CONCEPTO" as const,
+        motivos: ["Fixture de prueba: concepto con mantenimiento."],
+        match: (context: any) => String(context.conceptoNormalizado || "").includes("MANTENIMIENTO"),
+      },
+      {
+        id: "TEST_MATERIALES",
+        categoria: "SUMINISTROS_MATERIALES",
+        confianza: "ALTA" as const,
+        origen: "REGLA_CONCEPTO" as const,
+        motivos: ["Fixture de prueba: concepto con materiales."],
+        match: (context: any) => String(context.conceptoNormalizado || "").includes("MATERIALES"),
+      },
+      {
+        id: "TEST_COMBUSTIBLE",
+        categoria: "COMBUSTIBLE",
+        confianza: "ALTA" as const,
+        origen: "REGLA_CONCEPTO" as const,
+        motivos: ["Fixture de prueba: concepto con combustible."],
+        match: (context: any) => String(context.conceptoNormalizado || "").includes("COMBUSTIBLE"),
+      },
+    ],
+    reglasGenerales: [
+      {
+        id: "TEST_VENTA",
+        categoria: "VENTA_BIENES",
+        confianza: "ALTA" as const,
+        origen: "REGLA_GENERAL" as const,
+        requiereRevision: false,
+        motivos: ["Fixture de prueba: venta local."],
+        match: (context: any) => context.hoja === "VENTAS",
+      },
+    ],
+  };
+}
+
+function accountConfigurations(baseAccount = accounts.gasto) {
+  return [
+    { clave: "CATEGORIA:SUMINISTROS_MATERIALES", activa: true, cuenta: baseAccount },
+    { clave: "CATEGORIA:MANTENIMIENTO_REPARACIONES", activa: true, cuenta: accounts.mantenimiento },
+    { clave: "CATEGORIA:COMBUSTIBLE", activa: true, cuenta: accounts.combustible },
+    { clave: "ROL:RETENCION_FUENTE_POR_PAGAR", activa: true, cuenta: accounts.retFuentePagar },
+    { clave: "ROL:RETENCION_IVA_POR_PAGAR", activa: true, cuenta: accounts.retIvaPagar },
+    { clave: "ROL:CUENTAS_POR_PAGAR_PROVEEDORES", activa: true, cuenta: accounts.cxp },
+    { clave: "ROL:IVA_CREDITO_TRIBUTARIO", activa: true, cuenta: accounts.ivaCompra },
+    { clave: "ROL:CUENTAS_POR_COBRAR_CLIENTES", activa: true, cuenta: accounts.cxc },
+    { clave: "ROL:RETENCION_FUENTE_POR_COBRAR", activa: true, cuenta: accounts.retFuenteCobrar },
+    { clave: "ROL:RETENCION_IVA_POR_COBRAR", activa: true, cuenta: accounts.retIvaCobrar },
+    { clave: "ROL:INGRESO_VENTAS", activa: true, cuenta: accounts.ingreso },
+    { clave: "ROL:IVA_POR_PAGAR", activa: true, cuenta: accounts.ivaVenta },
+    { clave: "ROL:CUENTA_FINANCIERA_CAJA", activa: true, cuenta: accounts.caja },
+    { clave: "ROL:CUENTA_FINANCIERA_BANCO", activa: true, cuenta: accounts.banco },
+  ];
+}
+
 function service(baseAccount = accounts.gasto) {
   return new ExcelLibroDiarioService({
     accounts: Object.values(accounts),
     rules: rules(baseAccount),
-    classification: {
-      reglasConcepto: [
-        {
-          id: "TEST_MATERIALES",
-          categoria: "SUMINISTROS_MATERIALES",
-          confianza: "ALTA",
-          origen: "REGLA_CONCEPTO",
-          motivos: ["Fixture de prueba: concepto con materiales."],
-          match: (context: any) => String(context.conceptoNormalizado || "").includes("MATERIALES"),
-        },
-      ],
-      reglasGenerales: [
-        {
-          id: "TEST_VENTA",
-          categoria: "VENTA_BIENES",
-          confianza: "ALTA",
-          origen: "REGLA_GENERAL",
-          requiereRevision: false,
-          motivos: ["Fixture de prueba: venta local."],
-          match: (context: any) => context.hoja === "VENTAS",
-        },
-      ],
-    },
-    accountConfigurations: [
-      { clave: "CATEGORIA:SUMINISTROS_MATERIALES", activa: true, cuenta: baseAccount },
-      { clave: "ROL:RETENCION_FUENTE_POR_PAGAR", activa: true, cuenta: accounts.retFuentePagar },
-      { clave: "ROL:RETENCION_IVA_POR_PAGAR", activa: true, cuenta: accounts.retIvaPagar },
-      { clave: "ROL:CUENTAS_POR_PAGAR_PROVEEDORES", activa: true, cuenta: accounts.cxp },
-      { clave: "ROL:IVA_CREDITO_TRIBUTARIO", activa: true, cuenta: accounts.ivaCompra },
-    ],
+    classification: classificationConfig(),
+    accountConfigurations: accountConfigurations(baseAccount),
   });
 }
 
@@ -174,7 +213,7 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
   result.asientos.forEach((asiento) => {
     assert.equal(asiento.totalDebe, asiento.totalHaber);
     assert.ok(asiento.lineas.length >= 2);
-    assert.equal(asiento.lineas.some((linea) => linea.codigo === "5.02.02.29"), false);
+    assert.equal(asiento.lineas.some((linea) => /\./.test(linea.codigo)), false);
     assert.equal(asiento.lineas.some((linea) => linea.cuenta.includes("AJUSTE")), false);
   });
 }
@@ -194,7 +233,7 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
   assert.deepEqual(result.resumen.hojasLeidas, ["COMPRAS", "VENTAS", "GASTOSP"]);
   assert.deepEqual(result.resumen.hojasIgnoradas, ["PARAMETROS"]);
   assert.equal(result.resumen.documentosLeidos, 2);
-  assert.equal(result.resumen.asientos, 2);
+  assert.equal(result.resumen.asientos, 4);
   assert.deepEqual(result.resumen.tiposPagoCompras, { "01": 1 });
   assert.deepEqual(result.resumen.formasPagoCompras, { "01": 1 });
   assert.deepEqual(result.resumen.formasCobroVentas, { "01": 1 });
@@ -206,14 +245,93 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
   assert.equal(Array.isArray(result.warnings), true);
   assert.equal(Array.isArray(result.errors), true);
   assertBalanced(result);
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.gasto.codigo && linea.debe === 100));
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.ivaCompra.codigo && linea.debe === 15));
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.cxp.codigo && linea.haber === 115));
   assert.ok(result.asientos[0].evidencias?.some((evidence: any) => evidence.campo === "tipoPago"));
   assert.ok(result.asientos[0].evidencias?.some((evidence: any) => evidence.campo === "formaPago1"));
   assert.ok(result.asientos.some((asiento: any) => asiento.evidencias?.some((evidence: any) => evidence.campo === "formaCobro1")));
 }
 
 {
+  const result = new ExcelLibroDiarioService({
+    accounts: Object.values(accounts),
+    rules: [],
+    classification: classificationConfig(),
+    accountConfigurations: accountConfigurations(),
+  }).process(
+    workbookBuffer({
+      COMPRAS: [
+        compra({
+          0: "0992155312001",
+          2: "Corporacion Proauto S.A.",
+          7: "031",
+          8: "203",
+          9: "000018357",
+          18: "",
+          40: "Mantenimiento preventivo y correctivo de vehículo empresarial",
+        }),
+      ],
+    }),
+    "proauto-sin-regla.xlsx"
+  );
+
+  assert.equal(result.resumen.asientos, 2);
+  assert.equal(result.asientos[0].clasificacion?.categoria, "MANTENIMIENTO_REPARACIONES");
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.mantenimiento.codigo && linea.debe === 100));
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.ivaCompra.codigo && linea.debe === 15));
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.cxp.codigo && linea.haber === 115));
+  assert.equal(result.issues.some((issue) => issue.codigo === "PENDIENTE_CUENTA"), false);
+  assertBalanced(result);
+}
+
+{
+  const result = new ExcelLibroDiarioService({
+    accounts: Object.values(accounts),
+    rules: [],
+    classification: classificationConfig(),
+    accountConfigurations: accountConfigurations(),
+  }).process(workbookBuffer({ VENTAS: [venta()] }), "venta-sin-regla.xlsx");
+
+  assert.equal(result.resumen.asientos, 2);
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.cxc.codigo && linea.debe === 230));
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.ingreso.codigo && linea.haber === 200));
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.ivaVenta.codigo && linea.haber === 30));
+  assertBalanced(result);
+}
+
+{
+  const configsWithoutIvaPorPagar = accountConfigurations().filter((config) => config.clave !== "ROL:IVA_POR_PAGAR");
+  const result = new ExcelLibroDiarioService({
+    accounts: Object.values(accounts),
+    rules: [],
+    classification: classificationConfig(),
+    accountConfigurations: configsWithoutIvaPorPagar,
+  }).process(
+    workbookBuffer({ VENTAS: [venta(), venta({ 10: "000000002" })] }),
+    "ventas-sin-iva-por-pagar.xlsx"
+  );
+
+  const missingIvaErrors = result.errors.filter(
+    (issue) => issue.codigo === "ROL_SIN_RESOLVER" && issue.campo === "IVA_POR_PAGAR"
+  );
+  assert.equal(result.resumen.asientos, 0);
+  assert.equal(missingIvaErrors.length, 1);
+  assert.ok(missingIvaErrors[0].mensaje.includes("ROL:IVA_POR_PAGAR"));
+  assert.ok(missingIvaErrors[0].mensaje.includes("Documentos afectados: 2"));
+}
+
+{
+  const result = service().process(workbookBuffer({ COMPRAS: [compra({ 18: "Compra de combustible" })] }), "combustible.xlsx");
+  assert.equal(result.resumen.asientos, 2);
+  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.combustible.codigo && linea.debe === 100));
+  assert.equal(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.gasto.codigo), false);
+  assertBalanced(result);
+}
+
+{
   const result = service().process(workbookBuffer({ COMPRAS: [compra({ 22: 63.96, 23: null, 25: null, 36: 63.96 })] }), "compra-0.xlsx");
-  assert.equal(result.resumen.asientos, 1);
+  assert.equal(result.resumen.asientos, 2);
   assert.equal(result.asientos[0].totalDebe, 63.96);
   assertBalanced(result);
 }
@@ -221,42 +339,44 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
 {
   const result = service().process(workbookBuffer({ COMPRAS: [compra({ 94: "20-OTROS CON UTILIZACION DEL SISTEMA FINANCIERO" })] }), "compra-pago-20.xlsx");
   assert.deepEqual(result.resumen.formasPagoCompras, { "20": 1 });
-  assert.equal(result.asientos.some((asiento) => asiento.tipoEvento === "PAGO_PROVEEDOR"), false);
-  assert.equal(result.asientos.some((asiento) => asiento.lineas.some((linea) => linea.codigo.includes("BANC"))), false);
-  assert.ok(result.asientos[0].evidencias?.some((evidence: any) => evidence.valor === "20-OTROS CON UTILIZACION DEL SISTEMA FINANCIERO"));
+  const pago = result.asientos.find((asiento) => asiento.tipoEvento === "PAGO_PROVEEDOR");
+  assert.ok(pago);
+  assert.ok(pago.lineas.some((linea) => linea.codigo === accounts.banco.codigo && linea.haber === 115));
+  assert.ok(pago.evidencias?.some((evidence: any) => evidence.valor === "20-OTROS CON UTILIZACION DEL SISTEMA FINANCIERO"));
 }
 
 {
   const result = service().process(workbookBuffer({ VENTAS: [venta({ 53: "20-OTROS CON UTILIZACION DEL SISTEMA FINANCIERO" })] }), "venta-cobro-20.xlsx");
   assert.deepEqual(result.resumen.formasCobroVentas, { "20": 1 });
-  assert.equal(result.asientos.some((asiento) => asiento.tipoEvento === "COBRO_CLIENTE"), false);
-  assert.equal(result.asientos.some((asiento) => asiento.lineas.some((linea) => linea.codigo.includes("BANC"))), false);
-  assert.ok(result.asientos[0].evidencias?.some((evidence: any) => evidence.valor === "20-OTROS CON UTILIZACION DEL SISTEMA FINANCIERO"));
+  const cobro = result.asientos.find((asiento) => asiento.tipoEvento === "COBRO_CLIENTE");
+  assert.ok(cobro);
+  assert.ok(cobro.lineas.some((linea) => linea.codigo === accounts.banco.codigo && linea.debe === 230));
+  assert.ok(cobro.evidencias?.some((evidence: any) => evidence.valor === "20-OTROS CON UTILIZACION DEL SISTEMA FINANCIERO"));
 }
 
 {
   const result = service().process(workbookBuffer({ COMPRAS: [compra({ 57: "332", 58: 100, 59: "1.75%", 60: 1.75 })] }), "ret-fuente.xlsx");
-  assert.equal(result.resumen.asientos, 1);
+  assert.equal(result.resumen.asientos, 2);
   assert.equal(result.errors.length, 0);
   assert.equal(result.asientos.some((asiento) => asiento.tipoEvento === "RETENCION_EMITIDA"), false);
-  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.retFuentePagar.codigo && linea.haber === 1.75));
+  assert.ok(result.asientos[1].lineas.some((linea) => linea.codigo === accounts.retFuentePagar.codigo && linea.haber === 1.75));
 }
 
 {
   const result = service().process(workbookBuffer({ COMPRAS: [compra({ 82: 4.5 })] }), "ret-iva.xlsx");
-  assert.equal(result.resumen.asientos, 1);
+  assert.equal(result.resumen.asientos, 2);
   assert.equal(result.errors.length, 0);
   assert.equal(result.asientos.some((asiento) => asiento.tipoEvento === "RETENCION_EMITIDA"), false);
-  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.retIvaPagar.codigo && linea.haber === 4.5));
+  assert.ok(result.asientos[1].lineas.some((linea) => linea.codigo === accounts.retIvaPagar.codigo && linea.haber === 4.5));
 }
 
 {
   const result = service().process(workbookBuffer({ COMPRAS: [compra({ 60: 1.75, 82: 4.5 })] }), "ret-ambas.xlsx");
-  assert.equal(result.resumen.asientos, 1);
+  assert.equal(result.resumen.asientos, 2);
   assert.equal(result.errors.length, 0);
   assert.equal(result.asientos.some((asiento) => asiento.tipoEvento === "RETENCION_EMITIDA"), false);
-  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.retFuentePagar.codigo && linea.haber === 1.75));
-  assert.ok(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.retIvaPagar.codigo && linea.haber === 4.5));
+  assert.ok(result.asientos[1].lineas.some((linea) => linea.codigo === accounts.retFuentePagar.codigo && linea.haber === 1.75));
+  assert.ok(result.asientos[1].lineas.some((linea) => linea.codigo === accounts.retIvaPagar.codigo && linea.haber === 4.5));
 }
 
 {
@@ -267,8 +387,10 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
 
 {
   const result = service().process(workbookBuffer({ VENTAS: [venta({ 43: 5, 44: 10, 46: "001-001-9", 47: "17/04/2026" })] }), "venta-ret.xlsx");
-  assert.equal(result.resumen.asientos, 1);
-  assert.ok(result.errors.some((issue) => issue.codigo === "ROL_SIN_RESOLVER" && issue.campo === "RETENCION_FUENTE_POR_COBRAR"));
+  assert.equal(result.resumen.asientos, 2);
+  assert.equal(result.errors.some((issue) => issue.codigo === "ROL_SIN_RESOLVER" && issue.campo === "RETENCION_FUENTE_POR_COBRAR"), false);
+  assert.ok(result.asientos[1].lineas.some((linea) => linea.codigo === accounts.retFuenteCobrar.codigo && linea.debe === 10));
+  assert.ok(result.asientos[1].lineas.some((linea) => linea.codigo === accounts.retIvaCobrar.codigo && linea.debe === 5));
 }
 
 {
@@ -287,9 +409,9 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
 
 {
   const result = service().process(workbookBuffer({ COMPRAS: [compra({ 23: null, 25: null, 22: 42, 36: 42, 94: "01-SIN SISTEMA FINANCIERO" })] }), "ups-sin-iva.xlsx");
-  assert.equal(result.resumen.asientos, 1);
+  assert.equal(result.resumen.asientos, 2);
   assert.equal(result.asientos[0].lineas.some((linea) => linea.codigo === accounts.ivaCompra.codigo), false);
-  assert.equal(result.asientos[0].lineas.some((linea) => linea.codigo.includes("BANC")), false);
+  assert.equal(result.asientos[1].lineas.some((linea) => linea.codigo === accounts.caja.codigo && linea.haber === 42), true);
 }
 
 {
@@ -320,7 +442,7 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
 {
   const result = service().process(workbookBuffer({ COMPRAS: [compra()], VENTAS: [venta(), venta({ 10: "000000002", 27: 115, 15: 100, 17: 15 })] }), "mixto.xlsx");
   assert.equal(result.resumen.documentosLeidos, 3);
-  assert.equal(result.resumen.asientos, 3);
+  assert.equal(result.resumen.asientos, 6);
   assertBalanced(result);
 }
 
@@ -332,7 +454,7 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
 
 {
   const result = service().process(workbookBuffer({ COMPRAS: [compra()] }), "solo-compras.xlsx");
-  assert.equal(result.resumen.asientos, 1);
+  assert.equal(result.resumen.asientos, 2);
   assertBalanced(result);
 }
 
@@ -343,7 +465,7 @@ function assertBalanced(result: ReturnType<ExcelLibroDiarioService["process"]>) 
   assert.ok(result.resumen.documentosLeidos > 0);
   assert.ok(result.resumen.asientos > 0);
   assert.equal(result.resumen.totalDebe, result.resumen.totalHaber);
-  assert.equal(result.asientos.some((asiento) => asiento.lineas.some((linea) => linea.codigo === "5.02.02.29")), false);
+  assert.equal(result.asientos.some((asiento) => asiento.lineas.some((linea) => /\./.test(linea.codigo))), false);
   assert.equal(Array.isArray(result.issues), true);
   assert.equal(Array.isArray(result.warnings), true);
   assert.equal(Array.isArray(result.errors), true);

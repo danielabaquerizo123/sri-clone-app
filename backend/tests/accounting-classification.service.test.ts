@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   AccountingClassificationService,
   type AccountingClassificationDocument,
-} from "../src/services/contabilidad/application/accounting-classification.service";
+} from "../src/services/contabilidad/02-clasificacion/clasificador.service";
 
 function compra(overrides: Partial<AccountingClassificationDocument> = {}): AccountingClassificationDocument {
   return {

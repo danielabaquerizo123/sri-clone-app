@@ -1,0 +1,54 @@
+{
+  "cuentas": [
+    {
+      "codigo": "CODIGO_NUEVA_CUENTA",
+      "nombre": "NOMBRE CONFIGURABLE DE LA CUENTA",
+      "parentCodigo": "CODIGO_CUENTA_PADRE",
+      "tipo": "ACTIVO",
+      "naturaleza": "DEUDORA",
+      "nivel": 1,
+      "activa": true,
+      "permiteMovimiento": true
+    }
+  ],
+  "roles": [
+    {
+      "clave": "ROL:NOMBRE_DEL_ROL",
+      "codigoCuenta": "CODIGO_CUENTA_MOVIMIENTO",
+      "descripcion": "Descripción configurable del rol.",
+      "tipoEsperado": "ACTIVO",
+      "naturalezaEsperada": "DEUDORA",
+      "requiereMovimiento": true,
+      "activa": true
+    }
+  ],
+  "categorias": [
+    {
+      "clave": "CATEGORIA:NOMBRE_DE_LA_CATEGORIA",
+      "codigoCuenta": "CODIGO_CUENTA_MOVIMIENTO",
+      "descripcion": "Descripción configurable de la categoría.",
+      "tipoEsperado": "GASTO",
+      "naturalezaEsperada": "DEUDORA",
+      "requiereMovimiento": true,
+      "activa": true
+    }
+  ],
+  "reglasClasificacion": [
+    {
+      "codigo": "CODIGO_REGLA_CONFIGURABLE",
+      "categoria": "NOMBRE_DE_LA_CATEGORIA",
+      "tipoOperacion": "COMPRA",
+      "prioridad": 100,
+      "activa": true,
+      "descripcion": "Descripción configurable de la regla.",
+      "condiciones": {
+        "origen": "REGLA_CONCEPTO",
+        "confianza": "ALTA",
+        "requiereRevision": false,
+        "hojas": ["COMPRAS"],
+        "palabrasClave": ["TEXTO_CONFIGURABLE"],
+        "motivos": ["Motivo configurable mostrado al clasificar."]
+      }
+    }
+  ]
+}

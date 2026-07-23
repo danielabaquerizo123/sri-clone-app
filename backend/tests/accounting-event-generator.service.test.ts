@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { classifyAccountingDocument } from "../src/services/contabilidad/application/accounting-classification.service";
+import { classifyAccountingDocument } from "../src/services/contabilidad/02-clasificacion/clasificador.service";
 import {
   AccountingEventGenerator,
   adaptCompraToAccountingSource,
@@ -9,7 +9,7 @@ import {
   sumRetencionesFuente,
   sumRetencionesIva,
   type NormalizedAccountingSourceDocument,
-} from "../src/services/contabilidad/application/accounting-event-generator.service";
+} from "../src/services/contabilidad/04-asientos/generador-eventos.service";
 
 const alta = {
   categoria: "SUMINISTROS_MATERIALES",
@@ -94,7 +94,10 @@ function venta(overrides: Partial<NormalizedAccountingSourceDocument> = {}): Nor
   assert.ok(devengo);
   assert.equal(result.eventos.some((event) => event.tipo === "RETENCION_EMITIDA"), false);
   assert.equal(devengo.montos.retencionFuente, 1);
-  assert.ok(devengo.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"));
+  assert.equal(devengo.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"), false);
+  const pago = result.eventos.find((event) => event.tipo === "PAGO_PROVEEDOR");
+  assert.ok(pago);
+  assert.ok(pago.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"));
   assert.equal(result.eventos.some((event) => event.tipo === "PAGO_PROVEEDOR" && event.estado === "GENERABLE"), false);
 }
 
@@ -114,7 +117,10 @@ function venta(overrides: Partial<NormalizedAccountingSourceDocument> = {}): Nor
   assert.ok(devengo);
   assert.equal(result.eventos.some((event) => event.tipo === "RETENCION_EMITIDA"), false);
   assert.equal(devengo.montos.retencionIva, 4.5);
-  assert.ok(devengo.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"));
+  assert.equal(devengo.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"), false);
+  const pago = result.eventos.find((event) => event.tipo === "PAGO_PROVEEDOR");
+  assert.ok(pago);
+  assert.ok(pago.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"));
 }
 
 {
@@ -135,8 +141,12 @@ function venta(overrides: Partial<NormalizedAccountingSourceDocument> = {}): Nor
   assert.equal(devengo.montos.retencionFuente, 1.75);
   assert.equal(devengo.montos.retencionIva, 10.5);
   assert.equal(devengo.montos.saldoPendiente, 102.75);
-  assert.ok(devengo.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"));
-  assert.ok(devengo.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"));
+  assert.equal(devengo.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"), false);
+  assert.equal(devengo.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"), false);
+  const pago = result.eventos.find((event) => event.tipo === "PAGO_PROVEEDOR");
+  assert.ok(pago);
+  assert.ok(pago.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"));
+  assert.ok(pago.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"));
 }
 
 {
@@ -173,12 +183,15 @@ function venta(overrides: Partial<NormalizedAccountingSourceDocument> = {}): Nor
   ]);
 
   const retention = result.eventos.find((event) => event.tipo === "RETENCION_RECIBIDA");
-  assert.ok(retention);
-  assert.equal(retention.eventoRelacionadoId, result.eventos[0].idTemporal);
-  assert.deepEqual(retention.rolesRequeridos, [
-    "CUENTAS_POR_COBRAR_CLIENTES",
+  assert.equal(retention, undefined);
+  const cobro = result.eventos.find((event) => event.tipo === "COBRO_CLIENTE");
+  assert.ok(cobro);
+  assert.equal(cobro.eventoRelacionadoId, result.eventos[0].idTemporal);
+  assert.deepEqual(cobro.rolesRequeridos, [
+    "CUENTA_FINANCIERA",
     "RETENCION_FUENTE_POR_COBRAR",
     "RETENCION_IVA_POR_COBRAR",
+    "CUENTAS_POR_COBRAR_CLIENTES",
   ]);
 }
 

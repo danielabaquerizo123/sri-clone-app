@@ -325,7 +325,7 @@ export default function DashboardView({
           now={fechaActual}
         />
 
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] lg:p-5 2xl:p-6">
+        <main className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] lg:p-5 2xl:p-6 ${activeTab === "contabilidad" ? "pb-0 lg:pb-0 2xl:pb-0" : ""}`}>
           {(error || success) && (
             <div className="mx-auto mb-4 w-full max-w-[1800px]">
               {error && <Alert type="error" text={error} />}
@@ -518,7 +518,9 @@ export default function DashboardView({
           )}
 
           {activeTab === "contabilidad" && (
-            <ContabilidadPanel rucActivo={rucActivo} />
+            <div className="flex min-h-full flex-col">
+              <ContabilidadPanel rucActivo={rucActivo} />
+            </div>
           )}
 
         </main>

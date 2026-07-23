@@ -4,8 +4,8 @@ import {
   JournalPersistenceValidationError,
   validatePreviewEntries,
   validatePreviewIsPersistible,
-} from "../src/services/contabilidad/journal-persistence.service";
-import type { JournalPreviewResult, PreviewEntry } from "../src/services/contabilidad/journal-preview.service";
+} from "../src/services/contabilidad/motor-contable";
+import type { JournalPreviewResult, PreviewEntry } from "../src/services/contabilidad/motor-contable";
 
 function entry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
   return {
@@ -21,7 +21,7 @@ function entry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
     lineas: [
       {
         cuentaId: "cuenta-gasto",
-        codigo: "5.02.02.08",
+        codigo: "5020208",
         cuenta: "Mantenimiento",
         descripcion: "Base",
         debe: 100,
@@ -30,7 +30,7 @@ function entry(overrides: Partial<PreviewEntry> = {}): PreviewEntry {
       },
       {
         cuentaId: "cuenta-proveedor",
-        codigo: "2.01.01.01",
+        codigo: "2010102",
         cuenta: "Proveedores",
         descripcion: "Contrapartida",
         debe: 0,
@@ -97,8 +97,8 @@ function fakeDb(options: {
   const accounts =
     options.accounts ||
     [
-      { id: "cuenta-gasto", codigo: "5.02.02.08", activa: true, movimiento: true },
-      { id: "cuenta-proveedor", codigo: "2.01.01.01", activa: true, movimiento: true },
+      { id: "cuenta-gasto", codigo: "5020208", activa: true, movimiento: true },
+      { id: "cuenta-proveedor", codigo: "2010102", activa: true, movimiento: true },
     ];
 
   return {
@@ -248,8 +248,8 @@ async function main() {
   const errors = validatePreviewEntries(
     [entry()],
     new Map([
-      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5.02.02.08", activa: false, movimiento: true }],
-      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2.01.01.01", activa: true, movimiento: true }],
+      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5020208", activa: false, movimiento: true }],
+      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2010102", activa: true, movimiento: true }],
     ])
   );
   assert.ok(errors.some((item) => item.mensaje.includes("inactiva")));
@@ -259,8 +259,8 @@ async function main() {
   const errors = validatePreviewEntries(
     [entry()],
     new Map([
-      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5.02.02.08", activa: true, movimiento: false }],
-      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2.01.01.01", activa: true, movimiento: true }],
+      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5020208", activa: true, movimiento: false }],
+      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2010102", activa: true, movimiento: true }],
     ])
   );
   assert.ok(errors.some((item) => item.mensaje.includes("agrupadora")));
@@ -287,8 +287,8 @@ async function main() {
   const errors = validatePreviewEntries(
     [bad],
     new Map([
-      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5.02.02.08", activa: true, movimiento: true }],
-      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2.01.01.01", activa: true, movimiento: true }],
+      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5020208", activa: true, movimiento: true }],
+      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2010102", activa: true, movimiento: true }],
     ])
   );
   assert.ok(errors.some((item) => item.mensaje.includes("total Debe")));
@@ -307,8 +307,8 @@ async function main() {
   const errors = validatePreviewEntries(
     [bad],
     new Map([
-      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5.02.02.08", activa: true, movimiento: true }],
-      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2.01.01.01", activa: true, movimiento: true }],
+      ["cuenta-gasto", { id: "cuenta-gasto", codigo: "5020208", activa: true, movimiento: true }],
+      ["cuenta-proveedor", { id: "cuenta-proveedor", codigo: "2010102", activa: true, movimiento: true }],
     ])
   );
   assert.ok(errors.some((item) => item.mensaje.includes("simultáneamente")));

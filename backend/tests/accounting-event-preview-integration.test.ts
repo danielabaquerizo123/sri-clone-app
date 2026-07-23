@@ -1,25 +1,30 @@
 import assert from "node:assert/strict";
 import { prisma } from "../src/lib/prisma";
-import { classifyAccountingDocument } from "../src/services/contabilidad/application/accounting-classification.service";
+import { classifyAccountingDocument } from "../src/services/contabilidad/02-clasificacion/clasificador.service";
 import {
   AccountingEventGenerator,
   generateAccountingEvents,
   type AccountingEvent,
   type NormalizedAccountingSourceDocument,
-} from "../src/services/contabilidad/application/accounting-event-generator.service";
-import { AccountingRoleResolver, type ResolvedAccount } from "../src/services/contabilidad/application/accounting-role-resolver.service";
-import { AccountingEventJournalBuilder } from "../src/services/contabilidad/application/accounting-journal-builder.service";
-import { JournalPreviewService } from "../src/services/contabilidad/journal-preview.service";
+} from "../src/services/contabilidad/04-asientos/generador-eventos.service";
+import { AccountingRoleResolver, type ResolvedAccount } from "../src/services/contabilidad/03-cuentas/resolver-cuentas.service";
+import { AccountingEventJournalBuilder } from "../src/services/contabilidad/04-asientos/constructor-asiento.service";
+import { JournalPreviewService } from "../src/services/contabilidad/motor-contable";
 
 const accounts = {
-  gasto: { id: "cuenta-gasto", codigo: "5.02.02.29", nombre: "GASTOS ADMINISTRATIVOS", activa: true, movimiento: true },
-  ivaCompras: { id: "cuenta-iva-compras", codigo: "1.01.05.01", nombre: "IVA COMPRAS", activa: true, movimiento: true },
-  proveedor: { id: "cuenta-proveedor", codigo: "2.01.01.01", nombre: "CUENTAS POR PAGAR PROVEEDORES", activa: true, movimiento: true },
-  retFuentePagar: { id: "cuenta-ret-fuente-pagar", codigo: "2.01.07.02", nombre: "RETENCIONES FUENTE POR PAGAR", activa: true, movimiento: true },
-  retIvaPagar: { id: "cuenta-ret-iva-pagar", codigo: "2.01.07.03", nombre: "RETENCIONES IVA POR PAGAR", activa: true, movimiento: true },
-  ventas: { id: "cuenta-ventas", codigo: "4.01.01.01", nombre: "VENTAS LOCALES", activa: true, movimiento: true },
-  ivaVentas: { id: "cuenta-iva-ventas", codigo: "2.01.07.01", nombre: "IVA VENTAS", activa: true, movimiento: true },
-  cliente: { id: "cuenta-cliente", codigo: "1.01.02.01", nombre: "CUENTAS POR COBRAR CLIENTES", activa: true, movimiento: true },
+  gasto: { id: "cuenta-gasto", codigo: "5020228", nombre: "SUMINISTROS Y MATERIALES", activa: true, movimiento: true },
+  mantenimiento: { id: "cuenta-mantenimiento", codigo: "5020208", nombre: "MANTENIMIENTO Y REPARACIONES", activa: true, movimiento: true },
+  ivaCompras: { id: "cuenta-iva-compras", codigo: "1010501", nombre: "IVA CREDITO TRIBUTARIO", activa: true, movimiento: true },
+  proveedor: { id: "cuenta-proveedor", codigo: "2010102", nombre: "CUENTAS POR PAGAR PROVEEDORES", activa: true, movimiento: true },
+  retFuentePagar: { id: "cuenta-ret-fuente-pagar", codigo: "2010702", nombre: "RETENCIONES FUENTE POR PAGAR", activa: true, movimiento: true },
+  retIvaPagar: { id: "cuenta-ret-iva-pagar", codigo: "2010703", nombre: "RETENCIONES IVA POR PAGAR", activa: true, movimiento: true },
+  ventas: { id: "cuenta-ventas", codigo: "4010101", nombre: "VENTAS LOCALES", activa: true, movimiento: true },
+  ivaVentas: { id: "cuenta-iva-ventas", codigo: "2010701", nombre: "IVA VENTAS", activa: true, movimiento: true },
+  cliente: { id: "cuenta-cliente", codigo: "1010201", nombre: "CUENTAS POR COBRAR CLIENTES", activa: true, movimiento: true },
+  retFuenteCobrar: { id: "cuenta-ret-fuente-cobrar", codigo: "1010502", nombre: "RETENCION FUENTE POR COBRAR", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
+  retIvaCobrar: { id: "cuenta-ret-iva-cobrar", codigo: "1010504", nombre: "RETENCION IVA POR COBRAR", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
+  caja: { id: "cuenta-caja", codigo: "1010101", nombre: "CAJA", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
+  banco: { id: "cuenta-banco", codigo: "1010103", nombre: "INSTITUCIONES FINANCIERAS PRIVADAS", activa: true, movimiento: true, tipo: "ACTIVO", naturaleza: "DEUDORA" },
 };
 
 const classifiedPurchase = {
@@ -219,11 +224,18 @@ function installPrismaMock(params: { compras?: any[]; ventas?: any[]; lastNumber
   prismaMock.configuracionCuentaContable = {
     findMany: async () => [
       { clave: "CATEGORIA:SUMINISTROS_MATERIALES", activa: true, cuenta: accounts.gasto },
-      { clave: "CATEGORIA:MANTENIMIENTO_REPARACIONES", activa: true, cuenta: accounts.gasto },
+      { clave: "CATEGORIA:MANTENIMIENTO_REPARACIONES", activa: true, cuenta: accounts.mantenimiento },
       { clave: "ROL:IVA_CREDITO_TRIBUTARIO", activa: true, cuenta: accounts.ivaCompras },
       { clave: "ROL:CUENTAS_POR_PAGAR_PROVEEDORES", activa: true, cuenta: accounts.proveedor },
       { clave: "ROL:RETENCION_FUENTE_POR_PAGAR", activa: true, cuenta: accounts.retFuentePagar },
       { clave: "ROL:RETENCION_IVA_POR_PAGAR", activa: true, cuenta: accounts.retIvaPagar },
+      { clave: "ROL:CUENTAS_POR_COBRAR_CLIENTES", activa: true, cuenta: accounts.cliente },
+      { clave: "ROL:RETENCION_FUENTE_POR_COBRAR", activa: true, cuenta: accounts.retFuenteCobrar },
+      { clave: "ROL:RETENCION_IVA_POR_COBRAR", activa: true, cuenta: accounts.retIvaCobrar },
+      { clave: "ROL:INGRESO_VENTAS", activa: true, cuenta: accounts.ventas },
+      { clave: "ROL:IVA_POR_PAGAR", activa: true, cuenta: accounts.ivaVentas },
+      { clave: "ROL:CUENTA_FINANCIERA_CAJA", activa: true, cuenta: accounts.caja },
+      { clave: "ROL:CUENTA_FINANCIERA_BANCO", activa: true, cuenta: accounts.banco },
     ],
   };
 }
@@ -299,6 +311,37 @@ async function main() {
   assert.equal(entry.lineas[0].debe, 230);
   assert.equal(entry.lineas[1].haber, 200);
   assert.equal(entry.lineas[2].haber, 30);
+}
+
+{
+  const event = {
+    ...firstEvent(source({
+      hojaOrigen: "VENTAS",
+      tipoOperacion: "VENTA",
+      tipoComprobante: "18",
+      baseGravada: 200,
+      iva: 30,
+      total: 230,
+      clasificacion: classifiedSale,
+    })),
+    rolesRequeridos: ["CUENTAS_POR_COBRAR_CLIENTES", "INGRESO", "IVA_POR_PAGAR"] as AccountingEvent["rolesRequeridos"],
+  };
+  const roles = new AccountingRoleResolver({
+    configuraciones: [
+      { clave: "ROL:CUENTAS_POR_COBRAR_CLIENTES", activa: true, cuenta: accounts.cliente },
+      { clave: "ROL:INGRESO_VENTAS", activa: true, cuenta: accounts.ventas },
+      { clave: "ROL:IVA_POR_PAGAR", activa: true, cuenta: accounts.ivaVentas },
+    ],
+  }).resolveMany({ event, reglaContable: null });
+  const entry = new AccountingEventJournalBuilder().build(event, {
+    numero: 1,
+    resolvedRoles: roles,
+  }).entry;
+
+  assert.ok(roles.some((role) => role.role === "INGRESO" && role.origen === "CONFIGURACION_CUENTA"));
+  assert.ok(entry);
+  assert.ok(entry.lineas.some((line) => line.codigo === accounts.ventas.codigo && line.haber === 200));
+  assert.equal(entry.totalDebe, entry.totalHaber);
 }
 
 {
@@ -392,14 +435,23 @@ async function main() {
   assert.ok(devengo);
   assert.equal(devengo.montos.retencionFuente, 1);
   assert.equal(devengo.montos.retencionIva, 4.5);
-  assert.ok(devengo.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"));
-  assert.ok(devengo.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"));
+  assert.equal(devengo.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"), false);
+  assert.equal(devengo.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"), false);
+  const pago = result.eventos.find((event) => event.tipo === "PAGO_PROVEEDOR");
+  assert.ok(pago);
+  assert.ok(pago.rolesRequeridos.includes("RETENCION_FUENTE_POR_PAGAR"));
+  assert.ok(pago.rolesRequeridos.includes("RETENCION_IVA_POR_PAGAR"));
 }
 
 {
-  const result = generateAccountingEvents([source({ formaPago: "20" })]);
+  const result = generateAccountingEvents([
+    source({
+      fechaRegistro: new Date("2026-04-10T00:00:00.000Z"),
+      paymentEvidence: { formaPago1: "20-OTROS CON UTILIZACION DEL SISTEMA FINANCIERO" },
+    }),
+  ]);
   assert.equal(result.eventos.some((event) => event.tipo === "PAGO_PROVEEDOR"), true);
-  assert.equal(result.eventos.some((event) => event.tipo === "PAGO_PROVEEDOR" && event.estado === "GENERABLE"), false);
+  assert.equal(result.eventos.some((event) => event.tipo === "PAGO_PROVEEDOR" && event.estado === "GENERABLE"), true);
 }
 
 {
@@ -422,9 +474,10 @@ async function main() {
 {
   installPrismaMock({ compras: [compra({ formaPago1: "20" })] });
   const preview = await new JournalPreviewService().buildFromAtsLote("1250531510", "lote-1");
-  assert.equal(preview.asientos.length, 1);
+  assert.equal(preview.asientos.length, 2);
   assert.equal(preview.asientos[0].tipoEvento, "DEVENGO_COMPRA");
-  assert.equal(preview.eventosPendientes.some((event) => event.tipoEvento === "PAGO_PROVEEDOR"), true);
+  assert.equal(preview.asientos[1].tipoEvento, "PAGO_PROVEEDOR");
+  assert.equal(preview.eventosPendientes.some((event) => event.tipoEvento === "PAGO_PROVEEDOR"), false);
   assert.equal(preview.persistible, true);
 }
 
@@ -440,13 +493,15 @@ async function main() {
         baseImponibleRet1: 100,
         porcentajeRetencion1: 1,
         valorRetenido1: 1,
+        formaPago1: "20",
       }),
     ],
   });
   const preview = await new JournalPreviewService().buildFromAtsLote("1250531510", "lote-1");
-  assert.equal(preview.asientos.length, 1);
+  assert.equal(preview.asientos.length, 2);
   assert.equal(preview.eventos.some((event) => event.tipo === "RETENCION_EMITIDA"), false);
-  assert.equal(preview.asientos[0].lineas.some((linea) => linea.codigo === accounts.retFuentePagar.codigo), true);
+  assert.equal(preview.asientos[1].tipoEvento, "PAGO_PROVEEDOR");
+  assert.equal(preview.asientos[1].lineas.some((linea) => linea.codigo === accounts.retFuentePagar.codigo), true);
   assert.equal(preview.persistible, true);
 }
 
@@ -457,14 +512,16 @@ async function main() {
         valorRetenidoFuente: 2,
         noDocumentoRetencion: "000000111",
         fechaRetencion: new Date("2026-04-12T00:00:00.000Z"),
+        formaCobro1: "20",
       }),
     ],
   });
   const preview = await new JournalPreviewService().buildFromAtsLote("1250531510", "lote-1");
-  assert.equal(preview.asientos.length, 1);
-  assert.equal(preview.eventos.some((event) => event.tipo === "RETENCION_RECIBIDA"), true);
-  assert.equal(preview.rolesSinResolver.some((role) => role.role === "RETENCION_FUENTE_POR_COBRAR"), true);
-  assert.equal(preview.persistible, false);
+  assert.equal(preview.asientos.length, 2);
+  assert.equal(preview.eventos.some((event) => event.tipo === "RETENCION_RECIBIDA"), false);
+  assert.equal(preview.asientos[1].tipoEvento, "COBRO_CLIENTE");
+  assert.equal(preview.asientos[1].lineas.some((linea) => linea.codigo === accounts.retFuenteCobrar.codigo), true);
+  assert.equal(preview.persistible, true);
 }
 
 {

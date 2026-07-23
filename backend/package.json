@@ -9,7 +9,9 @@
     "start": "node dist/index.js",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "importar-configuracion-contable": "tsx scripts/cargarConfiguracionContable.ts",
+    "test": "tsx tests/accounting-description.service.test.ts && tsx tests/accounting-classification.service.test.ts && tsx tests/accounting-event-generator.service.test.ts && tsx tests/accounting-application-numeric.test.ts && tsx tests/accounting-event-preview-integration.test.ts && tsx tests/accounting-legacy-cleanup.test.ts && tsx tests/contabilidad-domain-adapters.test.ts && tsx tests/contabilidad-excel-response.test.ts && tsx tests/journal-preview.classification.test.ts && tsx tests/journal-persistence.service.test.ts && tsx tests/libro-mayor.service.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

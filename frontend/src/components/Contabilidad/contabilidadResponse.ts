@@ -26,13 +26,20 @@ export type LibroDiarioResponse = {
     totalHaber: number;
     errores: number;
     advertencias: number;
+    documentosPendientes: number;
     tiposPagoCompras: Record<string, number>;
     formasPagoCompras: Record<string, number>;
     formasCobroVentas: Record<string, number>;
+    ruc?: string;
+    razonSocial?: string;
+    periodo?: string;
+    moneda?: string;
   };
   hojas: ContabilidadHoja[];
   libroDiario: unknown[];
   asientos: unknown[];
+  auditoriaCompras: unknown[];
+  pendientesClasificacion: unknown[];
   issues: ContabilidadIssue[];
   warnings: unknown[];
   errors: unknown[];
@@ -123,13 +130,20 @@ export function normalizeLibroDiarioResponse(data: unknown): LibroDiarioResponse
       totalHaber: asNumber(resumen.totalHaber),
       errores: asNumber(resumen.errores || errors.length),
       advertencias: asNumber(resumen.advertencias || warnings.length),
+      documentosPendientes: asNumber(resumen.documentosPendientes),
       tiposPagoCompras: asNumberRecord(resumen.tiposPagoCompras),
       formasPagoCompras: asNumberRecord(resumen.formasPagoCompras),
       formasCobroVentas: asNumberRecord(resumen.formasCobroVentas),
+      ruc: String(resumen.ruc || ""),
+      razonSocial: String(resumen.razonSocial || ""),
+      periodo: String(resumen.periodo || ""),
+      moneda: String(resumen.moneda || ""),
     },
     hojas,
     libroDiario: asArray(record.libroDiario),
     asientos: asArray(record.asientos),
+    auditoriaCompras: asArray(record.auditoriaCompras),
+    pendientesClasificacion: asArray(record.pendientesClasificacion),
     issues,
     warnings,
     errors,

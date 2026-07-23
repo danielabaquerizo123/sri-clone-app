@@ -24,12 +24,22 @@ export type LibroDiarioEntry = {
 type Props = {
   entries?: unknown[];
   rows?: JournalVisualRow[];
+  resumen?: {
+    ruc?: string;
+    razonSocial?: string;
+    periodo?: string;
+    moneda?: string;
+  };
 };
 
 function toMoneyNumber(value: unknown): number {
   if (value === "" || value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
 
-  const normalized = String(value).replace(/\./g, "").replace(",", ".");
+  const raw = String(value).trim();
+  const normalized = raw.includes(",")
+    ? raw.replace(/\./g, "").replace(",", ".")
+    : raw;
   const numberValue = Number(normalized);
 
   return Number.isFinite(numberValue) ? numberValue : 0;
@@ -112,7 +122,7 @@ function normalizeEntries(entries: unknown[] = [], rows: JournalVisualRow[] = []
   return Array.from(grouped.values());
 }
 
-export default function LibroDiarioTab({ entries = [], rows = [] }: Props) {
+export default function LibroDiarioTab({ entries = [], rows = [], resumen }: Props) {
   const journal = normalizeEntries(entries, rows);
   const totalDebe = journal.reduce(
     (total, entry) => total + entry.lineas.reduce((sum, line) => sum + line.debe, 0),
@@ -136,6 +146,15 @@ export default function LibroDiarioTab({ entries = [], rows = [] }: Props) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
+      <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
+        <h3 className="text-base font-black text-[#003565]">Libro Diario</h3>
+        <div className="mt-3 grid gap-2 md:grid-cols-4">
+          <p><span className="font-black text-slate-900">RUC:</span> {resumen?.ruc || "No disponible"}</p>
+          <p><span className="font-black text-slate-900">Razón social:</span> {resumen?.razonSocial || "No disponible"}</p>
+          <p><span className="font-black text-slate-900">Periodo:</span> {resumen?.periodo || "No disponible"}</p>
+          <p><span className="font-black text-slate-900">Moneda:</span> {resumen?.moneda || "Dólares (USD)"}</p>
+        </div>
+      </div>
       <div className="max-h-[620px] overflow-auto">
         <table className="w-full min-w-[920px] border-collapse font-mono text-[13px]">
           <colgroup>

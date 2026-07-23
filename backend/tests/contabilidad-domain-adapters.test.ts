@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { adaptCompra } from "../src/services/contabilidad/adapters/compra.adapter";
-import { adaptGasto } from "../src/services/contabilidad/adapters/gasto.adapter";
-import { adaptVenta } from "../src/services/contabilidad/adapters/venta.adapter";
-import { SIN_CLASIFICACION } from "../src/services/contabilidad/domain/accounting-classification";
+import { adaptCompra } from "../src/services/contabilidad/01-lectura/compra.adapter";
+import { adaptGasto } from "../src/services/contabilidad/01-lectura/gasto.adapter";
+import { adaptVenta } from "../src/services/contabilidad/01-lectura/venta.adapter";
+import { SIN_CLASIFICACION } from "../src/services/contabilidad/contratos";
 
 {
   const compra = adaptCompra({

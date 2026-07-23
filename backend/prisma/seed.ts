@@ -1,7 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import fs from "fs";
-import path from "path";
 
 const prisma = new PrismaClient();
 
@@ -14,132 +12,9 @@ const calcularFechaExpiracion = (fechaBase = new Date()) => {
   return fechaExpiracion;
 };
 
-function readSeedJson<T>(filename: string): T {
-  const fullPath = path.join(__dirname, "seeds", filename);
-  return JSON.parse(fs.readFileSync(fullPath, "utf8")) as T;
-}
-
-type CuentaSeed = {
-  codigo: string;
-  nombre: string;
-  tipo: string;
-  naturaleza: string;
-  nivel: number;
-  movimiento: boolean;
-  activa: boolean;
-  parentCodigo?: string;
-};
-
-type ReglaSeed = {
-  codigo: string;
-  descripcion: string;
-  tipoOperacion: string;
-  tipoComprobante?: string | null;
-  codigoSustento?: string | null;
-  tarifaIva?: string | number | null;
-  formaPago?: string | null;
-  prioridad: number;
-  activa: boolean;
-  cuentaBaseCodigo: string;
-  ladoBase: string;
-  cuentaIvaCodigo?: string | null;
-  ladoIva?: string | null;
-  cuentaContrapartidaCodigo: string;
-  ladoContrapartida: string;
-};
-
-async function seedPlanCuentas() {
-  const cuentas = readSeedJson<CuentaSeed[]>("cuentas-contables-base.json");
-
-  for (const cuenta of cuentas) {
-    await prisma.cuentaContable.upsert({
-      where: { codigo: cuenta.codigo },
-      update: {
-        nombre: cuenta.nombre,
-        tipo: cuenta.tipo as any,
-        naturaleza: cuenta.naturaleza as any,
-        nivel: cuenta.nivel,
-        movimiento: cuenta.movimiento,
-        activa: cuenta.activa,
-        parentCodigo: cuenta.parentCodigo || null,
-      },
-      create: {
-        codigo: cuenta.codigo,
-        nombre: cuenta.nombre,
-        tipo: cuenta.tipo as any,
-        naturaleza: cuenta.naturaleza as any,
-        nivel: cuenta.nivel,
-        movimiento: cuenta.movimiento,
-        activa: cuenta.activa,
-        parentCodigo: cuenta.parentCodigo || null,
-      },
-    });
-  }
-
-  console.log(`Plan de cuentas base cargado: ${cuentas.length} cuentas.`);
-}
-
-async function seedReglasContables() {
-  const reglas = readSeedJson<ReglaSeed[]>("reglas-contables-base.json");
-  const cuentas = await prisma.cuentaContable.findMany();
-  const cuentaByCodigo = new Map(cuentas.map((cuenta) => [cuenta.codigo, cuenta]));
-
-  for (const regla of reglas) {
-    const cuentaBase = cuentaByCodigo.get(regla.cuentaBaseCodigo);
-    const cuentaIva = regla.cuentaIvaCodigo
-      ? cuentaByCodigo.get(regla.cuentaIvaCodigo)
-      : null;
-    const cuentaContrapartida = cuentaByCodigo.get(regla.cuentaContrapartidaCodigo);
-
-    if (!cuentaBase || !cuentaContrapartida || (regla.cuentaIvaCodigo && !cuentaIva)) {
-      throw new Error(`Regla contable ${regla.codigo} referencia cuentas inexistentes.`);
-    }
-
-    await prisma.reglaContable.upsert({
-      where: { codigo: regla.codigo },
-      update: {
-        descripcion: regla.descripcion,
-        tipoOperacion: regla.tipoOperacion as any,
-        tipoComprobante: regla.tipoComprobante || null,
-        codigoSustento: regla.codigoSustento || null,
-        tarifaIva: regla.tarifaIva === null || regla.tarifaIva === undefined ? null : regla.tarifaIva,
-        formaPago: regla.formaPago || null,
-        prioridad: regla.prioridad,
-        activa: regla.activa,
-        cuentaBaseId: cuentaBase.id,
-        ladoBase: regla.ladoBase as any,
-        cuentaIvaId: cuentaIva?.id || null,
-        ladoIva: regla.ladoIva ? (regla.ladoIva as any) : null,
-        cuentaContrapartidaId: cuentaContrapartida.id,
-        ladoContrapartida: regla.ladoContrapartida as any,
-      },
-      create: {
-        codigo: regla.codigo,
-        descripcion: regla.descripcion,
-        tipoOperacion: regla.tipoOperacion as any,
-        tipoComprobante: regla.tipoComprobante || null,
-        codigoSustento: regla.codigoSustento || null,
-        tarifaIva: regla.tarifaIva === null || regla.tarifaIva === undefined ? null : regla.tarifaIva,
-        formaPago: regla.formaPago || null,
-        prioridad: regla.prioridad,
-        activa: regla.activa,
-        cuentaBaseId: cuentaBase.id,
-        ladoBase: regla.ladoBase as any,
-        cuentaIvaId: cuentaIva?.id || null,
-        ladoIva: regla.ladoIva ? (regla.ladoIva as any) : null,
-        cuentaContrapartidaId: cuentaContrapartida.id,
-        ladoContrapartida: regla.ladoContrapartida as any,
-      },
-    });
-  }
-
-  console.log(`Reglas contables base cargadas: ${reglas.length} reglas.`);
-}
-
 async function main() {
   console.log("Iniciando el sembrado de datos (Seed)...");
 
-  // Generamos el hash real de la clave demo
   const saltRounds = 10;
   const hashClaveDemo = await bcrypt.hash("sripassword2026", saltRounds);
   const fechaAccesoSeed = new Date();
@@ -177,7 +52,6 @@ async function main() {
     }
   }
 
-  // Insertar/actualizar el usuario administrador respetando el modelo Contribuyente.
   const usuarioAdmin = await prisma.contribuyente.upsert({
     where: { ruc: adminIdentificacion },
     update: adminSeedData,
@@ -290,9 +164,6 @@ async function main() {
       direccionIpEmision: "10.1.2.142",
     },
   });
-
-  await seedPlanCuentas();
-  await seedReglasContables();
 
   console.log("¡Base de datos poblada con éxito!");
   console.log("Usuario ADMIN listo:", usuarioAdmin.ruc);

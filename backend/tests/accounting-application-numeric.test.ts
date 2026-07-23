@@ -2,26 +2,26 @@ import assert from "node:assert/strict";
 import {
   classifyAccountingDocument,
   type AccountingClassificationResult,
-} from "../src/services/contabilidad/application/accounting-classification.service";
+} from "../src/services/contabilidad/02-clasificacion/clasificador.service";
 import {
   generateAccountingEvents,
   type NormalizedAccountingSourceDocument,
-} from "../src/services/contabilidad/application/accounting-event-generator.service";
-import { AccountingEventJournalBuilder } from "../src/services/contabilidad/application/accounting-journal-builder.service";
-import { AccountingRoleResolver } from "../src/services/contabilidad/application/accounting-role-resolver.service";
+} from "../src/services/contabilidad/04-asientos/generador-eventos.service";
+import { AccountingEventJournalBuilder } from "../src/services/contabilidad/04-asientos/constructor-asiento.service";
+import { AccountingRoleResolver } from "../src/services/contabilidad/03-cuentas/resolver-cuentas.service";
 import {
   shouldHoldForClassification,
   validatePreviewEntryForTest,
   type PreviewEntry,
-} from "../src/services/contabilidad/journal-preview.service";
+} from "../src/services/contabilidad/motor-contable";
 
 const accounts = {
-  gasto: { id: "cuenta-gasto", codigo: "5.02.02.08", nombre: "Mantenimiento", activa: true, movimiento: true },
-  ivaCompras: { id: "cuenta-iva-compras", codigo: "1.01.05.01", nombre: "IVA compras", activa: true, movimiento: true },
-  proveedor: { id: "cuenta-proveedor", codigo: "2.01.01.01", nombre: "Proveedores", activa: true, movimiento: true },
-  ventas: { id: "cuenta-ventas", codigo: "4.01.01.01", nombre: "Ventas locales", activa: true, movimiento: true },
-  ivaVentas: { id: "cuenta-iva-ventas", codigo: "2.01.07.01", nombre: "IVA ventas", activa: true, movimiento: true },
-  cliente: { id: "cuenta-cliente", codigo: "1.01.02.01", nombre: "Clientes", activa: true, movimiento: true },
+  gasto: { id: "cuenta-gasto", codigo: "5020208", nombre: "Mantenimiento", activa: true, movimiento: true },
+  ivaCompras: { id: "cuenta-iva-compras", codigo: "1010501", nombre: "IVA compras", activa: true, movimiento: true },
+  proveedor: { id: "cuenta-proveedor", codigo: "2010102", nombre: "Proveedores", activa: true, movimiento: true },
+  ventas: { id: "cuenta-ventas", codigo: "4010101", nombre: "Ventas locales", activa: true, movimiento: true },
+  ivaVentas: { id: "cuenta-iva-ventas", codigo: "2010701", nombre: "IVA ventas", activa: true, movimiento: true },
+  cliente: { id: "cuenta-cliente", codigo: "1010201", nombre: "Clientes", activa: true, movimiento: true },
 };
 
 function classification(overrides: Partial<AccountingClassificationResult> = {}): AccountingClassificationResult {
@@ -71,7 +71,14 @@ function document(overrides: Partial<NormalizedAccountingSourceDocument> = {}): 
 
 function buildEntry(doc: NormalizedAccountingSourceDocument, ruleLike = rule(doc.tipoOperacion === "VENTA" ? "VENTA" : "COMPRA", doc.tipoComprobante || "01")) {
   const event = generateAccountingEvents([doc], { emitPendingPaymentEvents: false }).eventos[0];
-  const roles = new AccountingRoleResolver().resolveMany({ event, reglaContable: ruleLike });
+  const roles = new AccountingRoleResolver({
+    configuraciones: [
+      { clave: "CATEGORIA:SUMINISTROS_MATERIALES", activa: true, cuenta: accounts.gasto },
+      { clave: "CATEGORIA:MANTENIMIENTO_REPARACIONES", activa: true, cuenta: accounts.gasto },
+      { clave: "ROL:IVA_CREDITO_TRIBUTARIO", activa: true, cuenta: accounts.ivaCompras },
+      { clave: "ROL:CUENTAS_POR_PAGAR_PROVEEDORES", activa: true, cuenta: accounts.proveedor },
+    ],
+  }).resolveMany({ event, reglaContable: ruleLike });
   const result = new AccountingEventJournalBuilder().build(event, {
     numero: 1,
     reglaCodigo: ruleLike.codigo,
@@ -138,11 +145,11 @@ function buildEntry(doc: NormalizedAccountingSourceDocument, ruleLike = rule(doc
       formaPago: "20",
     }),
   ]);
-  const retencion = result.eventos.find((event) => event.tipo === "RETENCION_EMITIDA");
-  assert.ok(retencion);
-  assert.equal(retencion.montos.retencionFuente, 1);
-  assert.equal(retencion.montos.retencionIva, 4.5);
-  assert.equal(result.eventos.filter((event) => event.tipo === "RETENCION_EMITIDA").length, 1);
+  const devengo = result.eventos.find((event) => event.tipo === "DEVENGO_COMPRA");
+  assert.ok(devengo);
+  assert.equal(devengo.montos.retencionFuente, 1);
+  assert.equal(devengo.montos.retencionIva, 4.5);
+  assert.equal(result.eventos.some((event) => event.tipo === "RETENCION_EMITIDA"), false);
   assert.equal(result.eventos.some((event) => event.tipo === "PAGO_PROVEEDOR" && event.estado === "GENERABLE"), false);
 }
 
@@ -161,16 +168,16 @@ function buildEntry(doc: NormalizedAccountingSourceDocument, ruleLike = rule(doc
     hojaOrigen: "COMPRAS",
     rucTercero: "0101010101001",
     tipoComprobante: "01",
-    concepto: "Mantenimiento de equipos",
+    concepto: "Servicio profesional de asesoria",
   });
   const second = classifyAccountingDocument({
     hojaOrigen: "COMPRAS",
     rucTercero: "0202020202001",
     tipoComprobante: "01",
-    concepto: "Mantenimiento de equipos",
+    concepto: "Servicio profesional de asesoria",
   });
   assert.equal(first.categoria, second.categoria);
-  assert.equal(first.origen, "REGLA_CONCEPTO");
+  assert.equal(first.origen, second.origen);
 }
 
 {
