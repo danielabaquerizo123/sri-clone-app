@@ -1,17 +1,29 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bell, Camera, ChevronDown, LogOut, Search, Trash2, User } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { Camera, ChevronDown, LogOut, Trash2, User } from "lucide-react";
+import type { AccessInfo } from "../../utils/acceso";
+import type { OpcionesRuc } from "../../views/DashboardView";
+import GlobalSearch from "./GlobalSearch";
+import HeaderDropdownPortal from "./HeaderDropdownPortal";
+import LiveClock from "./LiveClock";
+import NotificationButton from "./NotificationButton";
 import UserAvatar from "../Profile/UserAvatar";
 import ProfilePhotoDialog from "../Profile/ProfilePhotoDialog";
+import { getNavigationItems, getSectionTitleFromRegistry } from "./navigationRegistry";
 
 interface DashboardHeaderProps {
   activeTab: string;
+  accessInfo: AccessInfo;
+  activo: boolean;
+  email?: string | null;
+  emailVerified?: boolean | null;
   nombreUsuario: string;
+  opcionesRuc: OpcionesRuc | null;
   rucUsuario: string;
   tipoContribuyente: "PERSONA_NATURAL" | "SOCIEDAD";
   fotoPerfilUrl?: string | null;
-  now: Date;
   photoLoading?: boolean;
   photoError?: string;
+  onNavigate: (tab: string) => void;
   onViewProfile: () => void;
   onUploadProfilePhoto: (file: File) => Promise<void>;
   onDeleteProfilePhoto: () => Promise<void>;
@@ -19,14 +31,19 @@ interface DashboardHeaderProps {
 }
 
 export default function DashboardHeader({
+  accessInfo,
+  activo,
   activeTab,
+  email,
+  emailVerified,
   nombreUsuario,
+  opcionesRuc,
   rucUsuario,
   tipoContribuyente,
   fotoPerfilUrl,
-  now,
   photoLoading = false,
   photoError = "",
+  onNavigate,
   onViewProfile,
   onUploadProfilePhoto,
   onDeleteProfilePhoto,
@@ -36,31 +53,10 @@ export default function DashboardHeader({
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const isInicio = activeTab === "inicio";
+  const navigationItems = getNavigationItems(opcionesRuc);
   const headerTitle = isInicio
     ? `Hola, ${getNombrePila(nombreUsuario, tipoContribuyente)}`
-    : getSectionTitle(activeTab);
-
-  void now;
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
-    };
-
-    window.addEventListener("mousedown", handleClickOutside);
-    window.addEventListener("keydown", handleEscape);
-
-    return () => {
-      window.removeEventListener("mousedown", handleClickOutside);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
+    : getSectionTitleFromRegistry(activeTab, opcionesRuc);
 
   const handleUpload = async (file: File) => {
     await onUploadProfilePhoto(file);
@@ -74,7 +70,7 @@ export default function DashboardHeader({
   };
 
   return (
-    <header className="border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
+    <header className="relative z-[var(--dashboard-z-header)] border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
       <div className="grid min-h-[88px] gap-3 px-5 py-3 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] lg:items-center xl:px-7">
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-black leading-tight text-[#082b68]">
@@ -88,25 +84,13 @@ export default function DashboardHeader({
           )}
         </div>
 
-        <div className="hidden h-[52px] min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-slate-500 shadow-[0_8px_18px_rgba(15,23,42,0.08)] xl:flex xl:w-[300px] 2xl:w-[390px]">
-          <Search size={18} className="shrink-0 text-slate-400" />
-          <input
-            aria-label="Buscar en el sistema"
-            className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400"
-            placeholder="Buscar en el sistema..."
-          />
-          <span className="hidden rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500 sm:inline">
-            Ctrl + K
-          </span>
-        </div>
-
-        <button
-          type="button"
-          aria-label="Ver notificaciones"
-          className="relative hidden h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-700 shadow-sm transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:flex lg:justify-self-end xl:justify-self-auto"
-        >
-          <Bell size={20} />
-        </button>
+        <GlobalSearch items={navigationItems} onNavigate={onNavigate} />
+        <LiveClock />
+        <NotificationButton
+          accessInfo={accessInfo}
+          activo={activo}
+          emailVerified={emailVerified}
+        />
 
         <div className="hidden h-10 w-px bg-slate-200 xl:block" />
 
@@ -142,11 +126,29 @@ export default function DashboardHeader({
             <ChevronDown size={17} />
           </button>
 
-          {menuOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-full z-40 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-xl"
-            >
+          <HeaderDropdownPortal
+            anchorRef={menuRef}
+            open={menuOpen}
+            width={320}
+            onClose={() => setMenuOpen(false)}
+          >
+            <div role="menu" className="overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-2xl">
+              <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
+                <UserAvatar fotoPerfilUrl={fotoPerfilUrl} nombres={nombreUsuario} size={48} />
+                <div className="min-w-0">
+                  <p title={nombreUsuario} className="truncate text-sm font-black text-[#082b68]">
+                    {nombreUsuario}
+                  </p>
+                  {email && (
+                    <p title={email} className="truncate text-xs font-semibold text-slate-500">
+                      {email}
+                    </p>
+                  )}
+                  <p className="font-mono text-xs font-semibold text-slate-500">
+                    RUC: {rucUsuario}
+                  </p>
+                </div>
+              </div>
               <MenuItem
                 icon={<User size={16} />}
                 label="Ver perfil"
@@ -175,7 +177,7 @@ export default function DashboardHeader({
               <div className="my-2 border-t border-slate-100" />
               <MenuItem icon={<LogOut size={16} />} label="Cerrar sesión" onClick={onLogout} />
             </div>
-          )}
+          </HeaderDropdownPortal>
 
           <ProfilePhotoDialog
             open={photoDialogOpen}
@@ -205,28 +207,6 @@ function getNombrePila(
   }
 
   return parts[0];
-}
-
-function getSectionTitle(activeTab: string) {
-  const titles: Record<string, string> = {
-    ruc_inscripcion: "Inscripcion RUC",
-    ruc_actualizacion: "Actualizacion RUC",
-    ruc_reapertura: "Reapertura RUC",
-    ruc_reimpresion: "Reimpresion RUC",
-    declaracion_elaboracion: "Declaraciones",
-    declaracion_consulta: "Consulta de declaraciones",
-    declaracion_107: "Formulario 107 - RDEP",
-    declaracion_103: "Formulario 103",
-    declaracion_104: "Formulario 104",
-    anexo_ats: "ATS",
-    anexo_envio: "Envio y consulta de anexos",
-    anexo_beneficiario: "Beneficiario pension",
-    anexo_dependientes_2022: "Dependientes hasta 2022",
-    anexo_cargas_2023: "Cargas desde 2023",
-    contabilidad: "Contabilidad",
-  };
-
-  return titles[activeTab] || "Portal transaccional";
 }
 
 function MenuItem({

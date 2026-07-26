@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   BadgeCheck,
   Calculator,
@@ -19,12 +19,13 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { ContribuyenteData, OpcionesRuc } from "../../views/DashboardView";
+import type { AccessInfo } from "../../utils/acceso";
 import sriLogo from "../../assets/images/SRI.png";
 
 interface DashboardSidebarProps {
   activeTab: string;
+  accessInfo: AccessInfo;
   data: ContribuyenteData;
-  diasRestantesAcceso: number | null;
   opcionesRuc: OpcionesRuc | null;
   onLogout: () => void;
   onNavigate: (tab: string) => void;
@@ -32,8 +33,8 @@ interface DashboardSidebarProps {
 
 export default function DashboardSidebar({
   activeTab,
+  accessInfo,
   data,
-  diasRestantesAcceso,
   opcionesRuc,
   onLogout,
   onNavigate,
@@ -43,21 +44,8 @@ export default function DashboardSidebar({
   const [declaracionesOpen, setDeclaracionesOpen] = useState(false);
   const [anexosOpen, setAnexosOpen] = useState(false);
 
-  const accessProgress = useMemo(() => {
-    if (diasRestantesAcceso === null || !data.fechaExpiracion) return null;
-
-    const inicio = new Date(data.fechaRegistro || data.createdAt);
-    const expiracion = new Date(data.fechaExpiracion);
-
-    if (Number.isNaN(inicio.getTime()) || Number.isNaN(expiracion.getTime())) {
-      return Math.max(0, Math.min(100, Math.round((diasRestantesAcceso / 120) * 100)));
-    }
-
-    const total = Math.max(expiracion.getTime() - inicio.getTime(), 1);
-    const restante = Math.max(expiracion.getTime() - Date.now(), 0);
-
-    return Math.max(0, Math.min(100, Math.round((restante / total) * 100)));
-  }, [data.createdAt, data.fechaExpiracion, data.fechaRegistro, diasRestantesAcceso]);
+  const accessProgress = accessInfo.porcentajeRestante;
+  const accessTone = getAccessTone(accessInfo.estadoAcceso);
 
   return (
     <aside className="flex max-h-[48vh] w-full flex-col overflow-y-auto bg-[linear-gradient(180deg,#061d58_0%,#003565_52%,#063e78_100%)] text-white shadow-[8px_0_30px_rgba(3,7,18,0.18)] [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.35)_transparent] lg:sticky lg:top-0 lg:h-screen lg:max-h-none lg:w-[272px] lg:shrink-0">
@@ -200,22 +188,22 @@ export default function DashboardSidebar({
           </button>
         </div>
 
-        {data.fechaExpiracion && (
+        {accessInfo.fechaExpiracion && (
         <div className="rounded-2xl border border-white/8 bg-[#07427f]/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[11px] font-black uppercase text-blue-100/70">Dias de acceso</p>
             <ShieldCheck size={15} className="text-sky-300" />
           </div>
           <p className="text-xl font-black">
-            {diasRestantesAcceso === null ? "-" : diasRestantesAcceso} dias
+            {formatAccessValue(accessInfo)}
           </p>
           <p className="mt-2 text-xs font-semibold text-white/60">
-            Expira el {formatDate(data.fechaExpiracion)}
+            Expira el {formatDate(accessInfo.fechaExpiracion)}
           </p>
           <div className="mt-3 flex items-center gap-3">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full rounded-full bg-cyan-300"
+                className={`h-full rounded-full ${accessTone}`}
                 style={{ width: `${accessProgress ?? 0}%` }}
               />
             </div>
@@ -330,9 +318,22 @@ function SidebarSubItem({
   );
 }
 
-function formatDate(value?: string | null) {
+function formatDate(value?: string | Date | null) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("es-EC");
+}
+
+function formatAccessValue(accessInfo: AccessInfo) {
+  if (accessInfo.estadoAcceso === "vencido") return "Acceso vencido";
+  if (accessInfo.estadoAcceso === "desactivado") return "Desactivado";
+  if (accessInfo.diasRestantes === null) return "-";
+  return `${accessInfo.diasRestantes} dias`;
+}
+
+function getAccessTone(estado: AccessInfo["estadoAcceso"]) {
+  if (estado === "alerta" || estado === "vencido" || estado === "desactivado") return "bg-red-300";
+  if (estado === "por_vencer") return "bg-amber-300";
+  return "bg-cyan-300";
 }

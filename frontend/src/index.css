@@ -9,4 +9,13 @@
   body {
     @apply font-sans antialiased bg-gray-50 text-gray-900;
   }
+
+  :root {
+    --dashboard-hero-start: #0b3578;
+    --dashboard-hero-middle: #1557c9;
+    --dashboard-hero-end: #6548d8;
+    --dashboard-z-header: 40;
+    --dashboard-z-dropdown: 80;
+    --dashboard-z-modal: 100;
+  }
 }

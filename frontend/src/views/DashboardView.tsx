@@ -20,7 +20,7 @@ import DashboardHeader from "../components/Dashboard/DashboardHeader";
 import DashboardHome from "../components/Dashboard/DashboardHome";
 import DashboardSidebar from "../components/Dashboard/DashboardSidebar";
 import { authFetch } from "../api/authApi";
-import { calcularDiasRestantes } from "../utils/acceso";
+import { calcularResumenAcceso } from "../utils/acceso";
 
 interface DashboardViewProps {
   rucUsuario: string;
@@ -74,6 +74,7 @@ export interface ContribuyenteData {
   referencia?: string | null;
   jurisdiccion?: string | null;
   email?: string | null;
+  emailVerified?: boolean | null;
   fotoPerfilUrl?: string | null;
   fotoPerfilPublicId?: string | null;
   telefonoDomicilio?: string | null;
@@ -144,9 +145,15 @@ export default function DashboardView({
   );
 
   const rucActivo = activeContribuyente.ruc || rucUsuario;
-  const diasRestantesAcceso = useMemo(
-    () => calcularDiasRestantes(data?.fechaExpiracion, fechaActual),
-    [data?.fechaExpiracion, fechaActual]
+  const accessInfo = useMemo(
+    () =>
+      calcularResumenAcceso({
+        activo: data?.activo ?? false,
+        fechaActual,
+        fechaExpiracion: data?.fechaExpiracion,
+        fechaInicio: data?.createdAt,
+      }),
+    [data?.activo, data?.createdAt, data?.fechaExpiracion, fechaActual]
   );
 
   const cargarDatos = async () => {
@@ -399,8 +406,8 @@ export default function DashboardView({
     <div className="flex min-h-screen flex-col overflow-hidden bg-[#eef4fb] text-slate-800 lg:h-screen lg:flex-row">
       <DashboardSidebar
         activeTab={activeTab}
+        accessInfo={accessInfo}
         data={data}
-        diasRestantesAcceso={diasRestantesAcceso}
         opcionesRuc={opcionesRuc}
         onLogout={onLogout}
         onNavigate={setActiveTab}
@@ -409,13 +416,18 @@ export default function DashboardView({
       <div className="flex min-w-0 flex-1 flex-col">
         <DashboardHeader
           activeTab={activeTab}
+          accessInfo={accessInfo}
+          activo={data.activo}
+          email={data.email}
+          emailVerified={data.emailVerified}
           nombreUsuario={displayRazonSocial}
+          opcionesRuc={opcionesRuc}
           rucUsuario={displayRuc}
           tipoContribuyente={data.tipoContribuyente}
           fotoPerfilUrl={data.fotoPerfilUrl}
-          now={fechaActual}
           photoLoading={profilePhotoLoading}
           photoError={profilePhotoError}
+          onNavigate={setActiveTab}
           onViewProfile={() => setActiveTab("inicio")}
           onUploadProfilePhoto={subirFotoPerfil}
           onDeleteProfilePhoto={eliminarFotoPerfil}
@@ -432,8 +444,8 @@ export default function DashboardView({
 
           {activeTab === "inicio" && (
             <DashboardHome
+              accessInfo={accessInfo}
               data={data}
-              diasRestantesAcceso={diasRestantesAcceso}
               obligacionesList={obligacionesList}
               onNavigate={setActiveTab}
               onRefresh={cargarDatos}

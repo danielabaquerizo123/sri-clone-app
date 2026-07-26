@@ -13,11 +13,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import type { AccessInfo } from "../../utils/acceso";
 import type { ContribuyenteData } from "../../views/DashboardView";
 
 interface DashboardHomeProps {
   data: ContribuyenteData;
-  diasRestantesAcceso: number | null;
+  accessInfo: AccessInfo;
   obligacionesList: string[];
   onNavigate: (tab: string) => void;
   onRefresh: () => void;
@@ -25,18 +26,18 @@ interface DashboardHomeProps {
 
 export default function DashboardHome({
   data,
-  diasRestantesAcceso,
+  accessInfo,
   obligacionesList,
   onNavigate,
   onRefresh,
 }: DashboardHomeProps) {
   const obligacionesRegistradas = obligacionesList.length;
-  const hasAccessDate = Boolean(data.fechaExpiracion);
   const estadoTone = getEstadoTone(data.estadoTributario || data.estadoRuc);
 
   return (
     <div className="w-full space-y-4 2xl:space-y-5">
-      <section className="relative min-h-[250px] overflow-hidden rounded-[22px] bg-[linear-gradient(112deg,#123da6_0%,#216bf4_45%,#8562ec_100%)] px-7 py-6 text-white shadow-[0_18px_42px_rgba(37,99,235,0.24)] lg:px-10 lg:py-6">
+      <section className="relative min-h-[250px] overflow-hidden rounded-[22px] bg-[linear-gradient(120deg,var(--dashboard-hero-start)_0%,var(--dashboard-hero-middle)_48%,var(--dashboard-hero-end)_100%)] px-7 py-6 text-white shadow-[0_18px_42px_rgba(11,53,120,0.26)] lg:px-10 lg:py-6">
+        <div className="absolute inset-0 bg-[#08245f]/10" />
         <div className="absolute inset-0 opacity-80">
           <div className="absolute -left-20 -top-28 h-72 w-72 rounded-full bg-sky-300/10" />
           <div className="absolute left-[53%] top-8 h-40 w-40 rounded-full bg-white/7" />
@@ -93,8 +94,8 @@ export default function DashboardHome({
         <MetricCard
           icon={<CalendarDays size={28} />}
           label="Dias de acceso"
-          value={diasRestantesAcceso === null ? "-" : `${diasRestantesAcceso} dias`}
-          detail={hasAccessDate ? `Expira el ${formatDate(data.fechaExpiracion)}` : "Sin fecha registrada"}
+          value={formatAccessValue(accessInfo)}
+          detail={accessInfo.fechaExpiracion ? `Expira el ${formatDate(accessInfo.fechaExpiracion)}` : "Sin fecha registrada"}
           tone="amber"
         />
       </section>
@@ -357,11 +358,18 @@ function DecorativeLaptop() {
   );
 }
 
-function formatDate(value?: string | null) {
+function formatDate(value?: string | Date | null) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("es-EC");
+}
+
+function formatAccessValue(accessInfo: AccessInfo) {
+  if (accessInfo.estadoAcceso === "vencido") return "Acceso vencido";
+  if (accessInfo.estadoAcceso === "desactivado") return "Desactivado";
+  if (accessInfo.diasRestantes === null) return "-";
+  return `${accessInfo.diasRestantes} dias`;
 }
 
 function formatTipo(value: ContribuyenteData["tipoContribuyente"]) {
