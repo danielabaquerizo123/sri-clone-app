@@ -224,8 +224,8 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
         throw new Error(data.message || "Credenciales incorrectas.");
       }
 
-      localStorage.setItem("sri_token", data.token);
-      localStorage.setItem("sri_user", JSON.stringify(data.user));
+      sessionStorage.setItem("sri_token", data.token);
+      sessionStorage.setItem("sri_user", JSON.stringify(data.user));
 
       onLoginSuccess(data.user.ruc);
     } catch (err: any) {

@@ -1,4 +1,4 @@
-export const getAuthToken = () => localStorage.getItem("sri_token");
+export const getAuthToken = () => sessionStorage.getItem("sri_token");
 
 export type AccessBlockedReason = "expired" | "disabled";
 

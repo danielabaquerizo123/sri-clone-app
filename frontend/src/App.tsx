@@ -44,19 +44,19 @@ export default function App() {
 
   // 1. ESTO ES NUEVO: Verifica si ya habías iniciado sesión antes (para que no te saque al presionar F5)
   useEffect(() => {
-    const user = localStorage.getItem("sri_user");
-    const token = localStorage.getItem("sri_token");
+    const user = sessionStorage.getItem("sri_user");
+    const token = sessionStorage.getItem("sri_token");
 
     if (!user || !token) {
-      localStorage.removeItem("sri_token");
-      localStorage.removeItem("sri_user");
-      localStorage.removeItem("sri_active_contribuyente");
+      sessionStorage.removeItem("sri_token");
+      sessionStorage.removeItem("sri_user");
+      sessionStorage.removeItem("sri_active_contribuyente");
       return;
     }
 
     try {
       const parsedUser = JSON.parse(user);
-      const storedActive = localStorage.getItem("sri_active_contribuyente");
+      const storedActive = sessionStorage.getItem("sri_active_contribuyente");
       const parsedActive = storedActive ? JSON.parse(storedActive) : null;
       const activeFromSession =
         parsedActive?.ruc === parsedUser.ruc
@@ -70,18 +70,18 @@ export default function App() {
       setUserRol(parsedUser.rol || "CONTRIBUYENTE");
       setAdminMode(parsedUser.rol === "ADMIN");
       setActiveContribuyente(activeFromSession);
-      localStorage.setItem("sri_active_contribuyente", JSON.stringify(activeFromSession));
+      sessionStorage.setItem("sri_active_contribuyente", JSON.stringify(activeFromSession));
       setIsAuthenticated(true);
     } catch {
-      localStorage.removeItem("sri_token");
-      localStorage.removeItem("sri_user");
-      localStorage.removeItem("sri_active_contribuyente");
+      sessionStorage.removeItem("sri_token");
+      sessionStorage.removeItem("sri_user");
+      sessionStorage.removeItem("sri_active_contribuyente");
     }
   }, []);
 
   // 2. TU MISMA FUNCIÓN INTACTA: Maneja el inicio de sesión exitoso
   const handleLoginSuccess = (ruc: string) => {
-    const user = localStorage.getItem("sri_user");
+    const user = sessionStorage.getItem("sri_user");
     const parsedUser = user ? JSON.parse(user) : null;
     const active = {
       ruc,
@@ -94,14 +94,14 @@ export default function App() {
     setAdminMode(parsedUser?.rol === "ADMIN");
     setAccessBlockedReason(null);
     setActiveContribuyente(active);
-    localStorage.setItem("sri_active_contribuyente", JSON.stringify(active));
+    sessionStorage.setItem("sri_active_contribuyente", JSON.stringify(active));
   };
 
   // 3. NUEVA FUNCIÓN: Limpia la memoria del navegador al salir
   const handleLogout = () => {
-    localStorage.removeItem("sri_token");
-    localStorage.removeItem("sri_user");
-    localStorage.removeItem("sri_active_contribuyente");
+    sessionStorage.removeItem("sri_token");
+    sessionStorage.removeItem("sri_user");
+    sessionStorage.removeItem("sri_active_contribuyente");
     setIsAuthenticated(false);
     setUserRuc("");
     setUserRazonSocial("");
