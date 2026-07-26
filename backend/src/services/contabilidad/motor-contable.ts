@@ -495,6 +495,41 @@ function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export class AccountingConfigurationError extends Error {
+  readonly code = "CONFIGURACION_CONTABLE_INCOMPLETA";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "AccountingConfigurationError";
+  }
+}
+
+function classificationRuleCount(config: AccountingClassificationConfig) {
+  return [
+    config.reglasProveedor,
+    config.reglasActividad,
+    config.reglasConcepto,
+    config.reglasSustento,
+    config.reglasGenerales,
+  ].reduce((sum, rules) => sum + (rules?.length || 0), 0);
+}
+
+function assertRuntimeConfiguration(params: {
+  accounts: ResolvedAccount[];
+  accountConfigurations: AccountConfigurationRecord[];
+  classification: AccountingClassificationConfig;
+}) {
+  const missing: string[] = [];
+  if (params.accounts.length === 0) missing.push("plan de cuentas");
+  if (params.accountConfigurations.length === 0) missing.push("configuraciones de cuentas contables");
+  if (classificationRuleCount(params.classification) === 0) missing.push("reglas de clasificación contable");
+  if (missing.length === 0) return;
+
+  throw new AccountingConfigurationError(
+    `Configuración contable incompleta: falta ${missing.join(", ")}.`
+  );
+}
+
 function absAmount(value: unknown) {
   return Math.abs(roundMoney(Number(value || 0)));
 }
@@ -850,6 +885,12 @@ export class ExcelLibroDiarioService {
   }
 
   process(buffer: Buffer, filename: string): ExcelLibroDiarioResult {
+    assertRuntimeConfiguration({
+      accounts: this.accounts,
+      accountConfigurations: this.accountConfigurations,
+      classification: this.classification,
+    });
+
     const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
     const sheetRows = new Map(workbook.SheetNames.map((name) => [name, rowsForSheet(workbook.Sheets[name])]));
     const hojas = workbook.SheetNames.map((name) => sheetInfo(name, sheetRows.get(name) || []));

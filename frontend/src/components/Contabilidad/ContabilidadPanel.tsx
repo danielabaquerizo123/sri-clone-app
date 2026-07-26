@@ -93,7 +93,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
       const normalized = normalizeLibroDiarioResponse(data);
       setResponse(normalized);
       setSuccessNotice(
-        `Se generaron ${normalized.resumen.asientos} asientos contables. Ya puedes revisar el Libro Diario y el Libro Mayor.`
+        `ATS procesado correctamente. Se generaron ${normalized.resumen.asientos} asientos contables.`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error generando Libro Diario.");

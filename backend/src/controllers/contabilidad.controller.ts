@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
-import { AccountingEngine, ExcelLibroDiarioService, JournalPersistenceService, JournalPreviewService } from "../services/contabilidad/motor-contable";
+import { AccountingConfigurationError, AccountingEngine, ExcelLibroDiarioService, JournalPersistenceService, JournalPreviewService } from "../services/contabilidad/motor-contable";
 import { LibroMayorService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor.service";
 import { LibroMayorExportExcelService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-excel.service";
 import { LibroMayorExportPdfService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-pdf.service";
@@ -16,6 +16,10 @@ function isValidationErrorWithDetails(error: unknown): error is Error & {
   warnings?: unknown[];
 } {
   return error instanceof Error && Array.isArray((error as any).errores);
+}
+
+function isAccountingConfigurationError(error: unknown): error is AccountingConfigurationError {
+  return error instanceof AccountingConfigurationError || (error instanceof Error && (error as any).code === "CONFIGURACION_CONTABLE_INCOMPLETA");
 }
 
 function toMoneyNumber(value: unknown) {
@@ -95,6 +99,13 @@ export const procesarAtsContabilidad = async (req: Request, res: Response) => {
       ...result,
     });
   } catch (error) {
+    if (isAccountingConfigurationError(error)) {
+      return res.status(422).json({
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       message: "Error procesando ATS en Contabilidad.",
       error: buildErrorMessage(error),
@@ -120,6 +131,13 @@ export const procesarExcelLibroDiario = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
+    if (isAccountingConfigurationError(error)) {
+      return res.status(422).json({
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       message: "Error generando Libro Diario desde Excel ATS.",
       error: buildErrorMessage(error),

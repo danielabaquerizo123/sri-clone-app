@@ -138,16 +138,16 @@ model Contribuyente {
   referencia   String?
   jurisdiccion String?
 
-  email             String?
-  emailVerified     Boolean   @default(false)
-  verificationToken String?
+  email               String?
+  emailVerified       Boolean   @default(false)
+  verificationToken   String?
   verificationExpires DateTime?
-  resetToken        String?
-  resetTokenExpires DateTime?
-  fotoPerfilUrl     String?
-  fotoPerfilPublicId String?
-  telefonoDomicilio String?
-  celular           String?
+  resetToken          String?
+  resetTokenExpires   DateTime?
+  fotoPerfilUrl       String?
+  fotoPerfilPublicId  String?
+  telefonoDomicilio   String?
+  celular             String?
 
   artesano              String? @default("No registra")
   obligadoContabilidad  String? @default("NO")
@@ -188,9 +188,9 @@ model CuentaContable {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
-  reglasBase          ReglaContable[] @relation("ReglaCuentaBase")
-  reglasIva           ReglaContable[] @relation("ReglaCuentaIva")
-  reglasContrapartida ReglaContable[] @relation("ReglaCuentaContrapartida")
+  reglasBase          ReglaContable[]               @relation("ReglaCuentaBase")
+  reglasIva           ReglaContable[]               @relation("ReglaCuentaIva")
+  reglasContrapartida ReglaContable[]               @relation("ReglaCuentaContrapartida")
   lineasAsiento       LineaAsiento[]
   configuraciones     ConfiguracionCuentaContable[] @relation("ConfiguracionesCuentaContable")
 }
@@ -293,16 +293,16 @@ model ConfiguracionCuentaContable {
 }
 
 model ReglaClasificacionContable {
-  id            String                  @id @default(uuid())
-  codigo        String                  @unique
+  id            String                @id @default(uuid())
+  codigo        String                @unique
   categoria     String
   tipoOperacion TipoOperacionContable
-  prioridad     Int                     @default(100)
-  activa        Boolean                 @default(true)
+  prioridad     Int                   @default(100)
+  activa        Boolean               @default(true)
   condiciones   Json
   descripcion   String?
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   @@index([categoria, activa, prioridad])
   @@index([tipoOperacion, activa, prioridad])

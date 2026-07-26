@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { ZodError } from "zod";
 import { prisma } from "../lib/prisma";
 import { calcularFechaExpiracion } from "../lib/acceso";
 import { normalizeRegistrationInput } from "../lib/registration-normalization";
@@ -21,6 +22,14 @@ import {
 const MENSAJE_RECUPERACION_GENERICO =
   "Si existe una cuenta asociada, enviaremos un correo con instrucciones para recuperar la contraseña.";
 
+function requestId() {
+  return `login-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isPrismaKnownError(error: unknown): error is { code: string; meta?: Record<string, unknown> } {
+  return Boolean(error && typeof error === "object" && typeof (error as any).code === "string");
+}
+
 const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
 
@@ -32,6 +41,8 @@ const getJwtSecret = () => {
 };
 
 export const login = async (req: Request, res: Response) => {
+  const traceId = requestId();
+
   try {
     const { ruc, ciAdicional, clave } = loginSchema.parse(req.body);
 
@@ -51,10 +62,29 @@ export const login = async (req: Request, res: Response) => {
           },
         });
 
+    console.info("[auth.login]", {
+      traceId,
+      usuarioEncontrado: Boolean(contribuyente),
+      activo: contribuyente?.activo ?? null,
+      expirado: contribuyente ? new Date() > contribuyente.fechaExpiracion : null,
+      tipoHash: contribuyente?.clave?.startsWith("$2") ? "bcrypt" : contribuyente?.clave ? "legacy" : "sin_clave",
+    });
+
     if (!contribuyente) {
       return res.status(401).json({
-        message:
-          "Las credenciales ingresadas son incorrectas o el usuario no está registrado.",
+        message: "Usuario o contraseña incorrectos.",
+      });
+    }
+
+    if (!contribuyente.activo) {
+      return res.status(403).json({
+        message: "Su cuenta se encuentra desactivada.",
+      });
+    }
+
+    if (new Date() > contribuyente.fechaExpiracion) {
+      return res.status(403).json({
+        message: "Usuario dado de baja por tiempo límite.",
       });
     }
 
@@ -71,9 +101,14 @@ export const login = async (req: Request, res: Response) => {
       claveValida = clave === contribuyente.clave;
     }
 
+    console.info("[auth.login]", {
+      traceId,
+      comparacionPassword: claveValida,
+    });
+
     if (!claveValida) {
       return res.status(401).json({
-        message: "Las credenciales ingresadas son incorrectas.",
+        message: "Usuario o contraseña incorrectos.",
       });
     }
 
@@ -112,13 +147,39 @@ export const login = async (req: Request, res: Response) => {
         activo: contribuyente.activo,
         fechaExpiracion: contribuyente.fechaExpiracion,
         emailVerified: contribuyente.emailVerified,
+        fotoPerfilUrl: contribuyente.fotoPerfilUrl,
       },
     });
   } catch (error) {
-    console.error("Error en login:", error);
+    if (error instanceof ZodError) {
+      return res.status(400).json({
+        message: "Datos inválidos para iniciar sesión.",
+        issues: error.issues,
+      });
+    }
 
-    return res.status(400).json({
-      message: "Datos inválidos para iniciar sesión.",
+    if (isPrismaKnownError(error)) {
+      console.error("[auth.login] Error de Prisma", {
+        traceId,
+        code: error.code,
+        model: error.meta?.modelName,
+        column: error.meta?.column,
+      });
+
+      return res.status(500).json({
+        message: "No fue posible iniciar sesión en este momento.",
+        requestId: traceId,
+      });
+    }
+
+    console.error("[auth.login] Error inesperado", {
+      traceId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+
+    return res.status(500).json({
+      message: "No fue posible iniciar sesión en este momento.",
+      requestId: traceId,
     });
   }
 };
