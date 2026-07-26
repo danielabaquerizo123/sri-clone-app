@@ -149,17 +149,6 @@ export default function DashboardView({
     [data?.fechaExpiracion, fechaActual]
   );
 
-  const actividadesList = useMemo(
-    () =>
-      data?.actividadesEconomicas
-        ?.split("•")
-        .join(",")
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean) || [],
-    [data]
-  );
-
   const cargarDatos = async () => {
     const primeraCarga = !data;
 
@@ -407,7 +396,7 @@ export default function DashboardView({
   const displayRazonSocial = razonSocialUsuario || rucUsuario;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#eef4fb] text-slate-800">
+    <div className="flex min-h-screen flex-col overflow-hidden bg-[#eef4fb] text-slate-800 lg:h-screen lg:flex-row">
       <DashboardSidebar
         activeTab={activeTab}
         data={data}
@@ -446,7 +435,6 @@ export default function DashboardView({
               data={data}
               diasRestantesAcceso={diasRestantesAcceso}
               obligacionesList={obligacionesList}
-              actividadesList={actividadesList}
               onNavigate={setActiveTab}
               onRefresh={cargarDatos}
             />

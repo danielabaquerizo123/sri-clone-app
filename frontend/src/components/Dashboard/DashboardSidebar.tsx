@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { ContribuyenteData, OpcionesRuc } from "../../views/DashboardView";
+import sriLogo from "../../assets/images/SRI.png";
 
 interface DashboardSidebarProps {
   activeTab: string;
@@ -43,25 +44,36 @@ export default function DashboardSidebar({
   const [anexosOpen, setAnexosOpen] = useState(false);
 
   const accessProgress = useMemo(() => {
-    if (diasRestantesAcceso === null) return 0;
-    return Math.max(0, Math.min(100, Math.round((diasRestantesAcceso / 120) * 100)));
-  }, [diasRestantesAcceso]);
+    if (diasRestantesAcceso === null || !data.fechaExpiracion) return null;
+
+    const inicio = new Date(data.fechaRegistro || data.createdAt);
+    const expiracion = new Date(data.fechaExpiracion);
+
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(expiracion.getTime())) {
+      return Math.max(0, Math.min(100, Math.round((diasRestantesAcceso / 120) * 100)));
+    }
+
+    const total = Math.max(expiracion.getTime() - inicio.getTime(), 1);
+    const restante = Math.max(expiracion.getTime() - Date.now(), 0);
+
+    return Math.max(0, Math.min(100, Math.round((restante / total) * 100)));
+  }, [data.createdAt, data.fechaExpiracion, data.fechaRegistro, diasRestantesAcceso]);
 
   return (
-    <aside className="flex flex-col overflow-y-auto bg-[#003565] text-white shadow-xl lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:shrink-0">
-      <div className="flex items-center gap-3 border-b border-white/10 p-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-lg font-black text-[#003565]">
-          SRI
+    <aside className="flex max-h-[48vh] w-full flex-col overflow-y-auto bg-[linear-gradient(180deg,#061d58_0%,#003565_52%,#063e78_100%)] text-white shadow-[8px_0_30px_rgba(3,7,18,0.18)] [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.35)_transparent] lg:sticky lg:top-0 lg:h-screen lg:max-h-none lg:w-[272px] lg:shrink-0">
+      <div className="flex items-center gap-4 p-5">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 shadow-sm">
+          <img src={sriLogo} alt="SRI" className="h-full w-full object-contain" />
         </div>
         <div className="min-w-0">
-          <p className="text-lg font-black leading-tight">SRI en linea</p>
-          <p className="text-xs font-black uppercase tracking-wider text-white/55">
-            Portal transaccional
+          <p className="text-xl font-black leading-tight">SRI en linea</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-100/70">
+            Portal tributario
           </p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-4 p-4">
+      <nav className="flex-1 space-y-5 px-5 pb-4 pt-3">
         <SidebarItem
           active={activeTab === "inicio"}
           icon={<Home size={18} />}
@@ -73,7 +85,7 @@ export default function DashboardSidebar({
           <button
             type="button"
             onClick={() => setFuncOpen((current) => !current)}
-            className="mb-2 flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-wider text-white/55 transition hover:bg-white/10"
+            className="mb-3 flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-wider text-blue-100/70 transition hover:bg-white/10"
           >
             Funcionalidades
             {funcOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
@@ -169,24 +181,29 @@ export default function DashboardSidebar({
         </div>
       </nav>
 
-      <div className="space-y-3 border-t border-white/10 p-4">
-        <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+      <div className="space-y-3 px-5 pb-5 pt-2">
+        <div className="rounded-2xl border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-black uppercase text-white/60">
+            <p className="text-[11px] font-black uppercase text-blue-100/70">
               Contribuyente activo
             </p>
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className={`h-2.5 w-2.5 rounded-full ${data.activo ? "bg-emerald-400" : "bg-amber-300"}`} />
           </div>
-          <p className="truncate text-sm font-black">{data.razonSocial}</p>
-          <p className="mt-1 font-mono text-xs text-white/60">RUC: {data.ruc}</p>
-          <span className="mt-2 inline-flex rounded-lg bg-white/10 px-3 py-1 text-[10px] font-black uppercase text-white/80">
-            {data.regimen}
-          </span>
+          <p className="truncate text-sm font-black text-white">{data.razonSocial}</p>
+          <p className="mt-1 font-mono text-xs font-bold text-blue-100/75">RUC: {data.ruc}</p>
+          <button
+            type="button"
+            onClick={() => onNavigate("ruc_reimpresion")}
+            className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          >
+            Ver perfil
+          </button>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+        {data.fechaExpiracion && (
+        <div className="rounded-2xl border border-white/8 bg-[#07427f]/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-black text-white/70">Acceso restante</p>
+            <p className="text-[11px] font-black uppercase text-blue-100/70">Dias de acceso</p>
             <ShieldCheck size={15} className="text-sky-300" />
           </div>
           <p className="text-xl font-black">
@@ -198,20 +215,21 @@ export default function DashboardSidebar({
           <div className="mt-3 flex items-center gap-3">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full rounded-full bg-sky-400"
-                style={{ width: `${accessProgress}%` }}
+                className="h-full rounded-full bg-cyan-300"
+                style={{ width: `${accessProgress ?? 0}%` }}
               />
             </div>
             <span className="text-xs font-bold text-white/65">
-              {accessProgress}%
+              {accessProgress ?? 0}%
             </span>
           </div>
         </div>
+        )}
 
         <button
           type="button"
           onClick={onLogout}
-          className="flex w-full items-center gap-3 rounded-2xl bg-white/10 px-4 py-2.5 text-sm font-black text-white/85 transition hover:bg-white/15 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-sm font-black text-white/90 transition hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
         >
           <LogOut size={18} />
           Cerrar sesion
@@ -236,9 +254,9 @@ function SidebarItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm font-black transition ${
+      className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
         active
-          ? "bg-blue-600 text-white shadow-lg shadow-blue-950/20"
+          ? "bg-blue-500 text-white shadow-[0_12px_24px_rgba(37,99,235,0.34)]"
           : "text-white/80 hover:bg-white/10 hover:text-white"
       }`}
     >
@@ -265,7 +283,7 @@ function ModuleButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-sm font-black transition ${
+      className={`flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-sm font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
         active
           ? "bg-white/12 text-white"
           : "text-white/80 hover:bg-white/10 hover:text-white"
@@ -298,7 +316,7 @@ function SidebarSubItem({
       type="button"
       disabled={!enabled}
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left text-xs font-bold transition ${
+      className={`flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${
         active
           ? "bg-white/12 text-white"
           : enabled
