@@ -45,7 +45,16 @@ export default function App() {
   // 1. ESTO ES NUEVO: Verifica si ya habías iniciado sesión antes (para que no te saque al presionar F5)
   useEffect(() => {
     const user = localStorage.getItem("sri_user");
-    if (user) {
+    const token = localStorage.getItem("sri_token");
+
+    if (!user || !token) {
+      localStorage.removeItem("sri_token");
+      localStorage.removeItem("sri_user");
+      localStorage.removeItem("sri_active_contribuyente");
+      return;
+    }
+
+    try {
       const parsedUser = JSON.parse(user);
       const storedActive = localStorage.getItem("sri_active_contribuyente");
       const parsedActive = storedActive ? JSON.parse(storedActive) : null;
@@ -63,6 +72,10 @@ export default function App() {
       setActiveContribuyente(activeFromSession);
       localStorage.setItem("sri_active_contribuyente", JSON.stringify(activeFromSession));
       setIsAuthenticated(true);
+    } catch {
+      localStorage.removeItem("sri_token");
+      localStorage.removeItem("sri_user");
+      localStorage.removeItem("sri_active_contribuyente");
     }
   }, []);
 

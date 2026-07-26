@@ -96,6 +96,20 @@ export interface OpcionesRuc {
 
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
+async function responseErrorMessage(response: Response, fallback: string) {
+  try {
+    const data = await response.clone().json();
+    return data?.message || data?.error || fallback;
+  } catch {
+    try {
+      const text = await response.text();
+      return text || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
 export default function DashboardView({
   rucUsuario,
   razonSocialUsuario,
@@ -156,8 +170,8 @@ export default function DashboardView({
         authFetch(`${apiUrl}/api/contribuyentes/${rucActivo}/ruc/opciones`),
       ]);
 
-      if (!perfilRes.ok) throw new Error("No se pudo cargar el perfil.");
-      if (!opcionesRes.ok) throw new Error("No se pudieron cargar las opciones RUC.");
+      if (!perfilRes.ok) throw new Error(await responseErrorMessage(perfilRes, "No se pudo cargar el perfil."));
+      if (!opcionesRes.ok) throw new Error(await responseErrorMessage(opcionesRes, "No se pudieron cargar las opciones RUC."));
 
       const perfil = await perfilRes.json();
       const opciones = await opcionesRes.json();
