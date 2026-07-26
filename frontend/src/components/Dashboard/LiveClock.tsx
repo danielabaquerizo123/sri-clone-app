@@ -42,7 +42,7 @@ export default function LiveClock() {
     <time
       dateTime={currentDate.toISOString()}
       title={`${formatted.dateLong} ${formatted.time}`}
-      className="hidden min-w-[86px] rounded-2xl bg-slate-50 px-3 py-2 text-right leading-tight text-slate-600 md:block xl:min-w-[154px]"
+      className="hidden min-w-[86px] max-w-[170px] rounded-2xl bg-slate-50 px-3 py-2 text-right leading-tight text-slate-600 md:block xl:min-w-[150px]"
     >
       <span className="hidden text-[11px] font-bold capitalize text-slate-500 xl:block">
         {formatted.dateLong}

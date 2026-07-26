@@ -71,30 +71,32 @@ export default function DashboardHeader({
 
   return (
     <header className="relative z-[var(--dashboard-z-header)] border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
-      <div className="grid min-h-[88px] gap-3 px-5 py-3 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] lg:items-center xl:px-7">
-        <div className="min-w-0">
+      <div className="flex min-h-[88px] items-center justify-between gap-3 px-5 py-4 lg:flex-nowrap xl:px-7">
+        <div className="min-w-[230px] shrink-0 lg:min-w-[260px]">
           <h1 className="truncate text-2xl font-black leading-tight text-[#082b68]">
             {headerTitle}
             {isInicio && <span className="ml-2" aria-hidden="true">👋</span>}
           </h1>
           {isInicio && (
-            <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
+            <p className="mt-1 hidden text-sm font-semibold leading-5 text-slate-500 2xl:block">
               Aqui tienes un resumen actualizado de tu informacion tributaria.
             </p>
           )}
         </div>
 
         <GlobalSearch items={navigationItems} onNavigate={onNavigate} />
-        <LiveClock />
-        <NotificationButton
-          accessInfo={accessInfo}
-          activo={activo}
-          emailVerified={emailVerified}
-        />
 
-        <div className="hidden h-10 w-px bg-slate-200 xl:block" />
+        <div className="ml-auto flex shrink-0 items-center gap-3 lg:flex-nowrap">
+          <LiveClock />
+          <NotificationButton
+            accessInfo={accessInfo}
+            activo={activo}
+            emailVerified={emailVerified}
+          />
 
-        <div ref={menuRef} className="relative flex min-w-0 items-center gap-3 rounded-2xl bg-white px-2 py-2 lg:justify-self-end xl:justify-self-auto">
+          <div className="hidden h-10 w-px bg-slate-200 xl:block" />
+
+        <div ref={menuRef} className="relative flex h-12 max-w-[220px] shrink-0 items-center gap-2 rounded-2xl bg-white px-2 xl:max-w-[240px] 2xl:max-w-[280px]">
           <button
             type="button"
             aria-label="Abrir menú de perfil"
@@ -108,12 +110,12 @@ export default function DashboardHeader({
           <button
             type="button"
             onClick={() => setMenuOpen((current) => !current)}
-            className="min-w-0 text-left leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="hidden min-w-0 text-left leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 xl:block"
           >
-            <p className="max-w-48 truncate text-sm font-black text-[#082b68] 2xl:max-w-56">
+            <p title={nombreUsuario} className="max-w-[140px] truncate whitespace-nowrap text-sm font-black text-[#082b68] 2xl:max-w-[180px]">
               {nombreUsuario}
             </p>
-            <p className="font-mono text-xs font-semibold text-slate-500">
+            <p className="whitespace-nowrap font-mono text-xs font-semibold text-slate-500">
               RUC: {rucUsuario}
             </p>
           </button>
@@ -188,6 +190,7 @@ export default function DashboardHeader({
             onClose={() => setPhotoDialogOpen(false)}
             onSave={handleUpload}
           />
+        </div>
         </div>
       </div>
     </header>

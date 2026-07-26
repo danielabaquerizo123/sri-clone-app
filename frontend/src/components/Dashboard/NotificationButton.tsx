@@ -45,7 +45,7 @@ export default function NotificationButton({
         aria-label="Abrir notificaciones"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="relative hidden h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-700 shadow-sm transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:flex lg:justify-self-end xl:justify-self-auto"
+        className="relative hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-700 shadow-sm transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:flex"
       >
         <Bell size={20} />
         {unreadCount > 0 && (

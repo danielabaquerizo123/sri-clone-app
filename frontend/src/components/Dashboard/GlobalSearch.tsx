@@ -86,8 +86,8 @@ export default function GlobalSearch({ items, onNavigate }: GlobalSearchProps) {
   };
 
   return (
-    <div ref={wrapperRef} className="hidden xl:block">
-      <div className="flex h-[52px] w-[300px] min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-slate-500 shadow-[0_8px_18px_rgba(15,23,42,0.08)] 2xl:w-[390px]">
+    <div ref={wrapperRef} className="hidden min-w-[240px] max-w-[420px] flex-1 lg:block">
+      <div className="flex h-[52px] w-full min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-slate-500 shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
         <Search size={18} className="shrink-0 text-slate-400" />
         <input
           ref={inputRef}
