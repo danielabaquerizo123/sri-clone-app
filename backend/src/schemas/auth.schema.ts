@@ -25,22 +25,27 @@ export const registerSchema = z
       required_error: "El tipo de identificación es requerido",
     }),
     identificacion: z
-      .string({ required_error: "La identificación es requerida" })
+      .string({ required_error: "La identificación es obligatoria." })
+      .trim()
+      .min(1, "La identificación es obligatoria.")
       .regex(/^\d+$/, "La identificación solo debe contener dígitos"),
     razonSocial: z
-      .string({ required_error: "Los nombres o razón social son requeridos" })
+      .string({ required_error: "Los nombres o razón social son obligatorios." })
       .trim()
+      .min(1, "Los nombres o razón social son obligatorios.")
       .min(3, "Ingrese nombres o razón social válidos"),
     tipoContribuyente: z.enum(["PERSONA_NATURAL", "SOCIEDAD"], {
       required_error: "El tipo de contribuyente es requerido",
     }),
     email: z
-      .string({ required_error: "El correo electrónico es requerido" })
+      .string({ required_error: "El correo electrónico es obligatorio." })
       .trim()
+      .min(1, "El correo electrónico es obligatorio.")
       .email("Ingrese un correo electrónico válido"),
     telefono: z
-      .string({ required_error: "El teléfono es requerido" })
+      .string({ required_error: "El teléfono es obligatorio." })
       .trim()
+      .min(1, "El teléfono es obligatorio.")
       .min(7, "Ingrese un teléfono válido")
       .max(20, "El teléfono no puede superar 20 caracteres"),
     password: z
@@ -48,7 +53,7 @@ export const registerSchema = z
       .min(8, "La contraseña debe tener mínimo 8 caracteres"),
     confirmPassword: z.string({
       required_error: "Debe confirmar la contraseña",
-    }),
+    }).min(1, "Debe confirmar la contraseña"),
   })
   .superRefine((data, ctx) => {
     if (data.tipoIdentificacion === "CEDULA" && data.identificacion.length !== 10) {
@@ -71,7 +76,7 @@ export const registerSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["confirmPassword"],
-        message: "La confirmación no coincide con la contraseña",
+        message: "Las contraseñas no coinciden.",
       });
     }
   });

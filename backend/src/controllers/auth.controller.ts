@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma";
 import { calcularFechaExpiracion } from "../lib/acceso";
+import { normalizeRegistrationInput } from "../lib/registration-normalization";
 import {
   calcularResetTokenExpires,
   calcularVerificationExpires,
@@ -124,11 +125,11 @@ export const login = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const input = registerSchema.parse(req.body);
-    const identificacion = input.identificacion.trim();
-    const razonSocial = input.razonSocial.trim();
-    const email = input.email.trim().toLowerCase();
-    const telefono = input.telefono.trim();
+    const input = registerSchema.parse(normalizeRegistrationInput(req.body));
+    const identificacion = input.identificacion;
+    const razonSocial = input.razonSocial;
+    const email = input.email;
+    const telefono = input.telefono;
 
     const existente = await prisma.contribuyente.findUnique({
       where: { ruc: identificacion },
@@ -138,6 +139,28 @@ export const register = async (req: Request, res: Response) => {
     if (existente) {
       return res.status(409).json({
         message: "La identificación ingresada ya se encuentra registrada.",
+        fieldErrors: {
+          identificacion: "La identificación ya está registrada.",
+        },
+      });
+    }
+
+    const emailExistente = await prisma.contribuyente.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: "insensitive",
+        },
+      },
+      select: { id: true },
+    });
+
+    if (emailExistente) {
+      return res.status(409).json({
+        message: "Este correo ya está registrado.",
+        fieldErrors: {
+          email: "Este correo ya está registrado.",
+        },
       });
     }
 
@@ -222,9 +245,18 @@ export const register = async (req: Request, res: Response) => {
     console.error("Error en registro:", error);
 
     if (error?.issues?.length) {
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of error.issues) {
+        const field = issue.path?.[0];
+        if (typeof field === "string" && !fieldErrors[field]) {
+          fieldErrors[field] = issue.message;
+        }
+      }
+
       return res.status(400).json({
         message: error.issues[0].message || "Datos inválidos para el registro.",
         issues: error.issues,
+        fieldErrors,
       });
     }
 

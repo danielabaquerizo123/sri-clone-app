@@ -2,6 +2,11 @@ import { Request, Response } from "express";
 import puppeteer from "puppeteer";
 import QRCode from "qrcode";
 import { prisma } from "../lib/prisma";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware";
+import {
+  ProfileImageValidationError,
+  profileImageStorageService,
+} from "../services/profile-image-storage.service";
 
 const formatDate = (value?: Date | string | null) => {
   if (!value) return "No registra";
@@ -38,6 +43,191 @@ const splitItems = (value?: string | null) =>
     .split(/(?:\s*•\s*)|(?:\r?\n)|(?:,(?=\s*(?:\d{4}\s*-|ANEXO|G\d{8})))/)
     .map((item) => item.trim())
     .filter(Boolean);
+
+const getPublicBaseUrl = (req: Request) =>
+  process.env.PUBLIC_API_URL ||
+  process.env.API_PUBLIC_URL ||
+  `${req.protocol}://${req.get("host")}`;
+
+const usuarioPerfilSelect = {
+  id: true,
+  ruc: true,
+  ciAdicional: true,
+  razonSocial: true,
+  tipoContribuyente: true,
+  estadoTributario: true,
+  rol: true,
+  activo: true,
+  fechaExpiracion: true,
+  estadoRuc: true,
+  regimen: true,
+  email: true,
+  emailVerified: true,
+  fotoPerfilUrl: true,
+  fotoPerfilPublicId: true,
+  fechaActualizacion: true,
+} as const;
+
+export const obtenerUsuarioAutenticado = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const userId = req.contribuyenteAuth?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Token de autenticación requerido.",
+      });
+    }
+
+    const usuario = await prisma.contribuyente.findUnique({
+      where: { id: userId },
+      select: usuarioPerfilSelect,
+    });
+
+    if (!usuario) {
+      return res.status(404).json({
+        message: "Usuario no encontrado.",
+      });
+    }
+
+    return res.json(usuario);
+  } catch (error) {
+    console.error("Error al obtener usuario autenticado:", error);
+
+    return res.status(500).json({
+      message: "Error al obtener el usuario autenticado.",
+    });
+  }
+};
+
+export const subirFotoPerfil = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  let uploadedPublicId: string | null = null;
+
+  try {
+    const userId = req.contribuyenteAuth?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Token de autenticación requerido.",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        message: "Seleccione una imagen válida.",
+      });
+    }
+
+    const usuarioActual = await prisma.contribuyente.findUnique({
+      where: { id: userId },
+      select: {
+        fotoPerfilPublicId: true,
+      },
+    });
+
+    if (!usuarioActual) {
+      return res.status(404).json({
+        message: "Usuario no encontrado.",
+      });
+    }
+
+    const nuevaFoto = await profileImageStorageService.uploadProfileImage({
+      userId,
+      file: req.file,
+      publicBaseUrl: getPublicBaseUrl(req),
+    });
+    uploadedPublicId = nuevaFoto.publicId;
+
+    const usuario = await prisma.contribuyente.update({
+      where: { id: userId },
+      data: {
+        fotoPerfilUrl: nuevaFoto.url,
+        fotoPerfilPublicId: nuevaFoto.publicId,
+        fechaActualizacion: new Date(),
+      },
+      select: usuarioPerfilSelect,
+    });
+
+    if (usuarioActual.fotoPerfilPublicId) {
+      await profileImageStorageService.deleteProfileImage(usuarioActual.fotoPerfilPublicId);
+    }
+
+    return res.json({
+      ok: true,
+      usuario,
+    });
+  } catch (error) {
+    await profileImageStorageService.deleteUploadedAfterFailure(uploadedPublicId);
+
+    if (error instanceof ProfileImageValidationError) {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
+    console.error("Error al subir foto de perfil:", error);
+
+    return res.status(500).json({
+      message: "No se pudo actualizar la foto de perfil.",
+    });
+  }
+};
+
+export const eliminarFotoPerfil = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const userId = req.contribuyenteAuth?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Token de autenticación requerido.",
+      });
+    }
+
+    const usuarioActual = await prisma.contribuyente.findUnique({
+      where: { id: userId },
+      select: {
+        fotoPerfilPublicId: true,
+      },
+    });
+
+    if (!usuarioActual) {
+      return res.status(404).json({
+        message: "Usuario no encontrado.",
+      });
+    }
+
+    const usuario = await prisma.contribuyente.update({
+      where: { id: userId },
+      data: {
+        fotoPerfilUrl: null,
+        fotoPerfilPublicId: null,
+        fechaActualizacion: new Date(),
+      },
+      select: usuarioPerfilSelect,
+    });
+
+    await profileImageStorageService.deleteProfileImage(usuarioActual.fotoPerfilPublicId);
+
+    return res.json({
+      ok: true,
+      usuario,
+    });
+  } catch (error) {
+    console.error("Error al eliminar foto de perfil:", error);
+
+    return res.status(500).json({
+      message: "No se pudo eliminar la foto de perfil.",
+    });
+  }
+};
 
 export const obtenerPerfilContribuyente = async (req: Request, res: Response) => {
   try {

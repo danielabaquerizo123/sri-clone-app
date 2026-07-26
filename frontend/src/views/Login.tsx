@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import {
   Download,
   Eye,
@@ -36,6 +37,8 @@ type RegisteredCredentials = RegisterForm & {
   fechaRegistro: string;
 };
 
+type RegisterFieldErrors = Partial<Record<keyof RegisterForm, string>>;
+
 const initialRegisterForm: RegisterForm = {
   tipoIdentificacion: "RUC",
   identificacion: "",
@@ -51,6 +54,18 @@ const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const formatTipoContribuyente = (value: RegisterForm["tipoContribuyente"]) =>
   value === "PERSONA_NATURAL" ? "PERSONA NATURAL" : "SOCIEDAD";
+
+const normalizeUppercaseText = (value: string) =>
+  value.replace(/\s+/g, " ").toLocaleUpperCase("es");
+
+const normalizeUppercaseTextForSubmit = (value: string) =>
+  normalizeUppercaseText(value.trim());
+
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+const isValidEmail = (value: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) &&
+  value.split("@").length === 2;
 
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">(
@@ -84,13 +99,46 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     useState<RegisterForm>(initialRegisterForm);
   const [registeredCredentials, setRegisteredCredentials] =
     useState<RegisteredCredentials | null>(null);
+  const [registerFieldErrors, setRegisterFieldErrors] =
+    useState<RegisterFieldErrors>({});
+  const identificacionRef = useRef<HTMLInputElement | null>(null);
+  const razonSocialRef = useRef<HTMLInputElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  const telefonoRef = useRef<HTMLInputElement | null>(null);
+  const passwordRef = useRef<HTMLInputElement | null>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement | null>(null);
 
   const updateRegisterField = <K extends keyof RegisterForm>(
     field: K,
     value: RegisterForm[K]
   ) => {
-    setRegisterForm((current) => ({ ...current, [field]: value }));
+    const normalizedValue =
+      field === "razonSocial"
+        ? normalizeUppercaseText(String(value))
+        : field === "email"
+          ? String(value).trim().toLowerCase()
+          : value;
+
+    setRegisterForm((current) => ({ ...current, [field]: normalizedValue as RegisterForm[K] }));
+    setRegisterFieldErrors((current) => ({ ...current, [field]: undefined }));
     setRegisterError("");
+  };
+
+  const focusFirstRegisterError = (errors: RegisterFieldErrors) => {
+    const refs: Partial<Record<keyof RegisterForm, RefObject<HTMLInputElement>>> = {
+      identificacion: identificacionRef,
+      razonSocial: razonSocialRef,
+      email: emailRef,
+      telefono: telefonoRef,
+      password: passwordRef,
+      confirmPassword: confirmPasswordRef,
+    };
+
+    const firstError = (Object.keys(errors) as Array<keyof RegisterForm>).find(
+      (field) => Boolean(errors[field])
+    );
+
+    if (firstError) refs[firstError]?.current?.focus();
   };
 
   useEffect(() => {
@@ -361,29 +409,61 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError("");
+    setRegisterFieldErrors({});
     setRegisterSuccessMessage("");
     setRegisteredCredentials(null);
 
     const identificacion = registerForm.identificacion.trim();
+    const razonSocial = normalizeUppercaseTextForSubmit(registerForm.razonSocial);
+    const email = normalizeEmail(registerForm.email);
+    const telefono = registerForm.telefono.trim().replace(/\s+/g, " ");
     const expectedLength =
       registerForm.tipoIdentificacion === "CEDULA" ? 10 : 13;
+    const fieldErrors: RegisterFieldErrors = {};
 
-    if (identificacion.length !== expectedLength) {
-      setRegisterError(
+    if (!identificacion) {
+      fieldErrors.identificacion = "La identificación es obligatoria.";
+    } else if (identificacion.length !== expectedLength) {
+      fieldErrors.identificacion =
         registerForm.tipoIdentificacion === "CEDULA"
           ? "La cédula debe tener 10 dígitos."
-          : "El RUC debe tener 13 dígitos."
-      );
-      return;
+          : "El RUC debe tener 13 dígitos.";
+    }
+
+    if (!razonSocial) {
+      fieldErrors.razonSocial = "Los nombres o razón social son obligatorios.";
+    } else if (razonSocial.length < 3) {
+      fieldErrors.razonSocial = "Ingrese nombres o razón social válidos.";
+    }
+
+    if (!email) {
+      fieldErrors.email = "El correo electrónico es obligatorio.";
+    } else if (!isValidEmail(email)) {
+      fieldErrors.email = "Ingrese un correo electrónico válido.";
+    }
+
+    if (!telefono) {
+      fieldErrors.telefono = "El teléfono es obligatorio.";
+    } else if (telefono.length < 7) {
+      fieldErrors.telefono = "Ingrese un teléfono válido.";
+    } else if (telefono.length > 20) {
+      fieldErrors.telefono = "El teléfono no puede superar 20 caracteres.";
     }
 
     if (registerForm.password.length < 8) {
-      setRegisterError("La contraseña debe tener mínimo 8 caracteres.");
-      return;
+      fieldErrors.password = "La contraseña debe tener mínimo 8 caracteres.";
     }
 
-    if (registerForm.password !== registerForm.confirmPassword) {
-      setRegisterError("La confirmación no coincide con la contraseña.");
+    if (!registerForm.confirmPassword) {
+      fieldErrors.confirmPassword = "Debe confirmar la contraseña.";
+    } else if (registerForm.password !== registerForm.confirmPassword) {
+      fieldErrors.confirmPassword = "Las contraseñas no coinciden.";
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setRegisterFieldErrors(fieldErrors);
+      setRegisterError("Revise los campos marcados antes de crear el registro.");
+      focusFirstRegisterError(fieldErrors);
       return;
     }
 
@@ -393,9 +473,9 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
       const payload = {
         ...registerForm,
         identificacion,
-        razonSocial: registerForm.razonSocial.trim(),
-        email: registerForm.email.trim(),
-        telefono: registerForm.telefono.trim(),
+        razonSocial,
+        email,
+        telefono,
       };
 
       const response = await fetch(`${apiBaseUrl}/api/auth/register`, {
@@ -409,6 +489,10 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
       const data = await response.json();
 
       if (!response.ok) {
+        if (data.fieldErrors) {
+          setRegisterFieldErrors(data.fieldErrors);
+          focusFirstRegisterError(data.fieldErrors);
+        }
         throw new Error(data.message || "No se pudo crear el registro.");
       }
 
@@ -805,10 +889,15 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                 )}
 
                 <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs font-semibold leading-5 text-white/80">
+                    <p>* Campos obligatorios</p>
+                    <p>Los nombres y datos personales se guardarán en mayúsculas.</p>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-bold uppercase">
-                        Tipo de identificación
+                        * Tipo de identificación
                       </label>
                       <select
                         value={registerForm.tipoIdentificacion}
@@ -827,13 +916,14 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
 
                     <div>
                       <label className="text-xs font-bold uppercase">
-                        Número
+                        * Número
                       </label>
                       <div className="mt-2 flex bg-white rounded overflow-hidden">
                         <div className="bg-slate-100 px-3 flex items-center text-slate-600">
                           <IdCard size={18} />
                         </div>
                         <input
+                          ref={identificacionRef}
                           value={registerForm.identificacion}
                           onChange={(e) =>
                             updateRegisterField(
@@ -850,18 +940,20 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                           required
                         />
                       </div>
+                      <FieldError message={registerFieldErrors.identificacion} />
                     </div>
                   </div>
 
                   <div>
                     <label className="text-xs font-bold uppercase">
-                      Nombres completos / Razón social
+                      * Nombres completos / Razón social
                     </label>
                     <div className="mt-2 flex bg-white rounded overflow-hidden">
                       <div className="bg-slate-100 px-3 flex items-center text-slate-600">
                         <Building2 size={18} />
                       </div>
                       <input
+                        ref={razonSocialRef}
                         value={registerForm.razonSocial}
                         onChange={(e) =>
                           updateRegisterField("razonSocial", e.target.value)
@@ -870,11 +962,12 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                         required
                       />
                     </div>
+                    <FieldError message={registerFieldErrors.razonSocial} />
                   </div>
 
                   <div>
                     <label className="text-xs font-bold uppercase">
-                      Tipo de contribuyente
+                      * Tipo de contribuyente
                     </label>
                     <select
                       value={registerForm.tipoContribuyente}
@@ -894,33 +987,37 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-bold uppercase">
-                        Correo electrónico
+                        * Correo electrónico
                       </label>
                       <div className="mt-2 flex bg-white rounded overflow-hidden">
                         <div className="bg-slate-100 px-3 flex items-center text-slate-600">
                           <Mail size={18} />
                         </div>
                         <input
+                          ref={emailRef}
                           type="email"
                           value={registerForm.email}
                           onChange={(e) =>
                             updateRegisterField("email", e.target.value)
                           }
                           className="flex-1 px-3 py-3 text-black outline-none min-w-0"
+                          placeholder="nombre@correo.com"
                           required
                         />
                       </div>
+                      <FieldError message={registerFieldErrors.email} />
                     </div>
 
                     <div>
                       <label className="text-xs font-bold uppercase">
-                        Teléfono / celular
+                        * Teléfono / celular
                       </label>
                       <div className="mt-2 flex bg-white rounded overflow-hidden">
                         <div className="bg-slate-100 px-3 flex items-center text-slate-600">
                           <Phone size={18} />
                         </div>
                         <input
+                          ref={telefonoRef}
                           value={registerForm.telefono}
                           onChange={(e) =>
                             updateRegisterField("telefono", e.target.value)
@@ -929,19 +1026,21 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                           required
                         />
                       </div>
+                      <FieldError message={registerFieldErrors.telefono} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-bold uppercase">
-                        Contraseña
+                        * Contraseña
                       </label>
                       <div className="mt-2 flex bg-white rounded overflow-hidden">
                         <div className="bg-slate-100 px-3 flex items-center text-slate-600">
                           <KeyRound size={18} />
                         </div>
                         <input
+                          ref={passwordRef}
                           type={showRegisterPassword ? "text" : "password"}
                           value={registerForm.password}
                           onChange={(e) =>
@@ -952,14 +1051,16 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                           required
                         />
                       </div>
+                      <FieldError message={registerFieldErrors.password} />
                     </div>
 
                     <div>
                       <label className="text-xs font-bold uppercase">
-                        Confirmar contraseña
+                        * Confirmar contraseña
                       </label>
                       <div className="mt-2 flex bg-white rounded overflow-hidden">
                         <input
+                          ref={confirmPasswordRef}
                           type={showRegisterPassword ? "text" : "password"}
                           value={registerForm.confirmPassword}
                           onChange={(e) =>
@@ -987,6 +1088,7 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
                           )}
                         </button>
                       </div>
+                      <FieldError message={registerFieldErrors.confirmPassword} />
                     </div>
                   </div>
 
@@ -1036,4 +1138,10 @@ Conserve este archivo en un lugar seguro. La clave no podrá recuperarse posteri
       </div>
     </main>
   );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+
+  return <p className="mt-1 text-xs font-bold text-red-200">{message}</p>;
 }

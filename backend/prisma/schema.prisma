@@ -144,6 +144,8 @@ model Contribuyente {
   verificationExpires DateTime?
   resetToken        String?
   resetTokenExpires DateTime?
+  fotoPerfilUrl     String?
+  fotoPerfilPublicId String?
   telefonoDomicilio String?
   celular           String?
 

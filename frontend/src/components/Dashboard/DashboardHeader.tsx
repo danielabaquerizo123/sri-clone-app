@@ -1,11 +1,21 @@
-import { CalendarDays, Search } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CalendarDays, Camera, LogOut, Search, Trash2, User } from "lucide-react";
+import UserAvatar from "../Profile/UserAvatar";
+import ProfilePhotoDialog from "../Profile/ProfilePhotoDialog";
 
 interface DashboardHeaderProps {
   activeTab: string;
   nombreUsuario: string;
   rucUsuario: string;
   tipoContribuyente: "PERSONA_NATURAL" | "SOCIEDAD";
+  fotoPerfilUrl?: string | null;
   now: Date;
+  photoLoading?: boolean;
+  photoError?: string;
+  onViewProfile: () => void;
+  onUploadProfilePhoto: (file: File) => Promise<void>;
+  onDeleteProfilePhoto: () => Promise<void>;
+  onLogout: () => void;
 }
 
 export default function DashboardHeader({
@@ -13,13 +23,53 @@ export default function DashboardHeader({
   nombreUsuario,
   rucUsuario,
   tipoContribuyente,
+  fotoPerfilUrl,
   now,
+  photoLoading = false,
+  photoError = "",
+  onViewProfile,
+  onUploadProfilePhoto,
+  onDeleteProfilePhoto,
+  onLogout,
 }: DashboardHeaderProps) {
-  const initials = getInitials(nombreUsuario);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const isInicio = activeTab === "inicio";
   const headerTitle = isInicio
     ? `Hola, ${getNombrePila(nombreUsuario, tipoContribuyente)}`
     : getSectionTitle(activeTab);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+
+    window.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const handleUpload = async (file: File) => {
+    await onUploadProfilePhoto(file);
+    setPhotoDialogOpen(false);
+    setMenuOpen(false);
+  };
+
+  const handleDelete = async () => {
+    await onDeleteProfilePhoto();
+    setMenuOpen(false);
+  };
 
   return (
     <header className="border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
@@ -36,41 +86,97 @@ export default function DashboardHeader({
         </div>
 
         <div className="hidden min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-slate-500 shadow-sm xl:flex">
-            <Search size={18} className="shrink-0 text-slate-400" />
-            <input
-              aria-label="Buscar en el sistema"
-              className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400"
-              placeholder="Buscar en el sistema..."
-            />
-            <span className="hidden rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500 sm:inline">
-              Ctrl + K
-            </span>
-          </div>
+          <Search size={18} className="shrink-0 text-slate-400" />
+          <input
+            aria-label="Buscar en el sistema"
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400"
+            placeholder="Buscar en el sistema..."
+          />
+          <span className="hidden rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500 sm:inline">
+            Ctrl + K
+          </span>
+        </div>
 
         <div className="hidden items-center gap-3 rounded-2xl bg-slate-50 px-3 py-2.5 text-slate-700 md:flex lg:justify-self-end xl:justify-self-auto">
-            <CalendarDays size={18} className="text-[#006aa6]" />
-            <div className="leading-tight">
-              <p className="text-[11px] font-bold capitalize text-slate-500">
-                {formatDate(now)}
-              </p>
-              <p className="font-mono text-sm font-black text-[#003565]">
-                {formatTime(now)}
-              </p>
-            </div>
+          <CalendarDays size={18} className="text-[#006aa6]" />
+          <div className="leading-tight">
+            <p className="text-[11px] font-bold capitalize text-slate-500">
+              {formatDate(now)}
+            </p>
+            <p className="font-mono text-sm font-black text-[#003565]">
+              {formatTime(now)}
+            </p>
           </div>
+        </div>
 
-        <div className="flex min-w-0 items-center gap-3 rounded-2xl bg-white px-2 py-2 lg:justify-self-end xl:justify-self-auto">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-500 text-sm font-black text-white">
-              {initials}
+        <div ref={menuRef} className="relative flex min-w-0 items-center gap-3 rounded-2xl bg-white px-2 py-2 lg:justify-self-end xl:justify-self-auto">
+          <button
+            type="button"
+            aria-label="Abrir menú de perfil"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((current) => !current)}
+            className="rounded-full outline-none ring-offset-2 ring-offset-white focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <UserAvatar fotoPerfilUrl={fotoPerfilUrl} nombres={nombreUsuario} size={44} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((current) => !current)}
+            className="min-w-0 text-left leading-tight"
+          >
+            <p className="max-w-36 truncate text-sm font-black text-[#003565] 2xl:max-w-44">
+              {nombreUsuario}
+            </p>
+            <p className="font-mono text-xs font-semibold text-slate-500">
+              RUC: {rucUsuario}
+            </p>
+          </button>
+
+          {menuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-40 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-xl"
+            >
+              <MenuItem
+                icon={<User size={16} />}
+                label="Ver perfil"
+                onClick={() => {
+                  onViewProfile();
+                  setMenuOpen(false);
+                }}
+              />
+              <MenuItem
+                icon={<Camera size={16} />}
+                label="Cambiar foto"
+                onClick={() => {
+                  setPhotoDialogOpen(true);
+                  setMenuOpen(false);
+                }}
+              />
+              {fotoPerfilUrl && (
+                <MenuItem
+                  icon={<Trash2 size={16} />}
+                  label="Eliminar foto"
+                  danger
+                  disabled={photoLoading}
+                  onClick={handleDelete}
+                />
+              )}
+              <div className="my-2 border-t border-slate-100" />
+              <MenuItem icon={<LogOut size={16} />} label="Cerrar sesión" onClick={onLogout} />
             </div>
-            <div className="min-w-0 leading-tight">
-              <p className="max-w-36 truncate text-sm font-black text-[#003565] 2xl:max-w-44">
-                {nombreUsuario}
-              </p>
-              <p className="font-mono text-xs font-semibold text-slate-500">
-                RUC: {rucUsuario}
-              </p>
-            </div>
+          )}
+
+          <ProfilePhotoDialog
+            open={photoDialogOpen}
+            currentPhotoUrl={fotoPerfilUrl}
+            nombreUsuario={nombreUsuario}
+            loading={photoLoading}
+            error={photoError}
+            onClose={() => setPhotoDialogOpen(false)}
+            onSave={handleUpload}
+          />
         </div>
       </div>
     </header>
@@ -130,12 +236,31 @@ function formatTime(value: Date) {
   });
 }
 
-function getInitials(value: string) {
-  return value
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+function MenuItem({
+  icon,
+  label,
+  danger = false,
+  disabled = false,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-bold disabled:opacity-50 ${
+        danger ? "text-red-600 hover:bg-red-50" : "text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
 }

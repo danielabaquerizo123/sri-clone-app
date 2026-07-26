@@ -74,6 +74,8 @@ export interface ContribuyenteData {
   referencia?: string | null;
   jurisdiccion?: string | null;
   email?: string | null;
+  fotoPerfilUrl?: string | null;
+  fotoPerfilPublicId?: string | null;
   telefonoDomicilio?: string | null;
   celular?: string | null;
   artesano?: string | null;
@@ -125,6 +127,8 @@ export default function DashboardView({
   const [saving, setSaving] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [reaperturaLoading, setReaperturaLoading] = useState(false);
+  const [profilePhotoLoading, setProfilePhotoLoading] = useState(false);
+  const [profilePhotoError, setProfilePhotoError] = useState("");
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -202,6 +206,89 @@ export default function DashboardView({
 
   const updateField = (name: keyof ContribuyenteData, value: string | number) => {
     setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const updateUserSession = (usuario: ContribuyenteData) => {
+    const currentUser = sessionStorage.getItem("sri_user");
+    let parsedUser = {};
+
+    try {
+      parsedUser = currentUser ? JSON.parse(currentUser) : {};
+    } catch {
+      parsedUser = {};
+    }
+
+    sessionStorage.setItem(
+      "sri_user",
+      JSON.stringify({
+        ...parsedUser,
+        razonSocial: usuario.razonSocial,
+        fotoPerfilUrl: usuario.fotoPerfilUrl,
+        fotoPerfilPublicId: usuario.fotoPerfilPublicId,
+      })
+    );
+  };
+
+  const applyProfilePhotoUser = (usuario: ContribuyenteData) => {
+    setData((current) => (current ? { ...current, ...usuario } : usuario));
+    setForm((current) => ({ ...current, ...usuario }));
+    updateUserSession(usuario);
+  };
+
+  const subirFotoPerfil = async (file: File) => {
+    try {
+      setProfilePhotoLoading(true);
+      setProfilePhotoError("");
+      setError("");
+
+      const formData = new FormData();
+      formData.append("foto", file);
+
+      const response = await authFetch(`${apiUrl}/api/contribuyentes/me/foto-perfil`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "No se pudo actualizar la foto de perfil.");
+      }
+
+      applyProfilePhotoUser(result.usuario);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo actualizar la foto de perfil.";
+      setProfilePhotoError(message);
+      throw err;
+    } finally {
+      setProfilePhotoLoading(false);
+    }
+  };
+
+  const eliminarFotoPerfil = async () => {
+    try {
+      setProfilePhotoLoading(true);
+      setProfilePhotoError("");
+      setError("");
+
+      const response = await authFetch(`${apiUrl}/api/contribuyentes/me/foto-perfil`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "No se pudo eliminar la foto de perfil.");
+      }
+
+      applyProfilePhotoUser(result.usuario);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo eliminar la foto de perfil.";
+      setProfilePhotoError(message);
+      setError(message);
+    } finally {
+      setProfilePhotoLoading(false);
+    }
   };
 
   const guardarActualizacion = async (e: FormEvent) => {
@@ -336,7 +423,14 @@ export default function DashboardView({
           nombreUsuario={displayRazonSocial}
           rucUsuario={displayRuc}
           tipoContribuyente={data.tipoContribuyente}
+          fotoPerfilUrl={data.fotoPerfilUrl}
           now={fechaActual}
+          photoLoading={profilePhotoLoading}
+          photoError={profilePhotoError}
+          onViewProfile={() => setActiveTab("inicio")}
+          onUploadProfilePhoto={subirFotoPerfil}
+          onDeleteProfilePhoto={eliminarFotoPerfil}
+          onLogout={onLogout}
         />
 
         <main className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] lg:p-5 2xl:p-6 ${activeTab === "contabilidad" ? "pb-0 lg:pb-0 2xl:pb-0" : ""}`}>
