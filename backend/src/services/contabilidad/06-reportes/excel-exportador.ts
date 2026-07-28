@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import type { AccountingEngineResult } from "../contratos";
 import type { PreviewEntry } from "../04-asientos/constructor-asiento.service";
 import type { LibroMayorFolio, LibroMayorResponse } from "./libro-mayor/libro-mayor.types";
@@ -43,13 +43,13 @@ export class AccountingExcelExporter {
     if (params.balanceComprobacion) {
       appendBalanceComprobacionSheet(workbook, params.balanceComprobacion);
     }
-    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx", cellStyles: true }) as Buffer;
   }
 
   exportBalanceComprobacion(result: BalanceComprobacionResponse): Buffer {
     const workbook = XLSX.utils.book_new();
     appendBalanceComprobacionSheet(workbook, result);
-    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx", cellStyles: true }) as Buffer;
   }
 }
 
@@ -91,56 +91,64 @@ function appendLibroDiarioSheet(workbook: XLSX.WorkBook, params: {
   periodo?: string;
   asientos: PreviewEntry[];
 }) {
-  const rows: Array<Array<string | number>> = [
-    [params.razonSocial || "No disponible", "", "", "", "", "", "", ""],
-    [`RUC: ${params.ruc || ""}`, "", "", "", "", "", "", ""],
-    ["Libro Diario", "", "", "", "", "", "", ""],
-    [`Periodo: ${params.periodo || ""}`, "", "", "", "", "", "", ""],
-    ["Expresados en Dolares", "", "", "", "", "", "", ""],
-    [],
-    ["FECHA", "N.º ASIENTO", "DOCUMENTO", "GLOSA", "CODIGO", "CUENTA", "DEBE", "HABER"],
+  const rows: Array<Array<string | number | Date>> = [
+    [headerCompany(params), "", "", "", ""],
+    ["Libro Diario", "", "", "", ""],
+    [`Periodo: ${params.periodo || ""}`, "", "", "", ""],
+    ["Expresados en Dólares", "", "", "", ""],
+    ["", "", "", "", ""],
+    ["FECHA", "CODIGO", "DETALLE", "DEBE", "HABER"],
   ];
+  const merges: XLSX.Range[] = [
+    mergeAcross(0),
+    mergeAcross(1),
+    mergeAcross(2),
+    mergeAcross(3),
+  ];
+  const glosaRows: number[] = [];
+  const numberRows: number[] = [];
   let totalDebe = 0;
   let totalHaber = 0;
 
   params.asientos.forEach((entry, index) => {
-    const asientoNumero = `AS-${index + 1}`;
     const lineas = Array.isArray(entry.lineas) ? entry.lineas : [];
-    lineas.forEach((line) => {
+    numberRows.push(rows.length);
+    rows.push([index + 1, "", "", "", ""]);
+
+    lineas.forEach((line, lineIndex) => {
       const debe = money(line.debe);
       const haber = money(line.haber);
       totalDebe = money(totalDebe + debe);
       totalHaber = money(totalHaber + haber);
       rows.push([
-        String(entry.fecha || "").slice(0, 10),
-        asientoNumero,
-        String(entry.documentoOrigen || ""),
-        "",
+        lineIndex === 0 ? journalDate(entry) : "",
         line.codigo || "",
         line.cuenta || "",
         debe > 0 ? debe : "",
         haber > 0 ? haber : "",
       ]);
     });
-    rows.push(["", asientoNumero, String(entry.documentoOrigen || ""), journalDescription(entry), "", "", "", ""]);
-    rows.push([]);
+    glosaRows.push(rows.length);
+    rows.push(["", "", journalDescription(entry), "", ""]);
+    rows.push(["", "", "", "", ""]);
   });
 
-  rows.push(["", "", "", "TOTALES", "", "", totalDebe, totalHaber]);
+  rows.push(["", "", "TOTALES", totalDebe, totalHaber]);
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
   sheet["!cols"] = [
     { wch: 14 },
-    { wch: 14 },
-    { wch: 20 },
-    { wch: 58 },
     { wch: 18 },
-    { wch: 48 },
+    { wch: 72 },
     { wch: 14 },
     { wch: 14 },
   ];
-  sheet["!autofilter"] = { ref: `A7:H${Math.max(rows.length, 7)}` };
-  sheet["!freeze"] = { xSplit: 0, ySplit: 7 };
+  sheet["!merges"] = [
+    ...merges,
+    ...glosaRows.map((row) => ({ s: { r: row, c: 2 }, e: { r: row, c: 4 } })),
+  ];
+  sheet["!freeze"] = { xSplit: 0, ySplit: 6 };
+  applyLibroDiarioFormats(sheet, rows.length, glosaRows, numberRows);
   XLSX.utils.book_append_sheet(workbook, sheet, "Libro Diario");
 }
 
@@ -240,6 +248,107 @@ function appendBalanceComprobacionSheet(workbook: XLSX.WorkBook, result: Balance
   XLSX.utils.book_append_sheet(workbook, sheet, "Balance Comprobacion");
 }
 
+function headerCompany(params: { ruc?: string; razonSocial?: string }) {
+  const razonSocial = String(params.razonSocial || "No disponible").trim();
+  const ruc = String(params.ruc || "").trim();
+  return ruc ? `${razonSocial} - RUC ${ruc}` : razonSocial;
+}
+
+function mergeAcross(row: number): XLSX.Range {
+  return { s: { r: row, c: 0 }, e: { r: row, c: 4 } };
+}
+
+function journalDate(entry: PreviewEntry) {
+  const raw = (entry as any).fechaDate || entry.fecha;
+  if (typeof entry.fecha === "string") {
+    const match = entry.fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${Number(match[3])}/${Number(match[2])}/${match[1]}`;
+  }
+
+  const date = raw instanceof Date ? raw : new Date(raw);
+  if (Number.isNaN(date.getTime())) return String(entry.fecha || "");
+  return `${date.getUTCDate()}/${date.getUTCMonth() + 1}/${date.getUTCFullYear()}`;
+}
+
+function applyLibroDiarioFormats(
+  sheet: XLSX.WorkSheet,
+  rowCount: number,
+  glosaRows: number[],
+  numberRows: number[]
+) {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || `A1:E${rowCount}`);
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    for (let col = range.s.c; col <= range.e.c; col += 1) {
+      const address = XLSX.utils.encode_cell({ r: row, c: col });
+      const cell = sheet[address];
+      if (!cell) continue;
+      (cell as any).s = {
+        ...(cell as any).s,
+        font: { color: { rgb: "000000" } },
+        fill: { patternType: "solid", fgColor: { rgb: "FFFFFF" } },
+        border: {
+          top: { style: "thin", color: { rgb: "000000" } },
+          bottom: { style: "thin", color: { rgb: "000000" } },
+          left: { style: "thin", color: { rgb: "000000" } },
+          right: { style: "thin", color: { rgb: "000000" } },
+        },
+      };
+    }
+  }
+
+  for (let row = 0; row <= 3; row += 1) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+    if (!cell) continue;
+    (cell as any).s = {
+      ...(cell as any).s,
+      font: { bold: row === 1, italic: row !== 1, sz: row === 1 ? 14 : 12, color: { rgb: "000000" } },
+      alignment: { horizontal: "center" },
+    };
+  }
+
+  for (let col = 0; col <= 4; col += 1) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: 5, c: col })];
+    if (!cell) continue;
+    (cell as any).s = {
+      ...(cell as any).s,
+      font: { bold: true, color: { rgb: "000000" } },
+      alignment: { horizontal: "center" },
+    };
+  }
+
+  numberRows.forEach((row) => {
+    const cell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+    if (!cell) return;
+    (cell as any).s = {
+      ...(cell as any).s,
+      font: { bold: true, color: { rgb: "000000" } },
+      alignment: { horizontal: "right" },
+    };
+  });
+
+  glosaRows.forEach((row) => {
+    const cell = sheet[XLSX.utils.encode_cell({ r: row, c: 2 })];
+    if (!cell) return;
+    (cell as any).s = {
+      ...(cell as any).s,
+      font: { italic: true, color: { rgb: "000000" } },
+    };
+  });
+
+  for (let row = 6; row < rowCount; row += 1) {
+    const dateCell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+    if (dateCell?.t === "d") {
+      dateCell.z = "d/m/yyyy";
+    }
+    for (const col of [3, 4]) {
+      const moneyCell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+      if (moneyCell?.t === "n") {
+        moneyCell.z = '"$" #,##0.00';
+      }
+    }
+  }
+}
+
 function appendFolioRows(rows: Array<Array<string | number>>, folio: LibroMayorFolio) {
   rows.push([`CÓDIGO Y DENOMINACIÓN DE LA CUENTA CONTABLE: ${folio.codigoCuenta} — ${folio.nombreCuenta}`]);
   rows.push([]);
@@ -317,15 +426,14 @@ function tercero(entry: PreviewEntry) {
 
 function journalDescription(entry: PreviewEntry) {
   const thirdParty = tercero(entry);
-  const document = String(entry.documentoOrigen || "").trim();
   const tipo = evidenceValue(entry, "tipoComprobante");
-  const tipoDocumento = tipo ? `${tipo} ${document}` : document;
+  const tipoDocumento = tipo ? `${tipo}-${tipoComprobanteLabel(tipo)}` : String(entry.documentoOrigen || "").trim();
 
   if (entry.tipoEvento === "PAGO_PROVEEDOR") {
-    return ["V. Pago Compra s/", tipoDocumento, thirdParty ? "a" : "", thirdParty].filter(Boolean).join(" ");
+    return journalGlosa("V. Pago Compra", tipoDocumento, thirdParty);
   }
   if (entry.tipoEvento === "DEVENGO_COMPRA" || entry.tipoEvento === "NOTA_CREDITO_COMPRA" || entry.tipoEvento === "NOTA_DEBITO_COMPRA") {
-    return ["V. Compra s/", tipoDocumento, thirdParty ? "a" : "", thirdParty].filter(Boolean).join(" ");
+    return journalGlosa("V. Compra", tipoDocumento, thirdParty);
   }
   if (entry.tipoEvento === "COBRO_CLIENTE") {
     return ["V. Cobro Venta a", thirdParty].filter(Boolean).join(" ");
@@ -335,4 +443,21 @@ function journalDescription(entry: PreviewEntry) {
   }
 
   return entry.glosa || entry.descripcion || "";
+}
+
+function journalGlosa(prefix: string, tipoDocumento: string, thirdParty: string) {
+  const source = tipoDocumento ? `s/${tipoDocumento}` : "";
+  return [prefix, source, thirdParty ? "a" : "", thirdParty].filter(Boolean).join(" ");
+}
+
+function tipoComprobanteLabel(tipo: string) {
+  const normalized = tipo.trim();
+  const labels: Record<string, string> = {
+    "01": "Factura",
+    "03": "Liquidación de compra",
+    "04": "Nota de crédito",
+    "05": "Nota de débito",
+    "07": "Comprobante de retención",
+  };
+  return labels[normalized] || "Comprobante";
 }

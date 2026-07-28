@@ -2,6 +2,7 @@ export type MoneyString = string;
 
 export type LibroMayorParams = {
   ruc: string;
+  loteId?: string;
   periodoId?: string;
   fechaDesde?: string;
   fechaHasta?: string;

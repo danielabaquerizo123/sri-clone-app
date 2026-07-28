@@ -18,7 +18,8 @@ export class LibroMayorAgrupadorService {
     const groups = new Map<string, LibroMayorMovementGroup>();
 
     for (const line of lines) {
-      const key = `${line.empresaId}|${line.periodoId}|${line.cuentaId}`;
+      // El código contable es la clave única del folio dentro del Diario filtrado.
+      const key = line.codigoCuenta;
       const group = groups.get(key) || {
         cuentaId: line.cuentaId,
         codigoCuenta: line.codigoCuenta,

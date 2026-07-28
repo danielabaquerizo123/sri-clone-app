@@ -1,12 +1,20 @@
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-export type EstadoAcceso = "activo" | "por_vencer" | "alerta" | "vencido" | "desactivado";
+export type EstadoAcceso =
+  | "activo"
+  | "por_vencer"
+  | "alerta"
+  | "expira_hoy"
+  | "vencido"
+  | "desactivado"
+  | "sin_vencimiento";
 
 interface AccessInfoInput {
-  activo: boolean;
-  fechaInicio?: string | Date | null;
+  activo?: boolean | null;
+  diasRestantes?: number | null;
+  estadoAcceso?: EstadoAcceso | string | null;
+  fechaInicioAcceso?: string | Date | null;
+  fechaFinAcceso?: string | Date | null;
   fechaExpiracion?: string | Date | null;
-  fechaActual?: Date;
+  porcentajeRestante?: number | null;
 }
 
 export interface AccessInfo {
@@ -17,103 +25,55 @@ export interface AccessInfo {
   fechaExpiracion: Date | null;
 }
 
-export function calcularDiasRestantes(
-  fechaExpiracion?: string | Date | null,
-  fechaActual: Date = new Date()
-) {
-  if (!fechaExpiracion) return null;
-
-  const fecha = new Date(fechaExpiracion);
-
-  if (Number.isNaN(fecha.getTime())) return null;
-
-  const diferenciaMs = fecha.getTime() - fechaActual.getTime();
-
-  return Math.max(Math.ceil(diferenciaMs / MS_PER_DAY), 0);
-}
-
-export function estaPorVencer(
-  fechaExpiracion?: string | Date | null,
-  fechaActual: Date = new Date()
-) {
-  const diasRestantes = calcularDiasRestantes(fechaExpiracion, fechaActual);
-
-  return diasRestantes !== null && diasRestantes >= 0 && diasRestantes <= 7;
-}
-
-export function calcularEstadoAcceso(
-  activo: boolean,
-  fechaExpiracion?: string | Date | null,
-  fechaActual: Date = new Date()
-) {
-  if (!activo) return "desactivado";
-
-  if (!fechaExpiracion) return "vencido";
-
-  const fecha = new Date(fechaExpiracion);
-
-  if (Number.isNaN(fecha.getTime())) return "vencido";
-
-  return fechaActual > fecha ? "vencido" : "activo";
-}
-
-export function calcularResumenAcceso({
-  activo,
-  fechaActual = new Date(),
-  fechaExpiracion,
-  fechaInicio,
-}: AccessInfoInput): AccessInfo {
-  const inicio = parseDate(fechaInicio);
-  const expiracion = parseDate(fechaExpiracion);
-  const diasRestantes = calcularDiasRestantes(expiracion, fechaActual);
-
-  if (!activo) {
-    return {
-      diasRestantes,
-      porcentajeRestante: 0,
-      estadoAcceso: "desactivado",
-      fechaInicio: inicio,
-      fechaExpiracion: expiracion,
-    };
-  }
-
-  if (!expiracion || fechaActual > expiracion) {
-    return {
-      diasRestantes: diasRestantes ?? 0,
-      porcentajeRestante: 0,
-      estadoAcceso: "vencido",
-      fechaInicio: inicio,
-      fechaExpiracion: expiracion,
-    };
-  }
-
-  const porcentajeRestante = calcularPorcentajeRestante(inicio, expiracion, fechaActual);
+export function crearResumenAccesoDesdeBackend(input?: AccessInfoInput | null): AccessInfo {
+  const estadoBackend = normalizeEstado(input?.estadoAcceso);
+  const diasRestantes =
+    typeof input?.diasRestantes === "number" && Number.isFinite(input.diasRestantes)
+      ? input.diasRestantes
+      : null;
 
   return {
     diasRestantes,
-    porcentajeRestante,
-    estadoAcceso: getEstadoPorDias(diasRestantes),
-    fechaInicio: inicio,
-    fechaExpiracion: expiracion,
+    porcentajeRestante:
+      typeof input?.porcentajeRestante === "number" && Number.isFinite(input.porcentajeRestante)
+        ? input.porcentajeRestante
+        : null,
+    estadoAcceso: estadoBackend || fallbackEstado(input?.activo, diasRestantes),
+    fechaInicio: parseDate(input?.fechaInicioAcceso),
+    fechaExpiracion: parseDate(input?.fechaFinAcceso ?? input?.fechaExpiracion),
   };
 }
 
-function calcularPorcentajeRestante(
-  fechaInicio: Date | null,
-  fechaExpiracion: Date,
-  fechaActual: Date
-) {
-  if (!fechaInicio) return null;
-
-  const totalMs = fechaExpiracion.getTime() - fechaInicio.getTime();
-  if (totalMs <= 0) return null;
-
-  const restanteMs = Math.max(fechaExpiracion.getTime() - fechaActual.getTime(), 0);
-  return Math.max(0, Math.min(100, Math.round((restanteMs / totalMs) * 100)));
+export function formatDiasAcceso(info: Pick<AccessInfo, "diasRestantes" | "estadoAcceso">) {
+  if (info.estadoAcceso === "desactivado") return "Desactivado";
+  if (info.estadoAcceso === "sin_vencimiento") return "Sin vencimiento";
+  if (info.estadoAcceso === "vencido") return "Vencido";
+  if (info.estadoAcceso === "expira_hoy" || info.diasRestantes === 0) return "Expira hoy";
+  if (info.diasRestantes === null) return "-";
+  if (info.diasRestantes === 1) return "1 día";
+  return `${info.diasRestantes} días`;
 }
 
-function getEstadoPorDias(diasRestantes: number | null): EstadoAcceso {
-  if (diasRestantes === null) return "activo";
+function normalizeEstado(value?: string | null): EstadoAcceso | null {
+  if (
+    value === "activo" ||
+    value === "por_vencer" ||
+    value === "alerta" ||
+    value === "expira_hoy" ||
+    value === "vencido" ||
+    value === "desactivado" ||
+    value === "sin_vencimiento"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function fallbackEstado(activo?: boolean | null, diasRestantes?: number | null): EstadoAcceso {
+  if (activo === false) return "desactivado";
+  if (diasRestantes == null) return "sin_vencimiento";
+  if (diasRestantes <= 0) return "expira_hoy";
   if (diasRestantes <= 7) return "alerta";
   if (diasRestantes <= 30) return "por_vencer";
   return "activo";

@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { AccessInfo } from "../../utils/acceso";
+import { formatDiasAcceso, type AccessInfo } from "../../utils/acceso";
 import type { ContribuyenteData } from "../../views/DashboardView";
 
 interface DashboardHomeProps {
@@ -366,10 +366,7 @@ function formatDate(value?: string | Date | null) {
 }
 
 function formatAccessValue(accessInfo: AccessInfo) {
-  if (accessInfo.estadoAcceso === "vencido") return "Acceso vencido";
-  if (accessInfo.estadoAcceso === "desactivado") return "Desactivado";
-  if (accessInfo.diasRestantes === null) return "-";
-  return `${accessInfo.diasRestantes} dias`;
+  return formatDiasAcceso(accessInfo);
 }
 
 function formatTipo(value: ContribuyenteData["tipoContribuyente"]) {

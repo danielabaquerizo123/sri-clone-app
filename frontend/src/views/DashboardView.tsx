@@ -20,7 +20,7 @@ import DashboardHeader from "../components/Dashboard/DashboardHeader";
 import DashboardHome from "../components/Dashboard/DashboardHome";
 import DashboardSidebar from "../components/Dashboard/DashboardSidebar";
 import { authFetch } from "../api/authApi";
-import { calcularResumenAcceso } from "../utils/acceso";
+import { crearResumenAccesoDesdeBackend } from "../utils/acceso";
 
 interface DashboardViewProps {
   rucUsuario: string;
@@ -52,6 +52,12 @@ export interface ContribuyenteData {
   rol: "ADMIN" | "CONTADOR" | "CONTRIBUYENTE";
   activo: boolean;
   fechaExpiracion: string;
+  diasRestantes?: number | null;
+  estadoAcceso?: string | null;
+  fechaInicioAcceso?: string | null;
+  fechaFinAcceso?: string | null;
+  porcentajeRestante?: number | null;
+  zonaHorariaAcceso?: string | null;
   estadoRuc: string;
   regimen: string;
   obligaciones: string;
@@ -133,8 +139,6 @@ export default function DashboardView({
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [fechaActual, setFechaActual] = useState(() => new Date());
-
   const [reaperturaMotivo, setReaperturaMotivo] = useState("");
   const [reaperturaObs, setReaperturaObs] = useState("");
   const [confirmReapertura, setConfirmReapertura] = useState(false);
@@ -146,14 +150,8 @@ export default function DashboardView({
 
   const rucActivo = activeContribuyente.ruc || rucUsuario;
   const accessInfo = useMemo(
-    () =>
-      calcularResumenAcceso({
-        activo: data?.activo ?? false,
-        fechaActual,
-        fechaExpiracion: data?.fechaExpiracion,
-        fechaInicio: data?.createdAt,
-      }),
-    [data?.activo, data?.createdAt, data?.fechaExpiracion, fechaActual]
+    () => crearResumenAccesoDesdeBackend(data),
+    [data]
   );
 
   const cargarDatos = async () => {
@@ -191,14 +189,6 @@ export default function DashboardView({
   useEffect(() => {
     cargarDatos();
   }, [rucActivo]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setFechaActual(new Date());
-    }, 60 * 1000);
-
-    return () => window.clearInterval(intervalId);
-  }, []);
 
   const updateField = (name: keyof ContribuyenteData, value: string | number) => {
     setForm((prev) => ({ ...prev, [name]: value }));

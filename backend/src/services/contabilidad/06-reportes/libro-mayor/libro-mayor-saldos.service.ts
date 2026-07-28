@@ -16,27 +16,18 @@ export function isZero(value: Prisma.Decimal) {
   return value.equals(MONEY_ZERO);
 }
 
-export function isCreditorNature(naturalezaCuenta: unknown) {
-  return String(naturalezaCuenta || "").trim().toUpperCase() === "ACREEDORA";
-}
-
-export function movementBalanceEffect(debe: unknown, haber: unknown, naturalezaCuenta: unknown) {
+export function movementBalanceEffect(debe: unknown, haber: unknown, _naturalezaCuenta?: unknown) {
   const debit = decimal(debe);
   const credit = decimal(haber);
-  return isCreditorNature(naturalezaCuenta) ? credit.minus(debit) : debit.minus(credit);
+  return debit.minus(credit);
 }
 
-export function splitBalance(value: Prisma.Decimal, naturalezaCuenta: unknown = "DEUDORA") {
-  const creditor = isCreditorNature(naturalezaCuenta);
+export function splitBalance(value: Prisma.Decimal, _naturalezaCuenta?: unknown) {
   if (value.greaterThan(MONEY_ZERO)) {
-    return creditor
-      ? { deudor: "0.00", acreedor: money(value) }
-      : { deudor: money(value), acreedor: "0.00" };
+    return { deudor: money(value), acreedor: "0.00" };
   }
   if (value.lessThan(MONEY_ZERO)) {
-    return creditor
-      ? { deudor: money(value.abs()), acreedor: "0.00" }
-      : { deudor: "0.00", acreedor: money(value.abs()) };
+    return { deudor: "0.00", acreedor: money(value.abs()) };
   }
   return { deudor: "0.00", acreedor: "0.00" };
 }
@@ -46,7 +37,7 @@ function isoDate(value: Date) {
 }
 
 export class LibroMayorSaldosService {
-  calculateMovements(lines: LibroMayorRawMovement[], saldoInicial: Prisma.Decimal, naturalezaCuenta: unknown = "DEUDORA") {
+  calculateMovements(lines: LibroMayorRawMovement[], saldoInicial: Prisma.Decimal) {
     let saldo = saldoInicial;
     let totalDebe = MONEY_ZERO;
     let totalHaber = MONEY_ZERO;
@@ -56,8 +47,8 @@ export class LibroMayorSaldosService {
       const haber = decimal(line.haber);
       totalDebe = totalDebe.plus(debe);
       totalHaber = totalHaber.plus(haber);
-      saldo = saldo.plus(movementBalanceEffect(debe, haber, naturalezaCuenta));
-      const balance = splitBalance(saldo, naturalezaCuenta);
+      saldo = saldo.plus(movementBalanceEffect(debe, haber));
+      const balance = splitBalance(saldo);
       return {
         lineaId: line.lineaId,
         asientoId: line.asientoId,
@@ -73,11 +64,11 @@ export class LibroMayorSaldosService {
     });
 
     const saldoFinal = saldoInicial.plus(lines.reduce(
-      (acc, line) => acc.plus(movementBalanceEffect(line.debe, line.haber, naturalezaCuenta)),
+      (acc, line) => acc.plus(movementBalanceEffect(line.debe, line.haber)),
       MONEY_ZERO
     ));
-    const saldoAnteriorBalance = splitBalance(saldoInicial, naturalezaCuenta);
-    const saldoFinalBalance = splitBalance(saldoFinal, naturalezaCuenta);
+    const saldoAnteriorBalance = splitBalance(saldoInicial);
+    const saldoFinalBalance = splitBalance(saldoFinal);
 
     return {
       movimientos,

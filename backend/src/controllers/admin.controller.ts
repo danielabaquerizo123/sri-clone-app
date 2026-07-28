@@ -1,22 +1,19 @@
 import { Response } from "express";
 import { prisma } from "../lib/prisma";
 import {
-  calcularDiasRestantes,
-  calcularEstadoAcceso,
   calcularFechaExpiracion,
+  construirResumenAcceso,
+  fechaInicioDiaEcuador,
+  inicioDiaActualEcuador,
 } from "../lib/acceso";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
 const mapContribuyenteAcceso = (contribuyente: {
-  fechaExpiracion: Date;
+  fechaExpiracion: Date | null;
+  fechaRegistro?: Date | null;
+  createdAt?: Date | null;
   activo: boolean;
-}) => ({
-  estadoAcceso: calcularEstadoAcceso(
-    contribuyente.activo,
-    contribuyente.fechaExpiracion
-  ),
-  diasRestantes: calcularDiasRestantes(contribuyente.fechaExpiracion),
-});
+}) => construirResumenAcceso(contribuyente);
 
 const parseFechaExpiracionManual = (value: unknown) => {
   if (typeof value !== "string") {
@@ -30,18 +27,22 @@ const parseFechaExpiracionManual = (value: unknown) => {
   }
 
   const [, year, month, day] = match;
-  const selectedDate = new Date(Number(year), Number(month) - 1, Number(day));
+  const selectedDate = fechaInicioDiaEcuador(
+    Number(year),
+    Number(month),
+    Number(day)
+  );
 
   if (
-    selectedDate.getFullYear() !== Number(year) ||
-    selectedDate.getMonth() !== Number(month) - 1 ||
-    selectedDate.getDate() !== Number(day)
+    Number.isNaN(selectedDate.getTime()) ||
+    selectedDate.getUTCFullYear() !== Number(year) ||
+    selectedDate.getUTCMonth() !== Number(month) - 1 ||
+    selectedDate.getUTCDate() !== Number(day)
   ) {
     throw new Error("La fecha de expiración no es válida.");
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = inicioDiaActualEcuador();
 
   if (selectedDate <= today) {
     throw new Error("La fecha de expiración debe ser una fecha futura.");

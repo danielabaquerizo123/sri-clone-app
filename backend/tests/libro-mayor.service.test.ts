@@ -94,7 +94,7 @@ function line(overrides: Partial<LibroMayorRawMovement>): LibroMayorRawMovement 
   const grouped = new LibroMayorAgrupadorService().group([
     line({ lineaId: "late", codigoCuenta: "1.10.2", fecha: date(2), numeroAsiento: 8, orden: 2, asientoCreatedAt: created(2), debe: new Prisma.Decimal(1) }),
     line({ lineaId: "early", cuentaId: "account-two", codigoCuenta: "1.2.10", fecha: date(1), numeroAsiento: 9, orden: 1, asientoCreatedAt: created(1), debe: new Prisma.Decimal(1) }),
-    line({ lineaId: "middle", codigoCuenta: "1.10.2", fecha: date(2), numeroAsiento: 7, orden: 1, asientoCreatedAt: created(1), debe: new Prisma.Decimal(1) }),
+    line({ lineaId: "middle", cuentaId: "account-three", codigoCuenta: "1.10.2", fecha: date(2), numeroAsiento: 7, orden: 1, asientoCreatedAt: created(1), debe: new Prisma.Decimal(1) }),
   ]);
   assert.deepEqual(grouped.map((group) => group.codigoCuenta), ["1.10.2", "1.2.10"]);
   assert.deepEqual(grouped[0].movimientos.map((item) => item.lineaId), ["middle", "late"]);
@@ -105,7 +105,7 @@ function line(overrides: Partial<LibroMayorRawMovement>): LibroMayorRawMovement 
     line({ lineaId: "a", cuentaId: "one", debe: new Prisma.Decimal("11.11"), haber: new Prisma.Decimal(0) }),
     line({ lineaId: "b", cuentaId: "one", debe: new Prisma.Decimal(0), haber: new Prisma.Decimal("3.33"), orden: 2 }),
   ];
-  const result = new LibroMayorSaldosService().calculateMovements(lines, new Prisma.Decimal("5.00"));
+  const result = new LibroMayorSaldosService().calculateMovements(lines, new Prisma.Decimal(0));
   const validation = new LibroMayorValidacionService().validateAgainstJournal(lines, [
     {
       folio: 1,
@@ -114,8 +114,8 @@ function line(overrides: Partial<LibroMayorRawMovement>): LibroMayorRawMovement 
       nombreCuenta: "Cuenta ficticia",
       tipoCuenta: "ACTIVO",
       naturalezaCuenta: "DEUDORA",
-      saldoAnterior: "5.00",
-      saldoAnteriorDeudor: "5.00",
+      saldoAnterior: "0.00",
+      saldoAnteriorDeudor: "0.00",
       saldoAnteriorAcreedor: "0.00",
       movimientos: result.movimientos,
       totalDebe: money(result.totalDebe),

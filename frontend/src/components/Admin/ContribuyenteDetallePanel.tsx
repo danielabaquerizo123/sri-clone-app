@@ -1,27 +1,17 @@
 import { CalendarDays, Clock3, Mail, UserRound, X } from "lucide-react";
 import type { ContribuyenteAdmin } from "./AdminContribuyentesPanel";
-import { calcularDiasRestantes, calcularEstadoAcceso } from "../../utils/acceso";
+import { formatDiasAcceso } from "../../utils/acceso";
 
 interface ContribuyenteDetallePanelProps {
   contribuyente: ContribuyenteAdmin;
-  fechaActual: Date;
   onClose: () => void;
 }
 
 export default function ContribuyenteDetallePanel({
   contribuyente,
-  fechaActual,
   onClose,
 }: ContribuyenteDetallePanelProps) {
-  const diasRestantes = calcularDiasRestantes(
-    contribuyente.fechaExpiracion,
-    fechaActual
-  );
-  const estadoAcceso = calcularEstadoAcceso(
-    contribuyente.activo,
-    contribuyente.fechaExpiracion,
-    fechaActual
-  );
+  const estadoAcceso = contribuyente.estadoAcceso;
 
   return (
     <aside className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -60,21 +50,23 @@ export default function ContribuyenteDetallePanel({
         <DetailItem
           icon={<CalendarDays size={17} />}
           label="Fecha de registro"
-          value={formatDate(contribuyente.fechaRegistro || contribuyente.createdAt)}
+          value={formatDate(
+            contribuyente.fechaInicioAcceso ||
+              contribuyente.fechaRegistro ||
+              contribuyente.createdAt
+          )}
         />
         <DetailItem
           icon={<CalendarDays size={17} />}
           label="Fecha de expiración"
-          value={formatDate(contribuyente.fechaExpiracion)}
+          value={formatDate(
+            contribuyente.fechaFinAcceso || contribuyente.fechaExpiracion
+          )}
         />
         <DetailItem
           icon={<Clock3 size={17} />}
           label="Días restantes"
-          value={
-            estadoAcceso === "activo"
-              ? `${diasRestantes ?? 0} días`
-              : "0 días"
-          }
+          value={formatDiasAcceso(contribuyente)}
         />
       </div>
     </aside>
@@ -107,13 +99,25 @@ function EstadoBadge({ estado }: { estado: ContribuyenteAdmin["estadoAcceso"] })
   const className =
     estado === "activo"
       ? "bg-emerald-50 text-emerald-700"
+      : estado === "expira_hoy"
+      ? "bg-red-50 text-red-700"
       : estado === "vencido"
-      ? "bg-amber-50 text-amber-700"
+      ? "bg-red-50 text-red-700"
+      : estado === "sin_vencimiento"
+      ? "bg-blue-50 text-blue-700"
       : "bg-red-50 text-red-700";
+
+  const labels = {
+    activo: "activo",
+    expira_hoy: "expira hoy",
+    vencido: "vencido",
+    desactivado: "desactivado",
+    sin_vencimiento: "sin vencimiento",
+  };
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${className}`}>
-      {estado}
+      {labels[estado]}
     </span>
   );
 }

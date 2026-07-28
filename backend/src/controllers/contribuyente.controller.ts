@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import puppeteer from "puppeteer";
 import QRCode from "qrcode";
 import { prisma } from "../lib/prisma";
+import { construirResumenAcceso } from "../lib/acceso";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
   ProfileImageValidationError,
@@ -65,8 +66,20 @@ const usuarioPerfilSelect = {
   emailVerified: true,
   fotoPerfilUrl: true,
   fotoPerfilPublicId: true,
+  fechaRegistro: true,
+  createdAt: true,
   fechaActualizacion: true,
 } as const;
+
+const withAccessInfo = <T extends {
+  activo: boolean;
+  fechaExpiracion?: Date | null;
+  fechaRegistro?: Date | null;
+  createdAt?: Date | null;
+}>(contribuyente: T) => ({
+  ...contribuyente,
+  ...construirResumenAcceso(contribuyente),
+});
 
 export const obtenerUsuarioAutenticado = async (
   req: AuthenticatedRequest,
@@ -92,7 +105,7 @@ export const obtenerUsuarioAutenticado = async (
       });
     }
 
-    return res.json(usuario);
+    return res.json(withAccessInfo(usuario));
   } catch (error) {
     console.error("Error al obtener usuario autenticado:", error);
 
@@ -159,7 +172,7 @@ export const subirFotoPerfil = async (
 
     return res.json({
       ok: true,
-      usuario,
+      usuario: withAccessInfo(usuario),
     });
   } catch (error) {
     await profileImageStorageService.deleteUploadedAfterFailure(uploadedPublicId);
@@ -218,7 +231,7 @@ export const eliminarFotoPerfil = async (
 
     return res.json({
       ok: true,
-      usuario,
+      usuario: withAccessInfo(usuario),
     });
   } catch (error) {
     console.error("Error al eliminar foto de perfil:", error);
@@ -255,7 +268,7 @@ export const obtenerPerfilContribuyente = async (req: Request, res: Response) =>
       });
     }
 
-    return res.json(contribuyente);
+    return res.json(withAccessInfo(contribuyente));
   } catch (error) {
     console.error(error);
 
@@ -349,7 +362,7 @@ export const actualizarContribuyente = async (req: Request, res: Response) => {
 
     return res.json({
       message: "Datos actualizados correctamente.",
-      contribuyente: actualizado,
+      contribuyente: withAccessInfo(actualizado),
     });
   } catch (error) {
     console.error(error);
@@ -391,7 +404,7 @@ export const solicitarReaperturaRuc = async (req: Request, res: Response) => {
 
     return res.json({
       message: "Reapertura procesada correctamente.",
-      contribuyente: actualizado,
+      contribuyente: withAccessInfo(actualizado),
       motivo: req.body.motivo,
       observaciones: req.body.observaciones,
     });

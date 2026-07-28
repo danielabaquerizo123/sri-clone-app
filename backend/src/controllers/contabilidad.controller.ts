@@ -39,6 +39,7 @@ function booleanQuery(value: unknown) {
 function libroMayorParams(req: Request) {
   return {
     ruc: req.params.ruc,
+    loteId: typeof req.query.loteId === "string" ? req.query.loteId : undefined,
     periodoId: typeof req.query.periodoId === "string" ? req.query.periodoId : undefined,
     fechaDesde: typeof req.query.fechaDesde === "string" ? req.query.fechaDesde : undefined,
     fechaHasta: typeof req.query.fechaHasta === "string" ? req.query.fechaHasta : undefined,

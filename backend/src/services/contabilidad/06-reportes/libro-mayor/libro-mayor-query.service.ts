@@ -1,7 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../../../lib/prisma";
 import { compareAccountCode } from "./libro-mayor-agrupador.service";
-import { decimal, MONEY_ZERO, movementBalanceEffect } from "./libro-mayor-saldos.service";
 import type { LibroMayorParams, LibroMayorRawMovement } from "./libro-mayor.types";
 
 type DbClient = PrismaClient | typeof defaultPrisma;
@@ -61,6 +60,7 @@ export class LibroMayorQueryService {
       asiento: {
         contribuyenteId: empresa.id,
         estado: { in: [...VALID_ENTRY_STATES] },
+        ...(params.loteId ? { atsLoteId: params.loteId } : {}),
         ...(params.periodoId ? { periodoId: params.periodoId } : {}),
         ...(fechaDesde || fechaHasta
           ? {
@@ -138,41 +138,4 @@ export class LibroMayorQueryService {
     };
   }
 
-  async previousBalances(params: LibroMayorParams, cuentaIds: string[]) {
-    if (!params.incluirSaldoAnterior || cuentaIds.length === 0 || !params.fechaDesde) {
-      return new Map<string, Prisma.Decimal>();
-    }
-
-    const empresa = await this.findCompany(params.ruc);
-    const fechaDesde = dateFromParam(params.fechaDesde);
-    if (!fechaDesde) return new Map<string, Prisma.Decimal>();
-
-    const rows = await this.db.lineaAsiento.findMany({
-      where: {
-        cuentaId: { in: cuentaIds },
-        asiento: {
-          contribuyenteId: empresa.id,
-          estado: { in: [...VALID_ENTRY_STATES] },
-          fecha: { lt: fechaDesde },
-        },
-      },
-      select: {
-        cuentaId: true,
-        debe: true,
-        haber: true,
-        cuenta: {
-          select: {
-            naturaleza: true,
-          },
-        },
-      },
-    });
-
-    const balances = new Map<string, Prisma.Decimal>();
-    for (const row of rows) {
-      const current = balances.get(row.cuentaId) || MONEY_ZERO;
-      balances.set(row.cuentaId, current.plus(movementBalanceEffect(row.debe, row.haber, row.cuenta.naturaleza)));
-    }
-    return balances;
-  }
 }

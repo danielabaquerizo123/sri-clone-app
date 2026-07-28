@@ -1,6 +1,6 @@
 import { Bell, CheckCheck, Clock3, ShieldAlert } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import type { AccessInfo } from "../../utils/acceso";
+import { formatDiasAcceso, type AccessInfo } from "../../utils/acceso";
 import HeaderDropdownPortal from "./HeaderDropdownPortal";
 
 interface NotificationButtonProps {
@@ -149,15 +149,18 @@ function buildNotifications({
       tone: "red",
     });
   } else if (
-    accessInfo.diasRestantes !== null &&
-    accessInfo.diasRestantes <= 30
+    accessInfo.estadoAcceso === "expira_hoy" ||
+    (accessInfo.diasRestantes !== null &&
+      accessInfo.diasRestantes <= 30)
   ) {
+    const diasRestantes = accessInfo.diasRestantes ?? 0;
+
     items.push({
       id: "access-expiring",
       title: "Acceso proximo a expirar",
-      detail: `Quedan ${accessInfo.diasRestantes} dias de acceso.`,
+      detail: `${formatDiasAcceso(accessInfo)} de acceso.`,
       date: accessInfo.fechaExpiracion || new Date(),
-      tone: accessInfo.diasRestantes <= 7 ? "red" : "amber",
+      tone: diasRestantes <= 7 ? "red" : "amber",
     });
   }
 

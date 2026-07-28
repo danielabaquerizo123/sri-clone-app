@@ -1,7 +1,7 @@
 import { LibroMayorAgrupadorService } from "./libro-mayor-agrupador.service";
 import { LibroMayorQueryService } from "./libro-mayor-query.service";
 import { LibroMayorPreviewAdapterService } from "./libro-mayor-preview-adapter.service";
-import { decimal, MONEY_ZERO, money, splitBalance, LibroMayorSaldosService } from "./libro-mayor-saldos.service";
+import { MONEY_ZERO, money, LibroMayorSaldosService } from "./libro-mayor-saldos.service";
 import { LibroMayorValidacionService } from "./libro-mayor-validacion.service";
 import type {
   LibroMayorEmpresa,
@@ -26,11 +26,8 @@ export class LibroMayorService {
 
   async generar(params: LibroMayorParams): Promise<LibroMayorResponse> {
     const data = await this.query.findMovements(params);
-    const groups = this.agrupador.group(data.movements);
-    const previousBalances = await this.query.previousBalances(params, groups.map((group) => group.cuentaId));
     return this.generarDesdeMovimientos({
       movements: data.movements,
-      previousBalances,
       origen: "PERSISTIDO",
       estadoReporte: "CONTABILIZADO",
       mensaje: data.movements.length > 0
@@ -44,7 +41,7 @@ export class LibroMayorService {
       periodo: data.periodo,
       fechaDesde: data.fechaDesde ? data.fechaDesde.toISOString().slice(0, 10) : null,
       fechaHasta: data.fechaHasta ? data.fechaHasta.toISOString().slice(0, 10) : null,
-      incluirSaldoAnterior: Boolean(params.incluirSaldoAnterior),
+      incluirSaldoAnterior: false,
       page: data.page,
       limit: data.limit,
     });
@@ -63,7 +60,6 @@ export class LibroMayorService {
       .filter((movement) => !busqueda || `${movement.codigoCuenta} ${movement.nombreCuenta}`.toLowerCase().includes(busqueda));
     return this.generarDesdeMovimientos({
       movements: filteredMovements,
-      previousBalances: new Map(),
       origen: "PREVIEW",
       estadoReporte: "NO_CONTABILIZADO",
       mensaje: adapted.movements.length > 0
@@ -81,7 +77,6 @@ export class LibroMayorService {
 
   private generarDesdeMovimientos(params: {
     movements: MovimientoMayorSource[];
-    previousBalances: Map<string, any>;
     origen: LibroMayorOrigen;
     estadoReporte: string;
     mensaje: string;
@@ -96,8 +91,8 @@ export class LibroMayorService {
     const groups = this.agrupador.group(params.movements);
 
     const allFolios = groups.map((group, index): LibroMayorFolio => {
-      const saldoAnterior = params.previousBalances.get(group.cuentaId) || MONEY_ZERO;
-      const result = this.saldos.calculateMovements(group.movimientos, saldoAnterior, group.naturalezaCuenta);
+      const saldoAnterior = MONEY_ZERO;
+      const result = this.saldos.calculateMovements(group.movimientos, saldoAnterior);
       return {
         folio: index + 1,
         cuentaId: group.cuentaId,
@@ -108,23 +103,7 @@ export class LibroMayorService {
         saldoAnterior: money(result.saldoAnterior),
         saldoAnteriorDeudor: result.saldoAnteriorDeudor,
         saldoAnteriorAcreedor: result.saldoAnteriorAcreedor,
-        movimientos: [
-          ...(params.incluirSaldoAnterior && !decimal(money(saldoAnterior)).equals(MONEY_ZERO)
-            ? [{
-                lineaId: "",
-                asientoId: "",
-                fecha: params.fechaDesde || "",
-                numeroAsiento: "",
-                descripcion: "Saldo anterior",
-                debe: "",
-                haber: "",
-                saldoAcumulado: money(saldoAnterior),
-                saldoDeudor: splitBalance(saldoAnterior, group.naturalezaCuenta).deudor,
-                saldoAcreedor: splitBalance(saldoAnterior, group.naturalezaCuenta).acreedor,
-              }]
-            : []),
-          ...result.movimientos,
-        ],
+        movimientos: result.movimientos,
         totalDebe: money(result.totalDebe),
         totalHaber: money(result.totalHaber),
         saldoFinal: money(result.saldoFinal),
@@ -162,10 +141,6 @@ export class LibroMayorService {
   async validar(params: LibroMayorParams): Promise<LibroMayorValidationResponse> {
     const data = await this.query.findMovements(params);
     const result = await this.generar({ ...params, page: 1, limit: Number.MAX_SAFE_INTEGER });
-    return {
-      valido: result.resumenGlobal.diferenciaDebe === "0.00" && result.resumenGlobal.diferenciaHaber === "0.00",
-      issues: this.validacion.validateLines(data.movements),
-      resumenGlobal: result.resumenGlobal,
-    };
+    return this.validacion.validateAgainstJournal(data.movements, result.folios);
   }
 }

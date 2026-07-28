@@ -19,7 +19,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { ContribuyenteData, OpcionesRuc } from "../../views/DashboardView";
-import type { AccessInfo } from "../../utils/acceso";
+import { formatDiasAcceso, type AccessInfo } from "../../utils/acceso";
 import sriLogo from "../../assets/images/SRI.png";
 
 interface DashboardSidebarProps {
@@ -326,10 +326,7 @@ function formatDate(value?: string | Date | null) {
 }
 
 function formatAccessValue(accessInfo: AccessInfo) {
-  if (accessInfo.estadoAcceso === "vencido") return "Acceso vencido";
-  if (accessInfo.estadoAcceso === "desactivado") return "Desactivado";
-  if (accessInfo.diasRestantes === null) return "-";
-  return `${accessInfo.diasRestantes} dias`;
+  return formatDiasAcceso(accessInfo);
 }
 
 function getAccessTone(estado: AccessInfo["estadoAcceso"]) {

@@ -22,15 +22,16 @@ import {
   Users,
 } from "lucide-react";
 import { authFetch } from "../../api/authApi";
-import {
-  calcularDiasRestantes,
-  calcularEstadoAcceso,
-  estaPorVencer,
-} from "../../utils/acceso";
+import { formatDiasAcceso } from "../../utils/acceso";
 import ContribuyenteDetallePanel from "./ContribuyenteDetallePanel";
 import EditarVigenciaModal from "./EditarVigenciaModal";
 
-export type EstadoAcceso = "activo" | "vencido" | "desactivado";
+export type EstadoAcceso =
+  | "activo"
+  | "expira_hoy"
+  | "vencido"
+  | "desactivado"
+  | "sin_vencimiento";
 
 export type ContribuyenteAdmin = {
   id: string;
@@ -42,11 +43,15 @@ export type ContribuyenteAdmin = {
   estadoRuc: string;
   estadoTributario: string;
   activo: boolean;
-  fechaExpiracion: string;
+  fechaExpiracion?: string | null;
   fechaRegistro?: string | null;
   createdAt: string;
   estadoAcceso: EstadoAcceso;
-  diasRestantes: number;
+  diasRestantes: number | null;
+  fechaInicioAcceso?: string | null;
+  fechaFinAcceso?: string | null;
+  porcentajeRestante?: number | null;
+  zonaHorariaAcceso?: string | null;
 };
 
 type EstadoFiltro =
@@ -80,36 +85,35 @@ export default function AdminContribuyentesPanel({
   const [mensaje, setMensaje] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>("todos");
-  const [fechaActual, setFechaActual] = useState(() => new Date());
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   const resumen = useMemo(
     () => ({
       activos: contribuyentes.filter(
-        (item) => getEstadoAcceso(item, fechaActual) === "activo"
+        (item) => item.estadoAcceso === "activo"
       ).length,
-      porVencer: contribuyentes.filter((item) => isPorVencer(item, fechaActual))
+      porVencer: contribuyentes.filter((item) => isPorVencer(item))
         .length,
       vencidos: contribuyentes.filter(
-        (item) => getEstadoAcceso(item, fechaActual) === "vencido"
+        (item) => item.estadoAcceso === "vencido"
       ).length,
       desactivados: contribuyentes.filter(
-        (item) => getEstadoAcceso(item, fechaActual) === "desactivado"
+        (item) => item.estadoAcceso === "desactivado"
       ).length,
       total: contribuyentes.length,
     }),
-    [contribuyentes, fechaActual]
+    [contribuyentes]
   );
 
   const contribuyentesFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
 
     return contribuyentes.filter((item) => {
-      const estadoAcceso = getEstadoAcceso(item, fechaActual);
+      const estadoAcceso = item.estadoAcceso;
       const coincideEstado =
         estadoFiltro === "todos" ||
         estadoAcceso === estadoFiltro ||
-        (estadoFiltro === "por_vencer" && isPorVencer(item, fechaActual));
+        (estadoFiltro === "por_vencer" && isPorVencer(item));
       const coincideTexto =
         !texto ||
         item.ruc.toLowerCase().includes(texto) ||
@@ -118,7 +122,7 @@ export default function AdminContribuyentesPanel({
 
       return coincideEstado && coincideTexto;
     });
-  }, [busqueda, contribuyentes, estadoFiltro, fechaActual]);
+  }, [busqueda, contribuyentes, estadoFiltro]);
 
   useEffect(() => {
     onAttentionCountChange?.(resumen.porVencer + resumen.vencidos);
@@ -141,14 +145,6 @@ export default function AdminContribuyentesPanel({
       document.removeEventListener("mousedown", handlePointerDown);
     };
   }, [openActionMenuId]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setFechaActual(new Date());
-    }, 60 * 1000);
-
-    return () => window.clearInterval(intervalId);
-  }, []);
 
   const visibleIds = useMemo(
     () => contribuyentesFiltrados.map((item) => item.id),
@@ -414,7 +410,7 @@ export default function AdminContribuyentesPanel({
         />
         <SummaryCard
           icon={<Clock3 size={20} />}
-          label="Por vencer (7 días)"
+          label="Por vencer (15 días)"
           value={resumen.porVencer}
           detail="Requieren atención"
           tone="amber"
@@ -524,7 +520,7 @@ export default function AdminContribuyentesPanel({
             </div>
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="min-w-[980px] w-full text-sm">
+              <table className="min-w-[1040px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="w-12 px-4 py-4">
@@ -542,26 +538,19 @@ export default function AdminContribuyentesPanel({
                         aria-label="Seleccionar contribuyentes visibles"
                       />
                     </th>
-                    <th className="px-4 py-4">Contribuyente</th>
-                    <th className="px-4 py-4">RUC</th>
-                    <th className="px-4 py-4">Email</th>
+                    <th className="px-4 py-4">Usuario</th>
+                    <th className="px-4 py-4">Correo</th>
+                    <th className="px-4 py-4">Inicio</th>
+                    <th className="px-4 py-4">Vencimiento</th>
+                    <th className="px-4 py-4">Días de acceso restantes</th>
                     <th className="px-4 py-4">Estado</th>
-                    <th className="px-4 py-4">Expira</th>
-                    <th className="px-4 py-4">Días restantes</th>
                     <th className="px-4 py-4 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {contribuyentesFiltrados.map((contribuyente) => {
                     const selected = selectedContribuyente?.id === contribuyente.id;
-                    const estadoAcceso = getEstadoAcceso(
-                      contribuyente,
-                      fechaActual
-                    );
-                    const diasRestantes = calcularDiasRestantes(
-                      contribuyente.fechaExpiracion,
-                      fechaActual
-                    );
+                    const estadoAcceso = contribuyente.estadoAcceso;
 
                     return (
                       <tr
@@ -587,32 +576,42 @@ export default function AdminContribuyentesPanel({
                           <p className="font-black text-slate-700">
                             {contribuyente.razonSocial}
                           </p>
+                          <p className="font-mono text-xs font-bold text-slate-500">
+                            {contribuyente.ruc}
+                          </p>
                           <p className="text-xs font-semibold text-slate-400">
                             {formatTipoContribuyente(
                               contribuyente.tipoContribuyente
                             )}
                           </p>
                         </td>
-                        <td className="px-4 py-4 font-mono font-bold text-slate-700">
-                          {contribuyente.ruc}
-                        </td>
                         <td className="px-4 py-4 font-semibold text-slate-600">
                           {contribuyente.email || "-"}
+                        </td>
+                        <td className="px-4 py-4 font-semibold text-slate-600">
+                          {formatDate(
+                            contribuyente.fechaInicioAcceso ||
+                              contribuyente.fechaRegistro ||
+                              contribuyente.createdAt
+                          )}
+                        </td>
+                        <td className="px-4 py-4 font-semibold text-slate-600">
+                          {formatDate(
+                            contribuyente.fechaFinAcceso ||
+                              contribuyente.fechaExpiracion
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <DiasAccesoBadge contribuyente={contribuyente} />
                         </td>
                         <td className="px-4 py-4">
                           <EstadoBadge
                             estado={
-                              isPorVencer(contribuyente, fechaActual)
+                              isPorVencer(contribuyente)
                                 ? "por_vencer"
                                 : estadoAcceso
                             }
                           />
-                        </td>
-                        <td className="px-4 py-4 font-semibold text-slate-600">
-                          {formatDate(contribuyente.fechaExpiracion)}
-                        </td>
-                        <td className="px-4 py-4 font-black text-slate-700">
-                          {estadoAcceso === "activo" ? diasRestantes ?? 0 : 0}
                         </td>
                         <td className="px-4 py-4">
                           <div
@@ -721,7 +720,6 @@ export default function AdminContribuyentesPanel({
         {selectedContribuyente && (
           <ContribuyenteDetallePanel
             contribuyente={selectedContribuyente}
-            fechaActual={fechaActual}
             onClose={() => setSelectedContribuyente(null)}
           />
         )}
@@ -814,34 +812,64 @@ function EstadoBadge({
   const className =
     estado === "activo"
       ? "bg-emerald-50 text-emerald-700"
-      : estado === "por_vencer"
+    : estado === "por_vencer"
       ? "bg-amber-50 text-amber-700"
+      : estado === "expira_hoy"
+      ? "bg-red-50 text-red-700"
       : estado === "vencido"
       ? "bg-red-50 text-red-700"
+      : estado === "sin_vencimiento"
+      ? "bg-blue-50 text-blue-700"
       : "bg-slate-100 text-slate-600";
 
-  const label = estado === "por_vencer" ? "por vencer" : estado;
+  const labels = {
+    activo: "activo",
+    por_vencer: "por vencer",
+    expira_hoy: "expira hoy",
+    vencido: "vencido",
+    desactivado: "desactivado",
+    sin_vencimiento: "sin vencimiento",
+  };
 
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${className}`}>
-      {label}
+      {labels[estado]}
     </span>
   );
 }
 
-function isPorVencer(contribuyente: ContribuyenteAdmin, fechaActual: Date) {
+function DiasAccesoBadge({ contribuyente }: { contribuyente: ContribuyenteAdmin }) {
+  const tone = getDiasAccesoTone(contribuyente);
+  const tones = {
+    normal: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-700",
+    critical: "border-red-200 bg-red-50 text-red-700",
+    disabled: "border-slate-200 bg-slate-100 text-slate-600",
+    indefinite: "border-blue-200 bg-blue-50 text-blue-700",
+  };
+
   return (
-    getEstadoAcceso(contribuyente, fechaActual) === "activo" &&
-    estaPorVencer(contribuyente.fechaExpiracion, fechaActual)
+    <span className={`inline-flex min-w-[112px] justify-center rounded-full border px-3 py-1 text-xs font-black ${tones[tone]}`}>
+      {formatDiasAcceso(contribuyente)}
+    </span>
   );
 }
 
-function getEstadoAcceso(contribuyente: ContribuyenteAdmin, fechaActual: Date) {
-  return calcularEstadoAcceso(
-    contribuyente.activo,
-    contribuyente.fechaExpiracion,
-    fechaActual
-  ) as EstadoAcceso;
+function getDiasAccesoTone(contribuyente: ContribuyenteAdmin) {
+  if (contribuyente.estadoAcceso === "desactivado") return "disabled";
+  if (contribuyente.estadoAcceso === "sin_vencimiento") return "indefinite";
+  if (contribuyente.estadoAcceso === "vencido" || contribuyente.estadoAcceso === "expira_hoy") return "critical";
+  if (contribuyente.diasRestantes !== null && contribuyente.diasRestantes <= 15) return "warning";
+  return "normal";
+}
+
+function isPorVencer(contribuyente: ContribuyenteAdmin) {
+  return (
+    contribuyente.estadoAcceso === "activo" &&
+    contribuyente.diasRestantes !== null &&
+    contribuyente.diasRestantes >= 1 &&
+    contribuyente.diasRestantes <= 15
+  );
 }
 
 function formatDate(value?: string | null) {
