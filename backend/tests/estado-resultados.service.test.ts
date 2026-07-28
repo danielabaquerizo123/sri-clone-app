@@ -39,10 +39,15 @@ async function resultFrom(input: ReturnType<typeof balance>) {
 
 void (async () => {
   assert.equal((await resultFrom(balance("120.00"))).totales.resultadoNeto, "29.00");
+  assert.equal((await resultFrom(balance("120.00"))).costoVentasDisponible, true);
+  assert.equal((await resultFrom(balance("120.00"))).resultadoDeterminado, true);
   assert.equal((await resultFrom(balance("20.00"))).resultadoFinal.etiqueta, "PÉRDIDA NETA DEL EJERCICIO");
   assert.equal((await resultFrom(balance("91.00"))).resultadoFinal.valor, "0.00");
   assert.equal((await resultFrom(balance("120.00"))).lineas.some((line) => line.cuentaId === "asset"), false);
-  assert.equal((await resultFrom(balance("120.00", false))).advertencias.includes("No existe información suficiente para determinar el costo de ventas."), true);
+  const resultWithoutCost = await resultFrom(balance("120.00", false));
+  assert.equal(resultWithoutCost.costoVentasDisponible, false);
+  assert.equal(resultWithoutCost.resultadoDeterminado, false);
+  assert.equal(resultWithoutCost.advertencias.includes("No se identificaron cuentas de costo de ventas en el Balance de Comprobación del período. No es posible determinar la utilidad bruta ni el resultado del ejercicio sin inventar valores."), true);
   await assert.rejects(() => resultFrom({ ...balance("120.00"), filas: [...balance("120.00").filas, balance("120.00").filas[0]] }), /duplicada/);
   console.log("estado-resultados.service.test.ts OK");
 })();

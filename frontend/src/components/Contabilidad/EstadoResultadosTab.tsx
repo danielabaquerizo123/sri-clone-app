@@ -12,6 +12,8 @@ type Resultado = {
   lineas: Linea[];
   totales: Record<Categoria, string> & Record<"utilidadBruta" | "totalGastosOperacionales" | "utilidadOperacional" | "resultadoAntesParticipacionImpuestos" | "resultadoAntesImpuesto" | "resultadoNeto", string>;
   resultadoFinal: { etiqueta: string; valor: string };
+  completo: boolean;
+  cuentasPendientes: Array<{ cuentaId: string; codigo: string; cuenta: string; tipo: string; saldo: string; motivo: string }>;
   advertencias: string[];
 };
 
@@ -66,7 +68,7 @@ export default function EstadoResultadosTab({ rucActivo, preview }: Props) {
     return () => { cancelled = true; };
   }, [preview, rucActivo]);
 
-  if (!preview) return <section className="rounded-[18px] border border-slate-200 bg-white p-6 text-sm font-bold text-slate-600 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">Genere primero el Libro Diario para consultar el Estado de Resultados.</section>;
+  if (!preview) return <section className="rounded-[18px] border border-slate-200 bg-white p-6 text-sm font-bold text-slate-600 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">No existe información contable para generar el Estado de Resultados.</section>;
   if (loading) return <section className="flex items-center gap-3 rounded-[18px] border border-slate-200 bg-white p-6 text-sm font-black text-slate-600 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"><Loader2 className="animate-spin text-[#246bfe]" size={18} />Generando Estado de Resultados...</section>;
   if (error) return <section className="flex items-center gap-3 rounded-[18px] border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700"><AlertCircle size={18} />{error}</section>;
   if (!data) return null;
@@ -77,6 +79,7 @@ export default function EstadoResultadosTab({ rucActivo, preview }: Props) {
       <p className="mt-2 text-sm font-semibold text-[#41527e]">{data.empresa.razonSocial} · RUC: {data.empresa.ruc} · {data.periodo.mes}/{data.periodo.anio} · {data.moneda}</p>
     </header>
     <div className="divide-y divide-slate-100 px-6">
+      {!data.completo && <p className="py-3 text-sm font-semibold text-amber-700">Estado de Resultados incompleto: existen cuentas pendientes de clasificación.</p>}
       {grupos.map(([categoria, label]) => {
         const lineas = data.lineas.filter((linea) => linea.categoria === categoria);
         if (!lineas.length) return null;
@@ -93,6 +96,7 @@ export default function EstadoResultadosTab({ rucActivo, preview }: Props) {
         <div className="flex justify-between border-t border-slate-200 pt-3 text-base"><span>{data.resultadoFinal.etiqueta}</span><span>{money(data.resultadoFinal.valor)}</span></div>
       </section>
       {data.advertencias.map((advertencia) => <p key={advertencia} className="py-3 text-sm font-semibold text-amber-700">{advertencia}</p>)}
+      {data.cuentasPendientes.map((cuenta) => <p key={cuenta.cuentaId} className="py-1 text-sm font-semibold text-amber-700">{cuenta.codigo} · {cuenta.cuenta} · {cuenta.tipo}</p>)}
     </div>
   </section>;
 }

@@ -1,33 +1,34 @@
 import { useState } from "react";
 import { AlertCircle, Download, Loader2 } from "lucide-react";
 import { authFetch } from "../../api/authApi";
+import type { LastAtsContribuyente } from "../../utils/atsSession";
 
-type Props = { rucActivo: string; preview: unknown | null };
+type Props = { ats: LastAtsContribuyente | null };
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-export default function ExportarExcelTab({ rucActivo, preview }: Props) {
+export default function ExportarExcelTab({ ats }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   async function download() {
-    if (!preview) return;
+    if (!ats) return;
     try {
       setLoading(true);
       setError("");
       setMessage("");
-      const response = await authFetch(`${apiUrl}/api/contabilidad/${rucActivo}/procesos/preview/exportar/excel`, {
+      const response = await authFetch(`${apiUrl}/api/contabilidad/procesos/exportar/excel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preview }),
+        body: JSON.stringify({ loteId: ats.loteId }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.message || data?.error || "No se pudo generar el archivo Excel. Intente nuevamente.");
       }
       const disposition = response.headers.get("Content-Disposition") || "";
-      const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `Procesos_Contables_${rucActivo}.xlsx`;
+      const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `Procesos_Contables_${ats.ruc}.xlsx`;
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
@@ -43,11 +44,12 @@ export default function ExportarExcelTab({ rucActivo, preview }: Props) {
     }
   }
 
-  if (!preview) return <section className="rounded-[18px] border border-slate-200 bg-white p-6 text-sm font-bold text-slate-600 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">No existen procesos contables para exportar.</section>;
+  if (!ats) return <section className="rounded-[18px] border border-slate-200 bg-white p-6 text-sm font-bold text-slate-600 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">No existe un lote ATS procesado para exportar.</section>;
 
   return <section className="rounded-[18px] border border-slate-200 bg-white p-6 shadow-[0_16px_40px_rgba(15,23,42,0.07)]">
     <h3 className="text-lg font-black text-[#071f55]">Exportar Excel</h3>
     <p className="mt-2 text-sm font-semibold text-[#41527e]">Descargue un único archivo con todos los procesos contables generados.</p>
+    <dl className="mt-4 grid gap-2 rounded-xl bg-slate-50 p-4 text-sm text-[#41527e] sm:grid-cols-3"><div><dt className="font-bold">Razón social</dt><dd>{ats.razonSocial}</dd></div><div><dt className="font-bold">RUC ATS</dt><dd>{ats.ruc}</dd></div><div><dt className="font-bold">Período ATS</dt><dd>{ats.mes}/{ats.anio}</dd></div></dl>
     <button type="button" onClick={() => setConfirming(true)} disabled={loading} className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-[#005cff] px-5 text-sm font-black text-white transition hover:bg-[#004ad0] disabled:cursor-not-allowed disabled:opacity-50"><Download size={17} />Exportar Excel</button>
     {loading && <p className="mt-4 flex items-center gap-2 text-sm font-bold text-[#41527e]"><Loader2 size={17} className="animate-spin" />Preparando archivo Excel...</p>}
     {message && <p className="mt-4 text-sm font-bold text-emerald-700">{message}</p>}

@@ -185,6 +185,7 @@ model Contribuyente {
   beneficiariosPension BeneficiarioPension[]
   periodosContables    PeriodoContable[]
   asientosContables    AsientoContable[]
+  exportacionesContables ExportacionContable[] @relation("ExportacionEjecutor")
   createdAt            DateTime              @default(now())
 }
 
@@ -810,4 +811,18 @@ model AtsLote {
   anulados ComprobanteAnulado[]
   guias    GuiaRemision[]
   asientos AsientoContable[]
+  exportacionesContables ExportacionContable[]
+}
+
+model ExportacionContable {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  loteId      String
+  ejecutorId  String
+
+  lote      AtsLote       @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  ejecutor  Contribuyente @relation("ExportacionEjecutor", fields: [ejecutorId], references: [id], onDelete: Restrict)
+
+  @@index([loteId, createdAt])
+  @@index([ejecutorId, createdAt])
 }

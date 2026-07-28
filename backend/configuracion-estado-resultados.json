@@ -1,0 +1,12 @@
+{
+  "clasificaciones": [
+    { "codigoCuenta": "40101", "categoriaEstadoResultados": "INGRESO_OPERACIONAL" },
+    { "codigoCuenta": "5020208", "categoriaEstadoResultados": "GASTO_ADMINISTRATIVO" },
+    { "codigoCuenta": "5020210", "categoriaEstadoResultados": "GASTO_ADMINISTRATIVO" },
+    { "codigoCuenta": "5020213", "categoriaEstadoResultados": "GASTO_ADMINISTRATIVO" },
+    { "codigoCuenta": "5020215", "categoriaEstadoResultados": "GASTO_ADMINISTRATIVO" },
+    { "codigoCuenta": "5020218", "categoriaEstadoResultados": "GASTO_ADMINISTRATIVO" },
+    { "codigoCuenta": "5020228", "categoriaEstadoResultados": "GASTO_ADMINISTRATIVO" },
+    { "codigoCuenta": "5020229", "categoriaEstadoResultados": "GASTO_ADMINISTRATIVO" }
+  ]
+}

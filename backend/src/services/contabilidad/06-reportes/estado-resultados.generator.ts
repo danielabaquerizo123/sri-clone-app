@@ -43,6 +43,7 @@ export type EstadoResultadosLinea = {
   categoria: CategoriaEstadoResultados;
   valor: string;
 };
+export type CuentaPendienteEstadoResultados = { cuentaId: string; codigo: string; cuenta: string; tipo: string; saldo: string; motivo: "SIN_CLASIFICACION_ESTADO_RESULTADOS" };
 
 export type EstadoResultadosResponse = {
   origen: BalanceComprobacionResponse["origen"];
@@ -53,6 +54,7 @@ export type EstadoResultadosResponse = {
   fechaHasta: string | null;
   moneda: "Dólares (USD)";
   lineas: EstadoResultadosLinea[];
+  secciones: Record<CategoriaEstadoResultados, EstadoResultadosLinea[]>;
   totales: Record<CategoriaEstadoResultados, string> & {
     utilidadBruta: string;
     totalGastosOperacionales: string;
@@ -62,6 +64,11 @@ export type EstadoResultadosResponse = {
     resultadoNeto: string;
   };
   resultadoFinal: { etiqueta: "UTILIDAD NETA DEL EJERCICIO" | "PÉRDIDA NETA DEL EJERCICIO" | "RESULTADO DEL EJERCICIO"; valor: string };
+  tipoResultado: "UTILIDAD" | "PERDIDA" | "CERO";
+  costoVentasDisponible: boolean;
+  resultadoDeterminado: boolean;
+  completo: boolean;
+  cuentasPendientes: CuentaPendienteEstadoResultados[];
   advertencias: string[];
 };
 
@@ -91,13 +98,19 @@ export class EstadoResultadosService {
     });
     const categorias = new Map(cuentas.map((cuenta) => [cuenta.cuentaId, cuenta.categoria as CategoriaEstadoResultados]));
     const advertencias: string[] = [];
+    const cuentasPendientes: CuentaPendienteEstadoResultados[] = [];
     const lineas = balance.filas.flatMap((fila) => {
       const categoria = categorias.get(fila.cuentaId);
-      if (!categoria || isZero(fila)) return [];
+      if (!categoria) {
+        if (["INGRESO", "GASTO", "COSTO"].includes(fila.tipoCuenta)) cuentasPendientes.push({ cuentaId: fila.cuentaId, codigo: fila.codigo, cuenta: fila.cuenta, tipo: fila.tipoCuenta, saldo: money(decimal(fila.deudor).minus(decimal(fila.acreedor))), motivo: "SIN_CLASIFICACION_ESTADO_RESULTADOS" });
+        return [];
+      }
+      if (isZero(fila)) return [];
       if (fila.tipoCuenta !== TIPO_POR_CATEGORIA[categoria]) {
         advertencias.push(`La cuenta ${fila.codigo} tiene una clasificación de resultados incompatible con su tipo contable.`);
         return [];
       }
+      if (TIPO_POR_CATEGORIA[categoria] === "INGRESO" ? decimal(fila.deudor).greaterThan(MONEY_ZERO) : decimal(fila.acreedor).greaterThan(MONEY_ZERO)) advertencias.push(`La cuenta ${fila.codigo} presenta un saldo contrario a su naturaleza esperada.`);
       return [{
         cuentaId: fila.cuentaId,
         codigo: fila.codigo,
@@ -110,16 +123,20 @@ export class EstadoResultadosService {
     const totals = Object.fromEntries(RESULTADO_CATEGORIAS.map((categoria) => [categoria, MONEY_ZERO])) as Record<CategoriaEstadoResultados, typeof MONEY_ZERO>;
     for (const linea of lineas) totals[linea.categoria] = totals[linea.categoria].plus(decimal(linea.valor));
 
-    const utilidadBruta = totals.INGRESO_OPERACIONAL.minus(totals.COSTO_VENTAS);
+    const costoDisponible = balance.filas.some((fila) => fila.tipoCuenta === "COSTO" && categorias.get(fila.cuentaId) === "COSTO_VENTAS");
+    const utilidadBrutaCalculada = totals.INGRESO_OPERACIONAL.minus(totals.COSTO_VENTAS);
     const totalGastosOperacionales = totals.GASTO_OPERACIONAL.plus(totals.GASTO_ADMINISTRATIVO).plus(totals.GASTO_VENTAS);
-    const utilidadOperacional = utilidadBruta.minus(totalGastosOperacionales);
-    const resultadoAntesParticipacionImpuestos = utilidadOperacional.plus(totals.OTRO_INGRESO).minus(totals.GASTO_FINANCIERO).minus(totals.OTRO_GASTO);
-    const resultadoAntesImpuesto = resultadoAntesParticipacionImpuestos.minus(totals.PARTICIPACION_TRABAJADORES);
-    const resultadoNeto = resultadoAntesImpuesto.minus(totals.IMPUESTO_RENTA);
+    const utilidadOperacionalCalculada = utilidadBrutaCalculada.minus(totalGastosOperacionales);
+    const resultadoAntesParticipacionImpuestosCalculado = utilidadOperacionalCalculada.plus(totals.OTRO_INGRESO).minus(totals.GASTO_FINANCIERO).minus(totals.OTRO_GASTO);
+    const resultadoAntesImpuestoCalculado = resultadoAntesParticipacionImpuestosCalculado.minus(totals.PARTICIPACION_TRABAJADORES);
+    const resultadoNetoCalculado = resultadoAntesImpuestoCalculado.minus(totals.IMPUESTO_RENTA);
+    const resultadoDeterminado = costoDisponible;
 
-    if (!lineas.some((linea) => linea.categoria === "COSTO_VENTAS")) {
-      advertencias.push("No existe información suficiente para determinar el costo de ventas.");
+    if (!costoDisponible) {
+      advertencias.push("No se identificaron cuentas de costo de ventas en el Balance de Comprobación del período. No es posible determinar la utilidad bruta ni el resultado del ejercicio sin inventar valores.");
     }
+    if (cuentasPendientes.length) advertencias.push("Estado de Resultados incompleto: existen cuentas pendientes de clasificación.");
+    const secciones = Object.fromEntries(RESULTADO_CATEGORIAS.map((categoria) => [categoria, lineas.filter((linea) => linea.categoria === categoria)])) as Record<CategoriaEstadoResultados, EstadoResultadosLinea[]>;
 
     return {
       origen: balance.origen,
@@ -130,20 +147,26 @@ export class EstadoResultadosService {
       fechaHasta: balance.fechaHasta,
       moneda: balance.moneda,
       lineas,
+      secciones,
       totales: {
         ...Object.fromEntries(RESULTADO_CATEGORIAS.map((categoria) => [categoria, money(totals[categoria])])) as Record<CategoriaEstadoResultados, string>,
-        utilidadBruta: money(utilidadBruta),
+        utilidadBruta: money(utilidadBrutaCalculada),
         totalGastosOperacionales: money(totalGastosOperacionales),
-        utilidadOperacional: money(utilidadOperacional),
-        resultadoAntesParticipacionImpuestos: money(resultadoAntesParticipacionImpuestos),
-        resultadoAntesImpuesto: money(resultadoAntesImpuesto),
-        resultadoNeto: money(resultadoNeto),
+        utilidadOperacional: money(utilidadOperacionalCalculada),
+        resultadoAntesParticipacionImpuestos: money(resultadoAntesParticipacionImpuestosCalculado),
+        resultadoAntesImpuesto: money(resultadoAntesImpuestoCalculado),
+        resultadoNeto: money(resultadoNetoCalculado),
       },
-      resultadoFinal: resultadoNeto.greaterThan(MONEY_ZERO)
-        ? { etiqueta: "UTILIDAD NETA DEL EJERCICIO", valor: money(resultadoNeto) }
-        : resultadoNeto.lessThan(MONEY_ZERO)
-          ? { etiqueta: "PÉRDIDA NETA DEL EJERCICIO", valor: money(resultadoNeto.abs()) }
+      resultadoFinal: resultadoNetoCalculado.greaterThan(MONEY_ZERO)
+        ? { etiqueta: "UTILIDAD NETA DEL EJERCICIO", valor: money(resultadoNetoCalculado) }
+        : resultadoNetoCalculado.lessThan(MONEY_ZERO)
+          ? { etiqueta: "PÉRDIDA NETA DEL EJERCICIO", valor: money(resultadoNetoCalculado.abs()) }
           : { etiqueta: "RESULTADO DEL EJERCICIO", valor: money(MONEY_ZERO) },
+      tipoResultado: resultadoNetoCalculado.greaterThan(MONEY_ZERO) ? "UTILIDAD" : resultadoNetoCalculado.lessThan(MONEY_ZERO) ? "PERDIDA" : "CERO",
+      costoVentasDisponible: costoDisponible,
+      resultadoDeterminado,
+      completo: cuentasPendientes.length === 0,
+      cuentasPendientes,
       advertencias,
     };
   }

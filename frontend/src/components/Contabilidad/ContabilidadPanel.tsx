@@ -7,6 +7,7 @@ import BalanceComprobacionTab from "./BalanceComprobacionTab";
 import EstadoResultadosTab from "./EstadoResultadosTab";
 import ExportarExcelTab from "./ExportarExcelTab";
 import { authFetch } from "../../api/authApi";
+import { getLastAtsContribuyente } from "../../utils/atsSession";
 import {
   normalizeLibroDiarioResponse,
   type ContabilidadIssue,
@@ -183,7 +184,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
       )}
 
       {activeView === "resultados" && <EstadoResultadosTab rucActivo={rucActivo} preview={response} />}
-      {activeView === "exportar" && <ExportarExcelTab rucActivo={rucActivo} preview={response} />}
+      {activeView === "exportar" && <ExportarExcelTab ats={getLastAtsContribuyente()} />}
 
       {activeView === "diario" && (
         response ? (

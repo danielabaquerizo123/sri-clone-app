@@ -61,6 +61,40 @@ function previewBody(req: Request) {
   return (body as any).preview || body;
 }
 
+export function exportLoteId(req: Request) {
+  const loteId = req.body?.loteId;
+  return typeof loteId === "string" && loteId.trim() ? loteId.trim() : null;
+}
+
+function sameText(left: unknown, right: unknown) {
+  return String(left || "").trim() === String(right || "").trim();
+}
+
+export function validateExportReportContext(params: {
+  lote: { id: string; rucInformante: string; razonSocial: string; anio: number; mes: string };
+  preview: any;
+  libroMayor: any;
+  balance: any;
+  estadoResultados: any;
+}) {
+  const { lote, preview, libroMayor, balance, estadoResultados } = params;
+  const samePeriod = (periodo: any) => Number(periodo?.anio) === lote.anio && String(periodo?.mes || "").padStart(2, "0") === String(lote.mes).padStart(2, "0");
+  const sameCompany = (empresa: any) => sameText(empresa?.ruc, lote.rucInformante) && sameText(empresa?.razonSocial, lote.razonSocial);
+
+  if (
+    !sameText(preview?.resumen?.loteId, lote.id) ||
+    !sameText(preview?.resumen?.ruc, lote.rucInformante) ||
+    !sameText(preview?.resumen?.razonSocial, lote.razonSocial) ||
+    !samePeriod(preview?.periodo) ||
+    !sameCompany(libroMayor?.empresa) || !samePeriod(libroMayor?.periodo) ||
+    !sameCompany(balance?.empresa) || !samePeriod(balance?.periodo) ||
+    !sameCompany(estadoResultados?.empresa) || !samePeriod(estadoResultados?.periodo) ||
+    balance?.moneda !== "Dólares (USD)" || estadoResultados?.moneda !== "Dólares (USD)"
+  ) {
+    throw new Error("Los reportes contables seleccionados no pertenecen al mismo lote ATS.");
+  }
+}
+
 function formatLibroDiarioAsientos(asientos: any[]) {
   return asientos.map((asiento) => ({
     numero: asiento.numero,
@@ -429,33 +463,34 @@ export const consultarEstadoResultadosPreview = async (req: Request, res: Respon
 
 export const exportarProcesosContablesPreviewExcel = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.contribuyenteAuth?.ruc !== req.params.ruc) {
-      return res.status(403).json({ message: "No tiene acceso al contribuyente solicitado." });
-    }
-    const preview = previewBody(req) as any;
-    const previewRuc = String(preview?.resumen?.ruc || preview?.ruc || "");
-    if (previewRuc && previewRuc !== req.params.ruc) {
-      return res.status(403).json({ message: "El Libro Diario no corresponde al contribuyente solicitado." });
-    }
-    const asientos = Array.isArray(preview?.libroDiario) ? preview.libroDiario : Array.isArray(preview?.asientos) ? preview.asientos : [];
+    const loteId = exportLoteId(req);
+    if (!loteId) return res.status(422).json({ message: "Debe seleccionar un lote ATS procesado para exportar." });
+    const lote = await prisma.atsLote.findUnique({ where: { id: loteId } });
+    if (!lote || lote.estado !== "PROCESADO_VALIDO") return res.status(422).json({ message: "El lote ATS seleccionado no está procesado o no es válido para exportar." });
+
+    // The ATS lot, never the authenticated user, is the accounting identity.
+    const preview = await new JournalPreviewService().buildFromAtsLote(lote.rucInformante, lote.id);
+    const asientos = preview.asientos;
     if (asientos.length === 0) return res.status(422).json({ message: "No existen procesos contables para exportar." });
 
-    const libroMayor = new LibroMayorService().generarDesdePreview({ ...preview, asientos }, { page: 1, limit: Number.MAX_SAFE_INTEGER });
+    const libroMayor = new LibroMayorService().generarDesdePreview(preview, { page: 1, limit: Number.MAX_SAFE_INTEGER });
     if (libroMayor.folios.length === 0) return res.status(422).json({ message: "No se pudo generar el Libro Mayor para la exportación." });
     const balance = new BalanceComprobacionService().generarDesdeLibroMayor(libroMayor);
     const estadoResultados = await new EstadoResultadosService().generarDesdeBalance(balance);
-    const periodo = String(preview?.resumen?.periodo || [libroMayor.periodo.anio, libroMayor.periodo.mes].filter(Boolean).join("-"));
+    validateExportReportContext({ lote, preview, libroMayor, balance, estadoResultados });
+    const periodo = `${String(lote.mes).padStart(2, "0")}/${lote.anio}`;
     const filenamePeriod = periodo.replace(/[^0-9-]/g, "") || "periodo";
-    const filenameRuc = req.params.ruc.replace(/[^0-9]/g, "");
+    const filenameRuc = lote.rucInformante.replace(/[^0-9]/g, "");
     const buffer = new AccountingExcelExporter().exportProcesosContables({
-      ruc: req.params.ruc,
-      razonSocial: preview?.resumen?.razonSocial || libroMayor.empresa.razonSocial,
+      ruc: lote.rucInformante,
+      razonSocial: lote.razonSocial,
       periodo,
       asientos,
       libroMayor,
       balanceComprobacion: balance,
       estadoResultados,
     });
+    await prisma.exportacionContable.create({ data: { loteId: lote.id, ejecutorId: req.contribuyenteAuth!.id } });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="Procesos_Contables_${filenameRuc}_${filenamePeriod}.xlsx"`);
     res.setHeader("Content-Length", buffer.length);
