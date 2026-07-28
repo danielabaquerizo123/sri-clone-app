@@ -278,17 +278,21 @@ function appendEstadoResultadosSheet(workbook: XLSX.WorkBook, result: EstadoResu
   ];
   result.lineas.forEach((linea) => rows.push([linea.codigo, linea.cuenta, money(linea.valor)]));
   rows.push([]);
-  rows.push(["", "Utilidad bruta", money(result.totales.utilidadBruta)]);
+  rows.push(["", "Utilidad bruta", estadoResultadosMoney(result, result.totales.utilidadBruta)]);
   rows.push(["", "Total gastos operacionales", money(result.totales.totalGastosOperacionales)]);
-  rows.push(["", "Utilidad operacional", money(result.totales.utilidadOperacional)]);
-  rows.push(["", "Resultado antes de impuesto", money(result.totales.resultadoAntesImpuesto)]);
-  rows.push(["", result.resultadoFinal.etiqueta, money(result.resultadoFinal.valor)]);
+  rows.push(["", "Utilidad operacional", estadoResultadosMoney(result, result.totales.utilidadOperacional)]);
+  rows.push(["", "Resultado antes de impuesto", estadoResultadosMoney(result, result.totales.resultadoAntesImpuesto)]);
+  rows.push(["", result.resultadoFinal.etiqueta, estadoResultadosMoney(result, result.resultadoFinal.valor)]);
   result.advertencias.forEach((advertencia) => rows.push(["", advertencia, ""]));
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
   sheet["!cols"] = [{ wch: 18 }, { wch: 62 }, { wch: 18 }];
   sheet["!freeze"] = { xSplit: 0, ySplit: 7 };
   XLSX.utils.book_append_sheet(workbook, sheet, "Estado de Resultados");
+}
+
+function estadoResultadosMoney(result: EstadoResultadosResponse, value: unknown) {
+  return result.resultadoDeterminado === false ? "No determinado" : money(value);
 }
 
 function headerCompany(params: { ruc?: string; razonSocial?: string }) {

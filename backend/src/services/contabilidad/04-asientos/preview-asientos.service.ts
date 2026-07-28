@@ -281,7 +281,7 @@ export class JournalPreviewService {
       },
     });
     const last = await (this.db as any).asientoContable.findFirst({
-      where: { contribuyenteId: contribuyente.id, periodoContableId: periodo.id },
+      where: { contribuyenteId: contribuyente.id, periodoId: periodo.id },
       orderBy: { numero: "desc" },
     });
     const rules = await (this.db as any).reglaContable.findMany({

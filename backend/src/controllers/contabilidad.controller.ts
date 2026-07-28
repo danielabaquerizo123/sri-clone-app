@@ -38,6 +38,25 @@ function booleanQuery(value: unknown) {
   return value === true || value === "true" || value === "1" || value === "SI";
 }
 
+function nombrePeriodoArchivo(mes: string, anio: number) {
+  const meses: Record<string, string> = {
+    "01": "Enero",
+    "02": "Febrero",
+    "03": "Marzo",
+    "04": "Abril",
+    "05": "Mayo",
+    "06": "Junio",
+    "07": "Julio",
+    "08": "Agosto",
+    "09": "Septiembre",
+    "10": "Octubre",
+    "11": "Noviembre",
+    "12": "Diciembre",
+  };
+  const mesNormalizado = String(mes).padStart(2, "0");
+  return `${meses[mesNormalizado] || mesNormalizado}_${anio}`;
+}
+
 function libroMayorParams(req: Request) {
   return {
     ruc: req.params.ruc,
@@ -479,8 +498,7 @@ export const exportarProcesosContablesPreviewExcel = async (req: AuthenticatedRe
     const estadoResultados = await new EstadoResultadosService().generarDesdeBalance(balance);
     validateExportReportContext({ lote, preview, libroMayor, balance, estadoResultados });
     const periodo = `${String(lote.mes).padStart(2, "0")}/${lote.anio}`;
-    const filenamePeriod = periodo.replace(/[^0-9-]/g, "") || "periodo";
-    const filenameRuc = lote.rucInformante.replace(/[^0-9]/g, "");
+    const filenamePeriod = nombrePeriodoArchivo(lote.mes, lote.anio);
     const buffer = new AccountingExcelExporter().exportProcesosContables({
       ruc: lote.rucInformante,
       razonSocial: lote.razonSocial,
@@ -492,7 +510,7 @@ export const exportarProcesosContablesPreviewExcel = async (req: AuthenticatedRe
     });
     await prisma.exportacionContable.create({ data: { loteId: lote.id, ejecutorId: req.contribuyenteAuth!.id } });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="Procesos_Contables_${filenameRuc}_${filenamePeriod}.xlsx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="Libro_Contable_${filenamePeriod}.xlsx"`);
     res.setHeader("Content-Length", buffer.length);
     return res.end(buffer);
   } catch (error) {
