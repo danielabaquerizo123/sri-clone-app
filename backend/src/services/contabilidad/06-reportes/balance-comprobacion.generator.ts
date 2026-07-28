@@ -1,7 +1,5 @@
-import type { TrialBalanceGeneratorContract } from "../contratos";
-import type { LedgerAccount, TrialBalanceRow } from "../contratos";
 import { LibroMayorService } from "./libro-mayor/libro-mayor.service";
-import { decimal, money, movementBalanceEffect, splitBalance, MONEY_ZERO } from "./libro-mayor/libro-mayor-saldos.service";
+import { decimal, money, splitBalance, MONEY_ZERO } from "./libro-mayor/libro-mayor-saldos.service";
 import type { JournalPreviewResult } from "../04-asientos/preview-asientos.service";
 import type { LibroMayorFolio, LibroMayorParams, LibroMayorResponse } from "./libro-mayor/libro-mayor.types";
 
@@ -41,12 +39,6 @@ export type BalanceComprobacionResponse = {
   };
 };
 
-export class TrialBalanceGenerator implements TrialBalanceGeneratorContract {
-  generate(_ledger: LedgerAccount[]): TrialBalanceRow[] {
-    return [];
-  }
-}
-
 export class BalanceComprobacionService {
   constructor(private readonly libroMayor = new LibroMayorService()) {}
 
@@ -65,6 +57,7 @@ export class BalanceComprobacionService {
   }
 
   generarDesdeLibroMayor(libroMayor: LibroMayorResponse): BalanceComprobacionResponse {
+    validateLibroMayor(libroMayor);
     const filas = libroMayor.folios.map((folio, index) => rowFromFolio(folio, index + 1));
     const totalDebe = filas.reduce((sum, row) => sum.plus(decimal(row.debe)), MONEY_ZERO);
     const totalHaber = filas.reduce((sum, row) => sum.plus(decimal(row.haber)), MONEY_ZERO);
@@ -99,10 +92,10 @@ export class BalanceComprobacionService {
 }
 
 function rowFromFolio(folio: LibroMayorFolio, numero: number): BalanceComprobacionRow {
-  const totalDebe = decimal(folio.totalDebe);
-  const totalHaber = decimal(folio.totalHaber);
-  const saldo = movementBalanceEffect(totalDebe, totalHaber, folio.naturalezaCuenta);
-  const balance = splitBalance(saldo, folio.naturalezaCuenta);
+  const totalDebe = folio.movimientos.reduce((sum, movimiento) => sum.plus(decimal(movimiento.debe)), MONEY_ZERO);
+  const totalHaber = folio.movimientos.reduce((sum, movimiento) => sum.plus(decimal(movimiento.haber)), MONEY_ZERO);
+  const saldo = totalDebe.minus(totalHaber);
+  const balance = splitBalance(saldo);
 
   return {
     numero,
@@ -116,4 +109,38 @@ function rowFromFolio(folio: LibroMayorFolio, numero: number): BalanceComprobaci
     deudor: balance.deudor,
     acreedor: balance.acreedor,
   };
+}
+
+function validateLibroMayor(libroMayor: LibroMayorResponse) {
+  const foliosPorCuenta = new Set<string>();
+  let totalDebe = MONEY_ZERO;
+  let totalHaber = MONEY_ZERO;
+
+  for (const folio of libroMayor.folios) {
+    if (foliosPorCuenta.has(folio.codigoCuenta)) {
+      throw new Error(`El Libro Mayor contiene más de un folio para la cuenta ${folio.codigoCuenta}.`);
+    }
+    foliosPorCuenta.add(folio.codigoCuenta);
+
+    const debeMovimientos = folio.movimientos.reduce((sum, movimiento) => sum.plus(decimal(movimiento.debe)), MONEY_ZERO);
+    const haberMovimientos = folio.movimientos.reduce((sum, movimiento) => sum.plus(decimal(movimiento.haber)), MONEY_ZERO);
+    const saldoMovimientos = debeMovimientos.minus(haberMovimientos);
+
+    if (!decimal(folio.totalDebe).equals(debeMovimientos) || !decimal(folio.totalHaber).equals(haberMovimientos)) {
+      throw new Error(`Las sumas del folio ${folio.codigoCuenta} no coinciden con sus movimientos.`);
+    }
+    if (!decimal(folio.saldoFinal).equals(saldoMovimientos)) {
+      throw new Error(`El saldo final del folio ${folio.codigoCuenta} no coincide con Debe menos Haber.`);
+    }
+
+    totalDebe = totalDebe.plus(debeMovimientos);
+    totalHaber = totalHaber.plus(haberMovimientos);
+  }
+
+  if (!totalDebe.equals(decimal(libroMayor.resumenGlobal.totalDebeMayor)) || !totalHaber.equals(decimal(libroMayor.resumenGlobal.totalHaberMayor))) {
+    throw new Error("Las sumas del Balance no coinciden con los totales del Libro Mayor.");
+  }
+  if (!totalDebe.equals(decimal(libroMayor.resumenGlobal.totalDebeDiario)) || !totalHaber.equals(decimal(libroMayor.resumenGlobal.totalHaberDiario))) {
+    throw new Error("Las sumas del Balance no coinciden con los totales del Libro Diario.");
+  }
 }

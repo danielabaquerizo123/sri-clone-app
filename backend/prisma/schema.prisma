@@ -91,6 +91,19 @@ enum NaturalezaCuenta {
   ACREEDORA
 }
 
+enum CategoriaEstadoResultados {
+  INGRESO_OPERACIONAL
+  OTRO_INGRESO
+  COSTO_VENTAS
+  GASTO_OPERACIONAL
+  GASTO_ADMINISTRATIVO
+  GASTO_VENTAS
+  GASTO_FINANCIERO
+  OTRO_GASTO
+  PARTICIPACION_TRABAJADORES
+  IMPUESTO_RENTA
+}
+
 enum TipoOperacionContable {
   COMPRA
   VENTA
@@ -193,6 +206,7 @@ model CuentaContable {
   reglasContrapartida ReglaContable[]               @relation("ReglaCuentaContrapartida")
   lineasAsiento       LineaAsiento[]
   configuraciones     ConfiguracionCuentaContable[] @relation("ConfiguracionesCuentaContable")
+  clasificacionResultado ClasificacionEstadoResultados?
 }
 
 model ReglaContable {
@@ -290,6 +304,18 @@ model ConfiguracionCuentaContable {
 
   @@index([cuentaId])
   @@index([activa])
+}
+
+model ClasificacionEstadoResultados {
+  id        String                     @id @default(uuid())
+  categoria CategoriaEstadoResultados
+  activa    Boolean                    @default(true)
+  cuentaId  String                     @unique
+  cuenta    CuentaContable             @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
+  createdAt DateTime                   @default(now())
+  updatedAt DateTime                   @updatedAt
+
+  @@index([categoria, activa])
 }
 
 model ReglaClasificacionContable {

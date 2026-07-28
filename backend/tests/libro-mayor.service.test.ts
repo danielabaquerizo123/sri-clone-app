@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { LibroMayorAgrupadorService } from "../src/services/contabilidad/06-reportes/libro-mayor/libro-mayor-agrupador.service";
 import { LibroMayorSaldosService, money } from "../src/services/contabilidad/06-reportes/libro-mayor/libro-mayor-saldos.service";
 import { LibroMayorValidacionService } from "../src/services/contabilidad/06-reportes/libro-mayor/libro-mayor-validacion.service";
+import { BalanceComprobacionService } from "../src/services/contabilidad/06-reportes/balance-comprobacion.generator";
 import { AccountingExcelExporter } from "../src/services/contabilidad/06-reportes/excel-exportador";
 import type { LibroMayorRawMovement, LibroMayorResponse } from "../src/services/contabilidad/06-reportes/libro-mayor/libro-mayor.types";
 
@@ -246,6 +247,47 @@ function line(overrides: Partial<LibroMayorRawMovement>): LibroMayorRawMovement 
   assert.equal(mayorRows.some((row) => row.includes("TOTALES")), true);
   assert.equal(mayorRows.some((row) => String(row[0] || "").startsWith("PERIODO:")), false);
   assert.equal(workbook.SheetNames.filter((name) => name.includes("1010101")).length, 0);
+
+  const balance = new BalanceComprobacionService().generarDesdeLibroMayor(mayor);
+  assert.equal(balance.filas.length, 1);
+  assert.deepEqual(balance.filas[0], {
+    numero: 1,
+    cuentaId: "cash",
+    cuenta: "CAJA",
+    codigo: "1010101",
+    tipoCuenta: "ACTIVO",
+    naturalezaCuenta: "DEUDORA",
+    debe: "100.00",
+    haber: "100.00",
+    deudor: "0.00",
+    acreedor: "0.00",
+  });
+  assert.equal(balance.resumen.totalDebe, mayor.resumenGlobal.totalDebeDiario);
+  assert.equal(balance.resumen.totalHaber, mayor.resumenGlobal.totalHaberDiario);
+  assert.equal(balance.resumen.cuadradoSumas, true);
+  assert.equal(balance.resumen.cuadradoSaldos, true);
+
+  assert.throws(
+    () => new BalanceComprobacionService().generarDesdeLibroMayor({
+      ...mayor,
+      folios: [...mayor.folios, { ...mayor.folios[0], folio: 2 }],
+    }),
+    /más de un folio/
+  );
+  assert.throws(
+    () => new BalanceComprobacionService().generarDesdeLibroMayor({
+      ...mayor,
+      folios: [{ ...mayor.folios[0], totalDebe: "99.00" }],
+    }),
+    /no coinciden con sus movimientos/
+  );
+  assert.throws(
+    () => new BalanceComprobacionService().generarDesdeLibroMayor({
+      ...mayor,
+      resumenGlobal: { ...mayor.resumenGlobal, totalDebeDiario: "99.00" },
+    }),
+    /no coinciden con los totales del Libro Diario/
+  );
 }
 
 console.log("libro-mayor.service.test.ts OK");

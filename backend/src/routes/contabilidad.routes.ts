@@ -5,6 +5,8 @@ import {
   consultarFolioLibroMayor,
   consultarBalanceComprobacion,
   consultarBalanceComprobacionPreview,
+  consultarEstadoResultados,
+  consultarEstadoResultadosPreview,
   consultarLibroMayor,
   consultarLibroMayorPreview,
   exportarBalanceComprobacionExcel,
@@ -17,6 +19,8 @@ import {
   generarAsientosDesdeAts,
   listarPlanCuentas,
   listarReglasContables,
+  listarClasificacionesEstadoResultados,
+  guardarClasificacionEstadoResultados,
   previsualizarLibroDiarioDesdeAts,
   procesarAtsContabilidad,
   procesarExcelLibroDiario,
@@ -34,6 +38,8 @@ const upload = multer({
 
 router.get("/:ruc/plan-cuentas", listarPlanCuentas);
 router.get("/:ruc/reglas", listarReglasContables);
+router.get("/:ruc/estado-resultados/clasificaciones", listarClasificacionesEstadoResultados);
+router.put("/:ruc/estado-resultados/clasificaciones", guardarClasificacionEstadoResultados);
 router.post("/:ruc/ats/:loteId/previsualizar", previsualizarLibroDiarioDesdeAts);
 router.post("/:ruc/ats/:loteId/generar-asientos", generarAsientosDesdeAts);
 router.get("/:ruc/libro-diario", consultarLibroDiario);
@@ -48,6 +54,8 @@ router.post("/:ruc/libro-mayor/preview/exportar/pdf", exportarLibroMayorPreviewP
 router.get("/:ruc/libro-mayor/cuentas/:cuentaId", consultarFolioLibroMayor);
 router.get("/:ruc/balance-comprobacion", consultarBalanceComprobacion);
 router.post("/:ruc/balance-comprobacion/preview", consultarBalanceComprobacionPreview);
+router.get("/:ruc/estado-resultados", consultarEstadoResultados);
+router.post("/:ruc/estado-resultados/preview", consultarEstadoResultadosPreview);
 router.get("/:ruc/balance-comprobacion/exportar/excel", exportarBalanceComprobacionExcel);
 router.post("/:ruc/balance-comprobacion/preview/exportar/excel", exportarBalanceComprobacionPreviewExcel);
 

@@ -6,6 +6,7 @@ import { LibroMayorExportExcelService } from "../services/contabilidad/06-report
 import { LibroMayorExportPdfService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-pdf.service";
 import { AccountingExcelExporter } from "../services/contabilidad/06-reportes/excel-exportador";
 import { BalanceComprobacionService } from "../services/contabilidad/06-reportes/balance-comprobacion.generator";
+import { EstadoResultadosService, RESULTADO_CATEGORIAS } from "../services/contabilidad/06-reportes/estado-resultados.generator";
 
 function buildErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -182,6 +183,42 @@ export const listarReglasContables = async (req: Request, res: Response) => {
       message: "Error consultando reglas contables.",
       error: buildErrorMessage(error),
     });
+  }
+};
+
+export const listarClasificacionesEstadoResultados = async (req: Request, res: Response) => {
+  try {
+    await findContribuyenteOrFail(req.params.ruc);
+    const clasificaciones = await prisma.clasificacionEstadoResultados.findMany({
+      include: { cuenta: true },
+      orderBy: { cuenta: { codigo: "asc" } },
+    });
+    return res.status(200).json({ clasificaciones, categorias: RESULTADO_CATEGORIAS });
+  } catch (error) {
+    return res.status(500).json({ message: "Error consultando clasificaciones de Estado de Resultados.", error: buildErrorMessage(error) });
+  }
+};
+
+export const guardarClasificacionEstadoResultados = async (req: Request, res: Response) => {
+  try {
+    await findContribuyenteOrFail(req.params.ruc);
+    const cuentaId = typeof req.body?.cuentaId === "string" ? req.body.cuentaId : "";
+    const categoria = typeof req.body?.categoria === "string" ? req.body.categoria : "";
+    const activa = typeof req.body?.activa === "boolean" ? req.body.activa : true;
+    if (!cuentaId || !RESULTADO_CATEGORIAS.includes(categoria as any)) {
+      return res.status(400).json({ message: "Cuenta y categoría de Estado de Resultados son obligatorias." });
+    }
+    const cuenta = await prisma.cuentaContable.findUnique({ where: { id: cuentaId } });
+    if (!cuenta) return res.status(404).json({ message: "Cuenta contable no encontrada." });
+    const clasificacion = await prisma.clasificacionEstadoResultados.upsert({
+      where: { cuentaId },
+      create: { cuentaId, categoria: categoria as any, activa },
+      update: { categoria: categoria as any, activa },
+      include: { cuenta: true },
+    });
+    return res.status(200).json(clasificacion);
+  } catch (error) {
+    return res.status(500).json({ message: "Error guardando clasificación de Estado de Resultados.", error: buildErrorMessage(error) });
   }
 };
 
@@ -370,6 +407,22 @@ export const consultarBalanceComprobacionPreview = async (req: Request, res: Res
       message: "Error generando Balance de Comprobación desde preview.",
       error: buildErrorMessage(error),
     });
+  }
+};
+
+export const consultarEstadoResultados = async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json(await new EstadoResultadosService().generar(libroMayorParams(req)));
+  } catch (error) {
+    return res.status(500).json({ message: "Error consultando Estado de Resultados.", error: buildErrorMessage(error) });
+  }
+};
+
+export const consultarEstadoResultadosPreview = async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json(await new EstadoResultadosService().generarDesdePreview(previewBody(req), libroMayorParams(req)));
+  } catch (error) {
+    return res.status(500).json({ message: "Error consultando Estado de Resultados.", error: buildErrorMessage(error) });
   }
 };
 

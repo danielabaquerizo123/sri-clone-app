@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Info as InfoIcon,
 import LibroDiarioTab from "./LibroDiarioTab";
 import LibroMayorTab from "./LibroMayorTab";
 import BalanceComprobacionTab from "./BalanceComprobacionTab";
+import EstadoResultadosTab from "./EstadoResultadosTab";
 import { authFetch } from "../../api/authApi";
 import {
   normalizeLibroDiarioResponse,
@@ -37,7 +38,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
   const [successNotice, setSuccessNotice] = useState("");
   const [showTechnicalDetail, setShowTechnicalDetail] = useState(false);
   const [showIncidenceDetail, setShowIncidenceDetail] = useState(false);
-  const [activeView, setActiveView] = useState<"ats" | "diario" | "mayor" | "balance">("ats");
+  const [activeView, setActiveView] = useState<"ats" | "diario" | "mayor" | "balance" | "resultados">("ats");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const reviewRef = useRef<HTMLElement | null>(null);
@@ -154,6 +155,10 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
           <FileSpreadsheet size={18} />
           Balance de Comprobación
         </button>
+        <button type="button" onClick={() => setActiveView("resultados")} className={`inline-flex h-12 items-center gap-2 rounded-t-xl rounded-b-md border px-5 text-sm font-black shadow-sm transition ${activeView === "resultados" ? "border-slate-200 border-b-[#0f66ff] bg-white text-[#005cff] shadow-[0_14px_30px_rgba(15,23,42,0.08)]" : "border-transparent bg-transparent text-[#344a78] hover:bg-white/70"}`}>
+          <FileSpreadsheet size={18} />
+          Estado de Resultados
+        </button>
       </section>
 
       {activeView === "mayor" && (
@@ -171,6 +176,8 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
           onExport={response ? () => void downloadBalanceExcel(response, rucActivo).catch((err) => setError(err instanceof Error ? err.message : "No se pudo exportar el Balance de Comprobación.")) : undefined}
         />
       )}
+
+      {activeView === "resultados" && <EstadoResultadosTab rucActivo={rucActivo} preview={response} />}
 
       {activeView === "diario" && (
         response ? (
