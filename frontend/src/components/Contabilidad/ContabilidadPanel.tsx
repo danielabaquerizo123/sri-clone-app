@@ -5,6 +5,7 @@ import LibroDiarioTab from "./LibroDiarioTab";
 import LibroMayorTab from "./LibroMayorTab";
 import BalanceComprobacionTab from "./BalanceComprobacionTab";
 import EstadoResultadosTab from "./EstadoResultadosTab";
+import ExportarExcelTab from "./ExportarExcelTab";
 import { authFetch } from "../../api/authApi";
 import {
   normalizeLibroDiarioResponse,
@@ -38,7 +39,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
   const [successNotice, setSuccessNotice] = useState("");
   const [showTechnicalDetail, setShowTechnicalDetail] = useState(false);
   const [showIncidenceDetail, setShowIncidenceDetail] = useState(false);
-  const [activeView, setActiveView] = useState<"ats" | "diario" | "mayor" | "balance" | "resultados">("ats");
+  const [activeView, setActiveView] = useState<"ats" | "diario" | "mayor" | "balance" | "resultados" | "exportar">("ats");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const reviewRef = useRef<HTMLElement | null>(null);
@@ -159,6 +160,10 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
           <FileSpreadsheet size={18} />
           Estado de Resultados
         </button>
+        <button type="button" onClick={() => setActiveView("exportar")} className={`inline-flex h-12 items-center gap-2 rounded-t-xl rounded-b-md border px-5 text-sm font-black shadow-sm transition ${activeView === "exportar" ? "border-slate-200 border-b-[#0f66ff] bg-white text-[#005cff] shadow-[0_14px_30px_rgba(15,23,42,0.08)]" : "border-transparent bg-transparent text-[#344a78] hover:bg-white/70"}`}>
+          <Download size={18} />
+          Exportar Excel
+        </button>
       </section>
 
       {activeView === "mayor" && (
@@ -178,6 +183,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
       )}
 
       {activeView === "resultados" && <EstadoResultadosTab rucActivo={rucActivo} preview={response} />}
+      {activeView === "exportar" && <ExportarExcelTab rucActivo={rucActivo} preview={response} />}
 
       {activeView === "diario" && (
         response ? (

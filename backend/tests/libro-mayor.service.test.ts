@@ -267,6 +267,40 @@ function line(overrides: Partial<LibroMayorRawMovement>): LibroMayorRawMovement 
   assert.equal(balance.resumen.cuadradoSumas, true);
   assert.equal(balance.resumen.cuadradoSaldos, true);
 
+  const procesos = new AccountingExcelExporter().exportProcesosContables({
+    ruc: mayor.empresa.ruc,
+    razonSocial: mayor.empresa.razonSocial,
+    periodo: "04/2026",
+    asientos: [
+      {
+        numero: 1,
+        fecha: "2026-04-01",
+        glosa: "Movimiento",
+        descripcion: "Movimiento",
+        documentoOrigen: "001",
+        hojaOrigen: "COMPRAS",
+        filaOrigen: 1,
+        lineas: [{ codigo: "1010101", cuenta: "CAJA", debe: 100, haber: 0, orden: 1 }],
+        totalDebe: 100,
+        totalHaber: 100,
+        valido: true,
+        errores: [],
+      },
+    ],
+    libroMayor: mayor,
+    balanceComprobacion: balance,
+    estadoResultados: {
+      empresa: mayor.empresa,
+      periodo: mayor.periodo,
+      lineas: [],
+      totales: { utilidadBruta: "0.00", totalGastosOperacionales: "0.00", utilidadOperacional: "0.00", resultadoAntesImpuesto: "0.00" },
+      resultadoFinal: { etiqueta: "RESULTADO DEL EJERCICIO", valor: "0.00" },
+      advertencias: [],
+    } as any,
+  });
+  const procesosWorkbook = XLSX.read(procesos, { type: "buffer" });
+  assert.deepEqual(procesosWorkbook.SheetNames, ["Libro Diario", "Libro Mayor", "Balance de Comprobación", "Estado de Resultados"]);
+
   assert.throws(
     () => new BalanceComprobacionService().generarDesdeLibroMayor({
       ...mayor,

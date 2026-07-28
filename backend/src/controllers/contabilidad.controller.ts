@@ -7,6 +7,7 @@ import { LibroMayorExportPdfService } from "../services/contabilidad/06-reportes
 import { AccountingExcelExporter } from "../services/contabilidad/06-reportes/excel-exportador";
 import { BalanceComprobacionService } from "../services/contabilidad/06-reportes/balance-comprobacion.generator";
 import { EstadoResultadosService, RESULTADO_CATEGORIAS } from "../services/contabilidad/06-reportes/estado-resultados.generator";
+import type { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
 function buildErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -423,6 +424,44 @@ export const consultarEstadoResultadosPreview = async (req: Request, res: Respon
     return res.status(200).json(await new EstadoResultadosService().generarDesdePreview(previewBody(req), libroMayorParams(req)));
   } catch (error) {
     return res.status(500).json({ message: "Error consultando Estado de Resultados.", error: buildErrorMessage(error) });
+  }
+};
+
+export const exportarProcesosContablesPreviewExcel = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.contribuyenteAuth?.ruc !== req.params.ruc) {
+      return res.status(403).json({ message: "No tiene acceso al contribuyente solicitado." });
+    }
+    const preview = previewBody(req) as any;
+    const previewRuc = String(preview?.resumen?.ruc || preview?.ruc || "");
+    if (previewRuc && previewRuc !== req.params.ruc) {
+      return res.status(403).json({ message: "El Libro Diario no corresponde al contribuyente solicitado." });
+    }
+    const asientos = Array.isArray(preview?.libroDiario) ? preview.libroDiario : Array.isArray(preview?.asientos) ? preview.asientos : [];
+    if (asientos.length === 0) return res.status(422).json({ message: "No existen procesos contables para exportar." });
+
+    const libroMayor = new LibroMayorService().generarDesdePreview({ ...preview, asientos }, { page: 1, limit: Number.MAX_SAFE_INTEGER });
+    if (libroMayor.folios.length === 0) return res.status(422).json({ message: "No se pudo generar el Libro Mayor para la exportación." });
+    const balance = new BalanceComprobacionService().generarDesdeLibroMayor(libroMayor);
+    const estadoResultados = await new EstadoResultadosService().generarDesdeBalance(balance);
+    const periodo = String(preview?.resumen?.periodo || [libroMayor.periodo.anio, libroMayor.periodo.mes].filter(Boolean).join("-"));
+    const filenamePeriod = periodo.replace(/[^0-9-]/g, "") || "periodo";
+    const filenameRuc = req.params.ruc.replace(/[^0-9]/g, "");
+    const buffer = new AccountingExcelExporter().exportProcesosContables({
+      ruc: req.params.ruc,
+      razonSocial: preview?.resumen?.razonSocial || libroMayor.empresa.razonSocial,
+      periodo,
+      asientos,
+      libroMayor,
+      balanceComprobacion: balance,
+      estadoResultados,
+    });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="Procesos_Contables_${filenameRuc}_${filenamePeriod}.xlsx"`);
+    res.setHeader("Content-Length", buffer.length);
+    return res.end(buffer);
+  } catch (error) {
+    return res.status(500).json({ message: "No se pudo generar el archivo Excel. Intente nuevamente.", error: buildErrorMessage(error) });
   }
 };
 

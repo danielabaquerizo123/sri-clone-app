@@ -3,6 +3,7 @@ import type { AccountingEngineResult } from "../contratos";
 import type { PreviewEntry } from "../04-asientos/constructor-asiento.service";
 import type { LibroMayorFolio, LibroMayorResponse } from "./libro-mayor/libro-mayor.types";
 import type { BalanceComprobacionResponse } from "./balance-comprobacion.generator";
+import type { EstadoResultadosResponse } from "./estado-resultados.generator";
 
 export class AccountingExcelExporter {
   prepare(_result: AccountingEngineResult): Buffer | null {
@@ -49,6 +50,23 @@ export class AccountingExcelExporter {
   exportBalanceComprobacion(result: BalanceComprobacionResponse): Buffer {
     const workbook = XLSX.utils.book_new();
     appendBalanceComprobacionSheet(workbook, result);
+    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx", cellStyles: true }) as Buffer;
+  }
+
+  exportProcesosContables(params: {
+    ruc?: string;
+    razonSocial?: string;
+    periodo?: string;
+    asientos: PreviewEntry[];
+    libroMayor: LibroMayorResponse;
+    balanceComprobacion: BalanceComprobacionResponse;
+    estadoResultados: EstadoResultadosResponse;
+  }): Buffer {
+    const workbook = XLSX.utils.book_new();
+    appendLibroDiarioSheet(workbook, params);
+    appendLibroMayorSheet(workbook, params.libroMayor);
+    appendBalanceComprobacionSheet(workbook, params.balanceComprobacion, "Balance de Comprobación");
+    appendEstadoResultadosSheet(workbook, params.estadoResultados);
     return XLSX.write(workbook, { type: "buffer", bookType: "xlsx", cellStyles: true }) as Buffer;
   }
 }
@@ -196,7 +214,7 @@ function appendEmptyLibroMayorSheet(workbook: XLSX.WorkBook, params: { ruc?: str
   XLSX.utils.book_append_sheet(workbook, sheet, "Libro Mayor");
 }
 
-function appendBalanceComprobacionSheet(workbook: XLSX.WorkBook, result: BalanceComprobacionResponse) {
+function appendBalanceComprobacionSheet(workbook: XLSX.WorkBook, result: BalanceComprobacionResponse, sheetName = "Balance Comprobacion") {
   const rows: Array<Array<string | number>> = [
     [result.empresa.razonSocial || "No disponible", "", "", "", "", "", ""],
     [`RUC: ${result.empresa.ruc || ""}`, "", "", "", "", "", ""],
@@ -245,7 +263,32 @@ function appendBalanceComprobacionSheet(workbook: XLSX.WorkBook, result: Balance
   ];
   sheet["!autofilter"] = { ref: `A8:G${Math.max(rows.length - 4, 8)}` };
   sheet["!freeze"] = { xSplit: 0, ySplit: 8 };
-  XLSX.utils.book_append_sheet(workbook, sheet, "Balance Comprobacion");
+  XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+}
+
+function appendEstadoResultadosSheet(workbook: XLSX.WorkBook, result: EstadoResultadosResponse) {
+  const rows: Array<Array<string | number>> = [
+    [result.empresa.razonSocial, "", ""],
+    [`RUC: ${result.empresa.ruc}`, "", ""],
+    ["Estado de Resultados", "", ""],
+    [`Periodo: ${[result.periodo.mes, result.periodo.anio].filter(Boolean).join("/")}`, "", ""],
+    ["Expresado en Dólares", "", ""],
+    [],
+    ["Código", "Detalle", "Valor"],
+  ];
+  result.lineas.forEach((linea) => rows.push([linea.codigo, linea.cuenta, money(linea.valor)]));
+  rows.push([]);
+  rows.push(["", "Utilidad bruta", money(result.totales.utilidadBruta)]);
+  rows.push(["", "Total gastos operacionales", money(result.totales.totalGastosOperacionales)]);
+  rows.push(["", "Utilidad operacional", money(result.totales.utilidadOperacional)]);
+  rows.push(["", "Resultado antes de impuesto", money(result.totales.resultadoAntesImpuesto)]);
+  rows.push(["", result.resultadoFinal.etiqueta, money(result.resultadoFinal.valor)]);
+  result.advertencias.forEach((advertencia) => rows.push(["", advertencia, ""]));
+
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  sheet["!cols"] = [{ wch: 18 }, { wch: 62 }, { wch: 18 }];
+  sheet["!freeze"] = { xSplit: 0, ySplit: 7 };
+  XLSX.utils.book_append_sheet(workbook, sheet, "Estado de Resultados");
 }
 
 function headerCompany(params: { ruc?: string; razonSocial?: string }) {

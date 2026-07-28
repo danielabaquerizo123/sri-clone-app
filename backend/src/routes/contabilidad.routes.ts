@@ -12,6 +12,7 @@ import {
   exportarBalanceComprobacionExcel,
   exportarBalanceComprobacionPreviewExcel,
   exportarLibroDiarioPreviewExcel,
+  exportarProcesosContablesPreviewExcel,
   exportarLibroMayorExcel,
   exportarLibroMayorPdf,
   exportarLibroMayorPreviewExcel,
@@ -44,6 +45,7 @@ router.post("/:ruc/ats/:loteId/previsualizar", previsualizarLibroDiarioDesdeAts)
 router.post("/:ruc/ats/:loteId/generar-asientos", generarAsientosDesdeAts);
 router.get("/:ruc/libro-diario", consultarLibroDiario);
 router.post("/:ruc/libro-diario/preview/exportar/excel", exportarLibroDiarioPreviewExcel);
+router.post("/:ruc/procesos/preview/exportar/excel", exportarProcesosContablesPreviewExcel);
 router.get("/:ruc/libro-mayor", consultarLibroMayor);
 router.post("/:ruc/libro-mayor/preview", consultarLibroMayorPreview);
 router.get("/:ruc/libro-mayor/validar", validarLibroMayor);
