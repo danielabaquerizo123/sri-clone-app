@@ -91,6 +91,26 @@ export function exportLoteId(req: Request) {
   return typeof loteId === "string" && loteId.trim() ? loteId.trim() : null;
 }
 
+async function findExportableAtsLoteForResult(rucActivo: string, result: { resumen?: { ruc?: string }; periodo?: { anio?: number | null; mes?: string | null } }) {
+  const contribuyente = await prisma.contribuyente.findUnique({ where: { ruc: rucActivo } });
+  const rucInformante = String(result.resumen?.ruc || "").trim();
+  const anio = Number(result.periodo?.anio);
+  const rawMes = String(result.periodo?.mes || "").trim();
+  if (!contribuyente || !rucInformante || !Number.isInteger(anio) || !rawMes) return null;
+  const mes = rawMes.padStart(2, "0");
+
+  return prisma.atsLote.findFirst({
+    where: {
+      contribuyenteId: contribuyente.id,
+      rucInformante,
+      anio,
+      mes,
+      estado: { in: [...ESTADOS_ATS_EXPORTABLES] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 function sameText(left: unknown, right: unknown) {
   return String(left || "").trim() === String(right || "").trim();
 }
@@ -183,9 +203,20 @@ export const procesarExcelLibroDiario = async (req: Request, res: Response) => {
 
     const service = new ExcelLibroDiarioService();
     const result = await service.processAsync(req.file.buffer, req.file.originalname);
+    const lote = await findExportableAtsLoteForResult(req.params.ruc, result);
 
     return res.status(200).json({
       ...result,
+      lote: lote
+        ? {
+            id: lote.id,
+            rucInformante: lote.rucInformante,
+            razonSocial: lote.razonSocial,
+            anio: lote.anio,
+            mes: lote.mes,
+            estado: lote.estado,
+          }
+        : null,
       resumen: {
         ...result.resumen,
         ruc: result.resumen.ruc || "",

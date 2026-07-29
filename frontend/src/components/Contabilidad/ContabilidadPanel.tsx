@@ -7,7 +7,7 @@ import BalanceComprobacionTab from "./BalanceComprobacionTab";
 import EstadoResultadosTab from "./EstadoResultadosTab";
 import ExportarExcelTab from "./ExportarExcelTab";
 import { authFetch } from "../../api/authApi";
-import { clearLastAtsContribuyente, getLastAtsContribuyente } from "../../utils/atsSession";
+import { clearLastAtsContribuyente, getLastAtsContribuyente, saveLastAtsContribuyente } from "../../utils/atsSession";
 import {
   normalizeLibroDiarioResponse,
   type ContabilidadIssue,
@@ -101,6 +101,17 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
       }
 
       const normalized = normalizeLibroDiarioResponse(data);
+      if (normalized.lote) {
+        const nextExportAts = {
+          ruc: normalized.lote.rucInformante,
+          razonSocial: normalized.lote.razonSocial,
+          anio: normalized.lote.anio,
+          mes: normalized.lote.mes,
+          loteId: normalized.lote.id,
+        };
+        setExportAts(nextExportAts);
+        saveLastAtsContribuyente(nextExportAts, rucActivo);
+      }
       setResponse(normalized);
       setSuccessNotice(
         `ATS procesado correctamente. Se generaron ${normalized.resumen.asientos} asientos contables.`

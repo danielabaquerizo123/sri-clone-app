@@ -14,6 +14,14 @@ export type ContabilidadHoja = {
 
 export type LibroDiarioResponse = {
   message: string;
+  lote?: {
+    id: string;
+    rucInformante: string;
+    razonSocial: string;
+    anio: number;
+    mes: string;
+    estado: string;
+  } | null;
   resumen: {
     archivo: string;
     hojasLeidas: string[];
@@ -118,6 +126,18 @@ export function normalizeLibroDiarioResponse(data: unknown): LibroDiarioResponse
 
   return {
     message: String(record.message || ""),
+    lote: (() => {
+      const lote = asRecord(record.lote);
+      if (!lote.id || !lote.rucInformante || !lote.razonSocial || !lote.anio || !lote.mes) return null;
+      return {
+        id: String(lote.id),
+        rucInformante: String(lote.rucInformante),
+        razonSocial: String(lote.razonSocial),
+        anio: asNumber(lote.anio),
+        mes: String(lote.mes).padStart(2, "0"),
+        estado: String(lote.estado || ""),
+      };
+    })(),
     resumen: {
       archivo: String(resumen.archivo || ""),
       hojasLeidas,

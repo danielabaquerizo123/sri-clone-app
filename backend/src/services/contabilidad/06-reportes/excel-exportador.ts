@@ -5,6 +5,20 @@ import type { LibroMayorFolio, LibroMayorResponse } from "./libro-mayor/libro-ma
 import type { BalanceComprobacionResponse } from "./balance-comprobacion.generator";
 import type { EstadoResultadosResponse } from "./estado-resultados.generator";
 
+type CellStyle = NonNullable<XLSX.CellObject["s"]>;
+type SheetCell = XLSX.CellObject & { s?: CellStyle };
+
+const COLORS = {
+  titleFill: "D9E2F3",
+  tableHeaderFill: "2F75B5",
+  accountFill: "DDEBF7",
+  totalFill: "EAF2F8",
+  white: "FFFFFF",
+  black: "000000",
+  border: "7F8C8D",
+};
+const MONEY_FORMAT = '"$" #,##0.00';
+
 export class AccountingExcelExporter {
   prepare(_result: AccountingEngineResult): Buffer | null {
     return null;
@@ -154,13 +168,7 @@ function appendLibroDiarioSheet(workbook: XLSX.WorkBook, params: {
   rows.push(["", "", "TOTALES", totalDebe, totalHaber]);
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet["!cols"] = [
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 72 },
-    { wch: 14 },
-    { wch: 14 },
-  ];
+  sheet["!cols"] = fitColumns(rows, [12, 12, 28, 12, 12], [16, 20, 82, 18, 18]);
   sheet["!merges"] = [
     ...merges,
     ...glosaRows.map((row) => ({ s: { r: row, c: 2 }, e: { r: row, c: 4 } })),
@@ -172,10 +180,10 @@ function appendLibroDiarioSheet(workbook: XLSX.WorkBook, params: {
 
 function appendLibroMayorSheet(workbook: XLSX.WorkBook, result: LibroMayorResponse) {
   const rows: Array<Array<string | number>> = [
+    [result.empresa.razonSocial || "No disponible"],
     ["Libro Mayor"],
     [`Periodo contable: ${periodLabel(result)}`],
     [`RUC: ${result.empresa.ruc}`],
-    [`Razón social: ${result.empresa.razonSocial}`],
     ["Moneda: Dólares (USD)"],
     [],
   ];
@@ -187,16 +195,10 @@ function appendLibroMayorSheet(workbook: XLSX.WorkBook, result: LibroMayorRespon
   });
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet["!cols"] = [
-    { wch: 14 },
-    { wch: 16 },
-    { wch: 58 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 16 },
-    { wch: 16 },
-  ];
+  sheet["!cols"] = fitColumns(rows, [12, 12, 28, 12, 12, 12, 12], [18, 18, 62, 18, 18, 18, 18]);
+  sheet["!merges"] = mergeHeaderRows(0, 4, 6);
   sheet["!freeze"] = { xSplit: 0, ySplit: 6 };
+  applyLibroMayorFormats(sheet, rows);
   XLSX.utils.book_append_sheet(workbook, sheet, "Libro Mayor");
 }
 
@@ -211,6 +213,7 @@ function appendEmptyLibroMayorSheet(workbook: XLSX.WorkBook, params: { ruc?: str
     ["No existe un Libro Diario generado para este lote y periodo. Genere primero el Libro Diario para consultar el Libro Mayor."],
   ]);
   sheet["!cols"] = [{ wch: 100 }];
+  applySimpleNoticeFormats(sheet, 0, 6, 0);
   XLSX.utils.book_append_sheet(workbook, sheet, "Libro Mayor");
 }
 
@@ -252,17 +255,15 @@ function appendBalanceComprobacionSheet(workbook: XLSX.WorkBook, result: Balance
   rows.push(["Verificación saldos", result.resumen.cuadradoSaldos ? "CUADRADO" : "NO CUADRADO", "", "", "", "", ""]);
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet["!cols"] = [
-    { wch: 8 },
-    { wch: 52 },
-    { wch: 18 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
+  sheet["!cols"] = fitColumns(rows, [8, 24, 12, 12, 12, 12, 12], [10, 58, 20, 18, 18, 18, 18]);
+  sheet["!merges"] = [
+    ...mergeHeaderRows(0, 4, 6),
+    { s: { r: 6, c: 3 }, e: { r: 6, c: 4 } },
+    { s: { r: 6, c: 5 }, e: { r: 6, c: 6 } },
   ];
   sheet["!autofilter"] = { ref: `A8:G${Math.max(rows.length - 4, 8)}` };
   sheet["!freeze"] = { xSplit: 0, ySplit: 8 };
+  applyBalanceFormats(sheet, rows);
   XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
 }
 
@@ -286,8 +287,10 @@ function appendEstadoResultadosSheet(workbook: XLSX.WorkBook, result: EstadoResu
   result.advertencias.forEach((advertencia) => rows.push(["", advertencia, ""]));
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet["!cols"] = [{ wch: 18 }, { wch: 62 }, { wch: 18 }];
+  sheet["!cols"] = fitColumns(rows, [12, 28, 14], [22, 70, 20]);
+  sheet["!merges"] = mergeHeaderRows(0, 4, 2);
   sheet["!freeze"] = { xSplit: 0, ySplit: 7 };
+  applyEstadoResultadosFormats(sheet, rows);
   XLSX.utils.book_append_sheet(workbook, sheet, "Estado de Resultados");
 }
 
@@ -323,63 +326,27 @@ function applyLibroDiarioFormats(
   glosaRows: number[],
   numberRows: number[]
 ) {
-  const range = XLSX.utils.decode_range(sheet["!ref"] || `A1:E${rowCount}`);
-  for (let row = range.s.r; row <= range.e.r; row += 1) {
-    for (let col = range.s.c; col <= range.e.c; col += 1) {
-      const address = XLSX.utils.encode_cell({ r: row, c: col });
-      const cell = sheet[address];
-      if (!cell) continue;
-      (cell as any).s = {
-        ...(cell as any).s,
-        font: { color: { rgb: "000000" } },
-        fill: { patternType: "solid", fgColor: { rgb: "FFFFFF" } },
-        border: {
-          top: { style: "thin", color: { rgb: "000000" } },
-          bottom: { style: "thin", color: { rgb: "000000" } },
-          left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } },
-        },
-      };
-    }
-  }
-
-  for (let row = 0; row <= 3; row += 1) {
-    const cell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
-    if (!cell) continue;
-    (cell as any).s = {
-      ...(cell as any).s,
-      font: { bold: row === 1, italic: row !== 1, sz: row === 1 ? 14 : 12, color: { rgb: "000000" } },
-      alignment: { horizontal: "center" },
-    };
-  }
-
-  for (let col = 0; col <= 4; col += 1) {
-    const cell = sheet[XLSX.utils.encode_cell({ r: 5, c: col })];
-    if (!cell) continue;
-    (cell as any).s = {
-      ...(cell as any).s,
-      font: { bold: true, color: { rgb: "000000" } },
-      alignment: { horizontal: "center" },
-    };
-  }
+  styleRange(sheet, 0, rowCount - 1, 0, 4, baseCellStyle());
+  styleReportHeader(sheet, 0, 3, 4, 1);
+  styleTableHeader(sheet, 5, 0, 4);
+  styleTotalRow(sheet, rowCount - 1, 0, 4);
+  applyMoneyFormat(sheet, 6, rowCount - 1, [3, 4]);
 
   numberRows.forEach((row) => {
-    const cell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
-    if (!cell) return;
-    (cell as any).s = {
-      ...(cell as any).s,
-      font: { bold: true, color: { rgb: "000000" } },
+    styleRange(sheet, row, row, 0, 4, {
+      ...baseCellStyle(),
+      font: { bold: true, color: { rgb: COLORS.black } },
+      fill: { patternType: "solid", fgColor: { rgb: "F8FBFF" } },
       alignment: { horizontal: "right" },
-    };
+    });
   });
 
   glosaRows.forEach((row) => {
-    const cell = sheet[XLSX.utils.encode_cell({ r: row, c: 2 })];
-    if (!cell) return;
-    (cell as any).s = {
-      ...(cell as any).s,
+    styleRange(sheet, row, row, 2, 4, {
+      ...baseCellStyle(),
       font: { italic: true, color: { rgb: "000000" } },
-    };
+      fill: { patternType: "solid", fgColor: { rgb: "F7F9FC" } },
+    });
   });
 
   for (let row = 6; row < rowCount; row += 1) {
@@ -390,10 +357,196 @@ function applyLibroDiarioFormats(
     for (const col of [3, 4]) {
       const moneyCell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
       if (moneyCell?.t === "n") {
-        moneyCell.z = '"$" #,##0.00';
+        moneyCell.z = MONEY_FORMAT;
       }
     }
   }
+}
+
+function applyLibroMayorFormats(sheet: XLSX.WorkSheet, rows: Array<Array<string | number>>) {
+  styleRange(sheet, 0, rows.length - 1, 0, 6, baseCellStyle());
+  styleReportHeader(sheet, 0, 4, 6, 0);
+  applyMoneyFormat(sheet, 0, rows.length - 1, [3, 4, 5, 6]);
+
+  rows.forEach((row, index) => {
+    const label = String(row[0] || "");
+    if (label.startsWith("CÓDIGO Y DENOMINACIÓN")) {
+      styleRange(sheet, index, index, 0, 6, {
+        ...baseCellStyle(),
+        font: { bold: true, color: { rgb: COLORS.black } },
+        fill: { patternType: "solid", fgColor: { rgb: COLORS.accountFill } },
+        alignment: { horizontal: "left" },
+      });
+      addMerge(sheet, index, 0, index, 6);
+    }
+    if (row[0] === "FECHA") {
+      styleTableHeader(sheet, index, 0, 6);
+      styleTableHeader(sheet, index + 1, 0, 6);
+      addMerge(sheet, index, 3, index, 4);
+      addMerge(sheet, index, 5, index, 6);
+    }
+    if (row[2] === "TOTALES") {
+      styleTotalRow(sheet, index, 0, 6);
+    }
+  });
+}
+
+function applyBalanceFormats(sheet: XLSX.WorkSheet, rows: Array<Array<string | number>>) {
+  styleRange(sheet, 0, rows.length - 1, 0, 6, baseCellStyle());
+  styleReportHeader(sheet, 0, 4, 6, 0);
+  styleTableHeader(sheet, 6, 0, 6);
+  styleTableHeader(sheet, 7, 0, 6);
+  applyMoneyFormat(sheet, 8, rows.length - 1, [3, 4, 5, 6]);
+  const totalRow = rows.findIndex((row) => row[1] === "TOTALES");
+  if (totalRow >= 0) styleTotalRow(sheet, totalRow, 0, 6);
+  rows.forEach((row, index) => {
+    if (String(row[0]).startsWith("Verificación")) {
+      styleRange(sheet, index, index, 0, 6, {
+        ...baseCellStyle(),
+        font: { bold: true, color: { rgb: COLORS.black } },
+        fill: { patternType: "solid", fgColor: { rgb: COLORS.totalFill } },
+      });
+    }
+  });
+}
+
+function applyEstadoResultadosFormats(sheet: XLSX.WorkSheet, rows: Array<Array<string | number>>) {
+  styleRange(sheet, 0, rows.length - 1, 0, 2, baseCellStyle());
+  styleReportHeader(sheet, 0, 4, 2, 0);
+  styleTableHeader(sheet, 6, 0, 2);
+  applyMoneyFormat(sheet, 7, rows.length - 1, [2]);
+  rows.forEach((row, index) => {
+    const label = String(row[1] || "");
+    if (["Utilidad bruta", "Total gastos operacionales", "Utilidad operacional", "Resultado antes de impuesto"].includes(label) || label.includes("EJERCICIO")) {
+      styleTotalRow(sheet, index, 0, 2);
+    }
+    if (!row[0] && label && !row[2] && index > 6) {
+      styleRange(sheet, index, index, 0, 2, {
+        ...baseCellStyle(),
+        font: { italic: true, color: { rgb: "7A4A00" } },
+        fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } },
+      });
+    }
+  });
+}
+
+function applySimpleNoticeFormats(sheet: XLSX.WorkSheet, headerStart: number, headerEnd: number, lastCol: number) {
+  styleRange(sheet, headerStart, headerEnd, 0, lastCol, baseCellStyle());
+  styleReportHeader(sheet, headerStart, Math.min(headerEnd, 4), lastCol, headerStart);
+}
+
+function styleReportHeader(sheet: XLSX.WorkSheet, startRow: number, endRow: number, lastCol: number, boldRow: number) {
+  styleRange(sheet, startRow, endRow, 0, lastCol, {
+    ...baseCellStyle(),
+    fill: { patternType: "solid", fgColor: { rgb: COLORS.titleFill } },
+    alignment: { horizontal: "center", vertical: "center" },
+  });
+  for (let row = startRow; row <= endRow; row += 1) {
+    const cell = ensureCell(sheet, row, 0);
+    cell.s = {
+      ...cell.s,
+      font: { bold: row === boldRow, sz: row === boldRow ? 14 : 12, color: { rgb: COLORS.black } },
+      alignment: { horizontal: "center", vertical: "center" },
+    };
+  }
+}
+
+function styleTableHeader(sheet: XLSX.WorkSheet, row: number, firstCol: number, lastCol: number) {
+  styleRange(sheet, row, row, firstCol, lastCol, {
+    ...baseCellStyle(),
+    font: { bold: true, color: { rgb: COLORS.white } },
+    fill: { patternType: "solid", fgColor: { rgb: COLORS.tableHeaderFill } },
+    alignment: { horizontal: "center", vertical: "center" },
+  });
+}
+
+function styleTotalRow(sheet: XLSX.WorkSheet, row: number, firstCol: number, lastCol: number) {
+  styleRange(sheet, row, row, firstCol, lastCol, {
+    ...baseCellStyle("medium"),
+    font: { bold: true, color: { rgb: COLORS.black } },
+    fill: { patternType: "solid", fgColor: { rgb: COLORS.totalFill } },
+  });
+}
+
+function applyMoneyFormat(sheet: XLSX.WorkSheet, firstRow: number, lastRow: number, columns: number[]) {
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    columns.forEach((col) => {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: col })] as SheetCell | undefined;
+      if (!cell || cell.t !== "n") return;
+      cell.z = MONEY_FORMAT;
+      cell.s = {
+        ...cell.s,
+        alignment: { ...(cell.s as any)?.alignment, horizontal: "right" },
+      };
+    });
+  }
+}
+
+function styleRange(sheet: XLSX.WorkSheet, firstRow: number, lastRow: number, firstCol: number, lastCol: number, style: CellStyle) {
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    for (let col = firstCol; col <= lastCol; col += 1) {
+      const cell = ensureCell(sheet, row, col);
+      cell.s = mergeStyle(cell.s, style);
+    }
+  }
+}
+
+function ensureCell(sheet: XLSX.WorkSheet, row: number, col: number): SheetCell {
+  const address = XLSX.utils.encode_cell({ r: row, c: col });
+  if (!sheet[address]) sheet[address] = { t: "s", v: "" };
+  return sheet[address] as SheetCell;
+}
+
+function mergeStyle(base: CellStyle | undefined, style: CellStyle): CellStyle {
+  return {
+    ...(base || {}),
+    ...style,
+    font: { ...(base as any)?.font, ...(style as any).font },
+    fill: { ...(base as any)?.fill, ...(style as any).fill },
+    border: { ...(base as any)?.border, ...(style as any).border },
+    alignment: { ...(base as any)?.alignment, ...(style as any).alignment },
+  };
+}
+
+function baseCellStyle(topStyle: "thin" | "medium" = "thin"): CellStyle {
+  return {
+    font: { color: { rgb: COLORS.black }, name: "Calibri", sz: 11 },
+    fill: { patternType: "solid", fgColor: { rgb: COLORS.white } },
+    alignment: { vertical: "center" },
+    border: {
+      top: { style: topStyle, color: { rgb: COLORS.border } },
+      bottom: { style: "thin", color: { rgb: COLORS.border } },
+      left: { style: "thin", color: { rgb: COLORS.border } },
+      right: { style: "thin", color: { rgb: COLORS.border } },
+    },
+  };
+}
+
+function fitColumns(rows: Array<Array<string | number | Date>>, minWidths: number[], maxWidths: number[]) {
+  const columns = Math.max(...rows.map((row) => row.length), minWidths.length);
+  return Array.from({ length: columns }, (_, col) => {
+    const maxContent = rows.reduce((max, row) => Math.max(max, displayWidth(row[col])), 0);
+    const min = minWidths[col] || 10;
+    const max = maxWidths[col] || 60;
+    return { wch: Math.min(Math.max(maxContent + 2, min), max) };
+  });
+}
+
+function displayWidth(value: unknown) {
+  if (value instanceof Date) return 12;
+  if (typeof value === "number") return 14;
+  return String(value || "").length;
+}
+
+function mergeHeaderRows(startRow: number, endRow: number, lastCol: number) {
+  return Array.from({ length: endRow - startRow + 1 }, (_, index) => ({
+    s: { r: startRow + index, c: 0 },
+    e: { r: startRow + index, c: lastCol },
+  }));
+}
+
+function addMerge(sheet: XLSX.WorkSheet, startRow: number, startCol: number, endRow: number, endCol: number) {
+  sheet["!merges"] = [...(sheet["!merges"] || []), { s: { r: startRow, c: startCol }, e: { r: endRow, c: endCol } }];
 }
 
 function appendFolioRows(rows: Array<Array<string | number>>, folio: LibroMayorFolio) {
