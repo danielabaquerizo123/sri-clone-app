@@ -113,6 +113,15 @@ type ExcelLibroDiarioOptions = {
 
 type SheetRow = unknown[];
 
+type PersistedAccountingAtsLote = {
+  id: string;
+  rucInformante: string;
+  razonSocial: string;
+  anio: number;
+  mes: string;
+  estado: string;
+};
+
 const READABLE_SHEETS = new Set(["COMPRAS", "VENTAS", "GASTOS", "GASTOSP"]);
 
 function normalizeSheetName(name: string) {
@@ -388,6 +397,120 @@ function gastoFromRow(row: SheetRow, filaExcel: number) {
     montoIva1: money(row[10]),
     totalDocumento: money(row[12]),
     conceptoGasto: "Gasto personal declarado",
+  };
+}
+
+function dateForPersistence(value: unknown, fallback?: unknown) {
+  const raw = cleanText(value) || cleanText(fallback);
+  const date = raw ? new Date(raw) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function persistedCompraFromRaw(raw: ReturnType<typeof compraFromRow>, contribuyenteId: string, atsLoteId: string) {
+  const fechaEmision = dateForPersistence(raw.fechaEmision);
+  return {
+    filaExcel: raw.filaExcel || null,
+    noIdentificacion: raw.noIdentificacion || "9999999999999",
+    razonSocialProveedor: raw.razonSocialProveedor || "SIN RAZON SOCIAL",
+    parteRelacionada: "NO",
+    tipoEmisionComprobante: null,
+    comprobante: raw.comprobante || TipoComprobanteSRI.FACTURA,
+    establecimiento: raw.establecimiento || "001",
+    puntoEmision: raw.puntoEmision || "001",
+    numeroSecuencial: raw.numeroSecuencial || "000000000",
+    numeroAutorizacionSri: "",
+    fechaEmision,
+    fechaRegistro: dateForPersistence(raw.fechaRegistro, raw.fechaEmision),
+    codigoSustento: raw.codigoSustento || "01",
+    conceptoCompra: raw.conceptoCompra || null,
+    comprobanteModificado: raw.comprobanteModificado || null,
+    establecimientoModificado: raw.establecimientoModificado || null,
+    puntoEmisionModificado: raw.puntoEmisionModificado || null,
+    numeroSecuencialModificado: raw.numeroSecuencialModificado || null,
+    numeroAutorizacionSriModificado: raw.numeroAutorizacionSriModificado || null,
+    baseNoObjetoIva: raw.baseNoObjetoIva,
+    baseExenta: raw.baseExenta,
+    baseTarifa0: raw.baseTarifa0,
+    baseGravableIva1: raw.baseGravableIva1,
+    tarifaIva1Aplicada: 15,
+    montoIva1: raw.montoIva1,
+    baseGravableIva2: raw.baseGravableIva2,
+    tarifaIva2Aplicada: 0,
+    montoIva2: raw.montoIva2,
+    baseGravableIva3: raw.baseGravableIva3,
+    tarifaIva3Aplicada: 0,
+    montoIva3: raw.montoIva3,
+    totalDocumento: raw.totalDocumento,
+    conceptoContableCompra: raw.conceptoContableCompra || null,
+    tipoActividad: raw.tipoActividad || null,
+    establecimientoRet: raw.establecimientoRet || null,
+    puntoEmisionRet: raw.puntoEmisionRet || null,
+    numeroSecuencialRet: raw.numeroSecuencialRet || null,
+    numeroAutorizacionSriRet: raw.numeroAutorizacionSriRet || null,
+    fechaEmisionRet1: cleanText(raw.fechaEmisionRet1) ? dateForPersistence(raw.fechaEmisionRet1) : null,
+    codigoRetencion1: raw.codigoRetencionFuente1 || null,
+    baseImponibleRet1: raw.baseImponibleRetencionFuente1,
+    porcentajeRetencion1: raw.porcentajeRetencionFuente1,
+    valorRetenido1: raw.valorRetenidoFuente1,
+    codigoRetencion2: raw.codigoRetencionFuente2 || null,
+    baseImponibleRet2: raw.baseImponibleRetencionFuente2,
+    porcentajeRetencion2: raw.porcentajeRetencionFuente2,
+    valorRetenido2: raw.valorRetenidoFuente2,
+    codigoRetencion3: raw.codigoRetencionFuente3 || null,
+    baseImponibleRet3: raw.baseImponibleRetencionFuente3,
+    porcentajeRetencion3: raw.porcentajeRetencionFuente3,
+    valorRetenido3: raw.valorRetenidoFuente3,
+    valorRetencionIva30: raw.valorRetenidoIva30,
+    valorRetencionIva50: raw.valorRetenidoIva50,
+    valorRetencionIva70: raw.valorRetenidoIva70,
+    valorRetencionIva100: raw.valorRetenidoIva100,
+    tipoPago: raw.tipoPago || null,
+    formaPago1: raw.formaPago1 || null,
+    formaPago2: raw.formaPago2 || null,
+    observaciones: raw.observaciones || null,
+    contribuyenteId,
+    atsLoteId,
+  };
+}
+
+function persistedVentaFromRaw(raw: ReturnType<typeof ventaFromRow>, contribuyenteId: string, atsLoteId: string) {
+  return {
+    filaExcel: raw.filaExcel || null,
+    noIdentificacion: raw.noIdentificacion || "9999999999999",
+    codigoIdentif: "07",
+    razonSocialCliente: raw.razonSocialCliente || "CONSUMIDOR FINAL",
+    parteRelacionada: "NO",
+    cantidadComprobantes: 1,
+    tipoEmisionComprobante: "ELECTRONICA",
+    tipoComprobante: raw.tipoComprobante || TipoComprobanteSRI.COMPROBANTE_VENTA,
+    fechaEmision: dateForPersistence(raw.fechaEmision),
+    codigoEstablecimiento: raw.codigoEstablecimiento || "001",
+    noDocumento: raw.noDocumento || `${raw.filaExcel}`,
+    conceptoVenta: raw.conceptoVenta || null,
+    baseNoObjetoIva: raw.baseNoObjetoIva,
+    baseExenta: raw.baseExenta,
+    baseTarifa0: raw.baseTarifa0,
+    baseGravableIva1: raw.baseGravableIva1,
+    tarifaIva1Aplicada: 15,
+    montoIva1: raw.montoIva1,
+    baseGravableIva2: raw.baseGravableIva2,
+    tarifaIva2Aplicada: 0,
+    montoIva2: raw.montoIva2,
+    baseGravableIva3: raw.baseGravableIva3,
+    tarifaIva3Aplicada: 0,
+    montoIva3: raw.montoIva3,
+    totalDocumento: raw.totalDocumento,
+    conceptoContableVenta: raw.conceptoContableVenta || null,
+    tipoActividad: raw.tipoActividad || null,
+    valorRetenidoIva: raw.valorRetenidoIva,
+    valorRetenidoFuente: raw.valorRetenidoFuente,
+    noDocumentoRetencion: raw.noDocumentoRetencion || null,
+    fechaRetencion: cleanText(raw.fechaRetencion) ? dateForPersistence(raw.fechaRetencion) : null,
+    noAutorizacionRetencion: raw.noAutorizacionRetencion || null,
+    formaPago1: raw.formaCobro1 || null,
+    formaPago2: raw.formaCobro2 || null,
+    contribuyenteId,
+    atsLoteId,
   };
 }
 
@@ -1312,6 +1435,108 @@ export class ExcelLibroDiarioService {
       auditoriaCompras: auditoriaComprasEnriquecida,
     };
   }
+}
+
+export async function persistAccountingAtsLoteFromExcel(params: {
+  buffer: Buffer;
+  filename: string;
+  rucAcceso: string;
+  result: ExcelLibroDiarioResult;
+}): Promise<PersistedAccountingAtsLote | null> {
+  const rucInformante = String(params.result.resumen.ruc || "").trim();
+  const razonSocial = String(params.result.resumen.razonSocial || "").trim();
+  const anio = Number(params.result.periodo?.anio);
+  const mes = String(params.result.periodo?.mes || "").padStart(2, "0");
+  if (!rucInformante || !razonSocial || !Number.isInteger(anio) || !mes.trim()) return null;
+
+  const [contribuyenteAcceso, contribuyenteInformante] = await Promise.all([
+    defaultPrisma.contribuyente.findUnique({
+      where: { ruc: params.rucAcceso },
+      select: { id: true, ruc: true, razonSocial: true },
+    }),
+    defaultPrisma.contribuyente.upsert({
+      where: { ruc: rucInformante },
+      update: { razonSocial },
+      create: {
+        ruc: rucInformante,
+        razonSocial,
+        clave: `ats-${rucInformante}-${Date.now()}`,
+        tipoContribuyente: "PERSONA_NATURAL",
+        estadoTributario: "AL DIA",
+        estadoRuc: "ACTIVO",
+        regimen: "GENERAL",
+        obligaciones: "",
+        actividadesEconomicas: "",
+        fechaExpiracion: new Date("2099-12-31T23:59:59.000Z"),
+      },
+      select: { id: true, ruc: true, razonSocial: true },
+    }),
+  ]);
+  if (!contribuyenteAcceso) return null;
+
+  const workbook = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
+  const sheetRows = new Map(workbook.SheetNames.map((name) => [name, rowsForSheet(workbook.Sheets[name])]));
+  const compras = (sheetRows.get("COMPRAS") || [])
+    .slice(6)
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => rowHasDocument(row, [0, 2, 6, 9, 36]))
+    .map(({ row, index }) => compraFromRow(row, index + 7))
+    .filter((compra) => compra.fechaEmision && compra.totalDocumento !== 0);
+  const ventas = (sheetRows.get("VENTAS") || [])
+    .slice(6)
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => rowHasDocument(row, [0, 2, 7, 27]))
+    .map(({ row, index }) => ventaFromRow(row, index + 7))
+    .filter((venta) => venta.fechaEmision && venta.totalDocumento !== 0);
+
+  return defaultPrisma.$transaction(async (tx) => {
+    const lote = await tx.atsLote.create({
+      data: {
+        nombreArchivo: params.filename,
+        rucInformante,
+        razonSocial,
+        anio,
+        mes,
+        estado: "PROCESADO_VALIDO",
+        erroresJSON: params.result.issues as any,
+        resumenJSON: {
+          ...params.result.resumen,
+          periodo: { anio, mes },
+          origen: "CONTABILIDAD_EXCEL_LIBRO_DIARIO",
+          contribuyenteAcceso: {
+            ruc: contribuyenteAcceso.ruc,
+            razonSocial: contribuyenteAcceso.razonSocial,
+          },
+          documentosContablesPersistidos: {
+            compras: compras.length,
+            ventas: ventas.length,
+          },
+        } as any,
+        contribuyenteId: contribuyenteInformante.id,
+      },
+      select: {
+        id: true,
+        rucInformante: true,
+        razonSocial: true,
+        anio: true,
+        mes: true,
+        estado: true,
+      },
+    });
+
+    if (compras.length > 0) {
+      await tx.compra.createMany({
+        data: compras.map((compra) => persistedCompraFromRaw(compra, contribuyenteInformante.id, lote.id)),
+      });
+    }
+    if (ventas.length > 0) {
+      await tx.venta.createMany({
+        data: ventas.map((venta) => persistedVentaFromRaw(venta, contribuyenteInformante.id, lote.id)),
+      });
+    }
+
+    return lote;
+  }, { timeout: 30000 });
 }
 
 

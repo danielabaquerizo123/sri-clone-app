@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
-import { AccountingConfigurationError, AccountingEngine, ExcelLibroDiarioService, JournalPersistenceService, JournalPreviewService } from "../services/contabilidad/motor-contable";
+import { AccountingConfigurationError, AccountingEngine, ExcelLibroDiarioService, JournalPersistenceService, JournalPreviewService, persistAccountingAtsLoteFromExcel } from "../services/contabilidad/motor-contable";
 import { LibroMayorService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor.service";
 import { LibroMayorExportExcelService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-excel.service";
 import { LibroMayorExportPdfService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-pdf.service";
@@ -99,16 +99,33 @@ async function findExportableAtsLoteForResult(rucActivo: string, result: { resum
   if (!contribuyente || !rucInformante || !Number.isInteger(anio) || !rawMes) return null;
   const mes = rawMes.padStart(2, "0");
 
-  return prisma.atsLote.findFirst({
+  const lotes = await prisma.atsLote.findMany({
     where: {
-      contribuyenteId: contribuyente.id,
       rucInformante,
       anio,
       mes,
       estado: { in: [...ESTADOS_ATS_EXPORTABLES] },
     },
+    select: {
+      id: true,
+      contribuyenteId: true,
+      rucInformante: true,
+      razonSocial: true,
+      anio: true,
+      mes: true,
+      estado: true,
+      resumenJSON: true,
+    },
     orderBy: { createdAt: "desc" },
+    take: 20,
   });
+
+  return lotes.find((lote) => {
+    if (lote.contribuyenteId === contribuyente.id) return true;
+    const resumen = lote.resumenJSON && typeof lote.resumenJSON === "object" ? (lote.resumenJSON as Record<string, any>) : {};
+    const acceso = resumen.contribuyenteAcceso && typeof resumen.contribuyenteAcceso === "object" ? resumen.contribuyenteAcceso : {};
+    return sameText(acceso.ruc, rucActivo);
+  }) || null;
 }
 
 function sameText(left: unknown, right: unknown) {
@@ -203,7 +220,12 @@ export const procesarExcelLibroDiario = async (req: Request, res: Response) => {
 
     const service = new ExcelLibroDiarioService();
     const result = await service.processAsync(req.file.buffer, req.file.originalname);
-    const lote = await findExportableAtsLoteForResult(req.params.ruc, result);
+    const lote = await persistAccountingAtsLoteFromExcel({
+      buffer: req.file.buffer,
+      filename: req.file.originalname,
+      rucAcceso: req.params.ruc,
+      result,
+    }) || await findExportableAtsLoteForResult(req.params.ruc, result);
 
     return res.status(200).json({
       ...result,

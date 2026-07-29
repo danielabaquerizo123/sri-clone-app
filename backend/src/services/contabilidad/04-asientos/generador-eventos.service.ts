@@ -734,7 +734,7 @@ export function adaptCompraToAccountingSource(
     }),
     clasificacion,
     actividadEconomica: text(compra.tipoActividad) || null,
-    concepto: text(compra.conceptoContableCompra || compra.conceptoCompra) || null,
+    concepto: text(compra.conceptoContableCompra || compra.conceptoCompra || compra.observaciones) || null,
     documentoModificado: [
       compra.establecimientoModificado,
       compra.puntoEmisionModificado,
