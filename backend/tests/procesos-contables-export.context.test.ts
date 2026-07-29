@@ -1,6 +1,6 @@
 import assert from "assert";
 import XLSX from "xlsx";
-import { exportLoteId, validateExportReportContext } from "../src/controllers/contabilidad.controller";
+import { exportLoteId, isAtsLoteExportable, validateExportReportContext } from "../src/controllers/contabilidad.controller";
 import { requireAuth } from "../src/middlewares/auth.middleware";
 import { AccountingExcelExporter } from "../src/services/contabilidad/06-reportes/excel-exportador";
 
@@ -20,6 +20,10 @@ void (async () => {
   assert.throws(() => validateExportReportContext({ lote, preview, libroMayor, balance: { ...balance, periodo: { ...periodo, mes: "05" } }, estadoResultados }), /mismo lote ATS/);
   assert.equal(exportLoteId({ body: {} } as any), null);
   assert.equal(exportLoteId({ body: { loteId: lote.id } } as any), lote.id);
+  assert.equal(isAtsLoteExportable({ estado: "PROCESADO_VALIDO" }), true);
+  assert.equal(isAtsLoteExportable({ estado: "XML_GENERADO" }), true);
+  assert.equal(isAtsLoteExportable({ estado: "PROCESANDO" }), false);
+  assert.equal(isAtsLoteExportable({ estado: "PROCESADO_CON_ERRORES" }), false);
 
   const workbook = XLSX.read(new AccountingExcelExporter().exportProcesosContables({
     ruc: lote.rucInformante,

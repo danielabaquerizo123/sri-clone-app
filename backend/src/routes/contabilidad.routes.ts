@@ -20,8 +20,6 @@ import {
   generarAsientosDesdeAts,
   listarPlanCuentas,
   listarReglasContables,
-  listarClasificacionesEstadoResultados,
-  guardarClasificacionEstadoResultados,
   previsualizarLibroDiarioDesdeAts,
   procesarAtsContabilidad,
   procesarExcelLibroDiario,
@@ -41,8 +39,6 @@ router.post("/procesos/exportar/excel", exportarProcesosContablesPreviewExcel);
 
 router.get("/:ruc/plan-cuentas", listarPlanCuentas);
 router.get("/:ruc/reglas", listarReglasContables);
-router.get("/:ruc/estado-resultados/clasificaciones", listarClasificacionesEstadoResultados);
-router.put("/:ruc/estado-resultados/clasificaciones", guardarClasificacionEstadoResultados);
 router.post("/:ruc/ats/:loteId/previsualizar", previsualizarLibroDiarioDesdeAts);
 router.post("/:ruc/ats/:loteId/generar-asientos", generarAsientosDesdeAts);
 router.get("/:ruc/libro-diario", consultarLibroDiario);

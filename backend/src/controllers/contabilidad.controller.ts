@@ -6,7 +6,7 @@ import { LibroMayorExportExcelService } from "../services/contabilidad/06-report
 import { LibroMayorExportPdfService } from "../services/contabilidad/06-reportes/libro-mayor/libro-mayor-export-pdf.service";
 import { AccountingExcelExporter } from "../services/contabilidad/06-reportes/excel-exportador";
 import { BalanceComprobacionService } from "../services/contabilidad/06-reportes/balance-comprobacion.generator";
-import { EstadoResultadosService, RESULTADO_CATEGORIAS } from "../services/contabilidad/06-reportes/estado-resultados.generator";
+import { EstadoResultadosService } from "../services/contabilidad/06-reportes/estado-resultados.generator";
 import type { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
 function buildErrorMessage(error: unknown) {
@@ -36,6 +36,12 @@ function numberQuery(value: unknown): number | undefined {
 
 function booleanQuery(value: unknown) {
   return value === true || value === "true" || value === "1" || value === "SI";
+}
+
+export const ESTADOS_ATS_EXPORTABLES = ["PROCESADO_VALIDO", "XML_GENERADO"] as const;
+
+export function isAtsLoteExportable(lote: { estado?: string | null } | null | undefined) {
+  return Boolean(lote?.estado && (ESTADOS_ATS_EXPORTABLES as readonly string[]).includes(lote.estado));
 }
 
 function nombrePeriodoArchivo(mes: string, anio: number) {
@@ -237,42 +243,6 @@ export const listarReglasContables = async (req: Request, res: Response) => {
       message: "Error consultando reglas contables.",
       error: buildErrorMessage(error),
     });
-  }
-};
-
-export const listarClasificacionesEstadoResultados = async (req: Request, res: Response) => {
-  try {
-    await findContribuyenteOrFail(req.params.ruc);
-    const clasificaciones = await prisma.clasificacionEstadoResultados.findMany({
-      include: { cuenta: true },
-      orderBy: { cuenta: { codigo: "asc" } },
-    });
-    return res.status(200).json({ clasificaciones, categorias: RESULTADO_CATEGORIAS });
-  } catch (error) {
-    return res.status(500).json({ message: "Error consultando clasificaciones de Estado de Resultados.", error: buildErrorMessage(error) });
-  }
-};
-
-export const guardarClasificacionEstadoResultados = async (req: Request, res: Response) => {
-  try {
-    await findContribuyenteOrFail(req.params.ruc);
-    const cuentaId = typeof req.body?.cuentaId === "string" ? req.body.cuentaId : "";
-    const categoria = typeof req.body?.categoria === "string" ? req.body.categoria : "";
-    const activa = typeof req.body?.activa === "boolean" ? req.body.activa : true;
-    if (!cuentaId || !RESULTADO_CATEGORIAS.includes(categoria as any)) {
-      return res.status(400).json({ message: "Cuenta y categoría de Estado de Resultados son obligatorias." });
-    }
-    const cuenta = await prisma.cuentaContable.findUnique({ where: { id: cuentaId } });
-    if (!cuenta) return res.status(404).json({ message: "Cuenta contable no encontrada." });
-    const clasificacion = await prisma.clasificacionEstadoResultados.upsert({
-      where: { cuentaId },
-      create: { cuentaId, categoria: categoria as any, activa },
-      update: { categoria: categoria as any, activa },
-      include: { cuenta: true },
-    });
-    return res.status(200).json(clasificacion);
-  } catch (error) {
-    return res.status(500).json({ message: "Error guardando clasificación de Estado de Resultados.", error: buildErrorMessage(error) });
   }
 };
 
@@ -485,7 +455,10 @@ export const exportarProcesosContablesPreviewExcel = async (req: AuthenticatedRe
     const loteId = exportLoteId(req);
     if (!loteId) return res.status(422).json({ message: "Debe seleccionar un lote ATS procesado para exportar." });
     const lote = await prisma.atsLote.findUnique({ where: { id: loteId } });
-    if (!lote || lote.estado !== "PROCESADO_VALIDO") return res.status(422).json({ message: "El lote ATS seleccionado no está procesado o no es válido para exportar." });
+    if (!lote) return res.status(404).json({ message: "Lote ATS no encontrado." });
+    if (!isAtsLoteExportable(lote)) {
+      return res.status(422).json({ message: "El ATS aún no ha completado el procesamiento contable. Genere primero el Libro Diario." });
+    }
 
     // The ATS lot, never the authenticated user, is the accounting identity.
     const preview = await new JournalPreviewService().buildFromAtsLote(lote.rucInformante, lote.id);

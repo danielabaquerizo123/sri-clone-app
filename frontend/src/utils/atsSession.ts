@@ -12,19 +12,32 @@ function normalizeMes(mes: string | number | undefined) {
   return String(mes || "").padStart(2, "0");
 }
 
-export function saveLastAtsContribuyente(data: LastAtsContribuyente) {
-  localStorage.setItem(
-    LAST_ATS_KEY,
-    JSON.stringify({
-      ...data,
-      mes: normalizeMes(data.mes),
-    })
-  );
+function scopedKey(ownerRuc?: string | null) {
+  const normalized = String(ownerRuc || "").trim();
+  return normalized ? `${LAST_ATS_KEY}:${normalized}` : LAST_ATS_KEY;
 }
 
-export function getLastAtsContribuyente(): LastAtsContribuyente | null {
+export function saveLastAtsContribuyente(data: LastAtsContribuyente, ownerRuc?: string | null) {
+  const payload = JSON.stringify({
+    ...data,
+    mes: normalizeMes(data.mes),
+  });
+  localStorage.setItem(scopedKey(ownerRuc), payload);
+  if (!ownerRuc) {
+    localStorage.setItem(LAST_ATS_KEY, payload);
+  }
+}
+
+export function clearLastAtsContribuyente(ownerRuc?: string | null) {
+  localStorage.removeItem(scopedKey(ownerRuc));
+  if (!ownerRuc) {
+    localStorage.removeItem(LAST_ATS_KEY);
+  }
+}
+
+export function getLastAtsContribuyente(ownerRuc?: string | null): LastAtsContribuyente | null {
   try {
-    const raw = localStorage.getItem(LAST_ATS_KEY);
+    const raw = localStorage.getItem(scopedKey(ownerRuc)) || (!ownerRuc ? null : localStorage.getItem(LAST_ATS_KEY));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<LastAtsContribuyente>;
     if (!parsed.ruc || !parsed.razonSocial || !parsed.anio || !parsed.mes || !parsed.loteId) {
@@ -43,8 +56,8 @@ export function getLastAtsContribuyente(): LastAtsContribuyente | null {
   }
 }
 
-export function getLastAtsContribuyenteForPeriod(anio: number, mes: string | number) {
-  const lastAts = getLastAtsContribuyente();
+export function getLastAtsContribuyenteForPeriod(anio: number, mes: string | number, ownerRuc?: string | null) {
+  const lastAts = getLastAtsContribuyente(ownerRuc);
   if (!lastAts) return null;
   return lastAts.anio === Number(anio) && lastAts.mes === normalizeMes(mes) ? lastAts : null;
 }

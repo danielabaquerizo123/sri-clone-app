@@ -33,7 +33,24 @@ function balance(ingreso: string, includeCost = true) {
 }
 
 async function resultFrom(input: ReturnType<typeof balance>) {
-  const db = { clasificacionEstadoResultados: { findMany: async () => input.classifications } };
+  const db = {
+    configuracionCuentaContable: {
+      findMany: async () => input.classifications.map((item) => ({
+        cuentaId: item.cuentaId,
+        clave: `ESTADO_RESULTADOS_${item.categoria}`,
+        descripcion: null,
+      })),
+    },
+    reglaClasificacionContable: { findMany: async () => [] },
+  };
+  return new EstadoResultadosService(undefined, db as any).generarDesdeBalance(input);
+}
+
+async function resultWithoutFineClassification(input: ReturnType<typeof balance>) {
+  const db = {
+    configuracionCuentaContable: { findMany: async () => [] },
+    reglaClasificacionContable: { findMany: async () => [] },
+  };
   return new EstadoResultadosService(undefined, db as any).generarDesdeBalance(input);
 }
 
@@ -46,8 +63,12 @@ void (async () => {
   assert.equal((await resultFrom(balance("120.00"))).lineas.some((line) => line.cuentaId === "asset"), false);
   const resultWithoutCost = await resultFrom(balance("120.00", false));
   assert.equal(resultWithoutCost.costoVentasDisponible, false);
-  assert.equal(resultWithoutCost.resultadoDeterminado, false);
-  assert.equal(resultWithoutCost.advertencias.includes("No se identificaron cuentas de costo de ventas en el Balance de Comprobación del período. No es posible determinar la utilidad bruta ni el resultado del ejercicio sin inventar valores."), true);
+  assert.equal(resultWithoutCost.resultadoDeterminado, true);
+  const resultWithoutFineConfig = await resultWithoutFineClassification(balance("120.00"));
+  assert.equal(resultWithoutFineConfig.totales.resultadoNeto, "29.00");
+  assert.equal(resultWithoutFineConfig.lineas.length > 0, true);
+  assert.equal(resultWithoutFineConfig.completo, false);
+  assert.equal(resultWithoutFineConfig.advertencias.includes("Estado de Resultados con clasificación fina pendiente: las cuentas sin categoría de presentación configurada se incluyeron en el resultado usando su tipo contable base."), true);
   await assert.rejects(() => resultFrom({ ...balance("120.00"), filas: [...balance("120.00").filas, balance("120.00").filas[0]] }), /duplicada/);
   console.log("estado-resultados.service.test.ts OK");
 })();

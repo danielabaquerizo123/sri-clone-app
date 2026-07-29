@@ -6,6 +6,7 @@ import type { JournalPreviewResult } from "../04-asientos/preview-asientos.servi
 import type { LibroMayorParams } from "./libro-mayor/libro-mayor.types";
 
 type DbClient = PrismaClient | typeof defaultPrisma;
+type TipoResultadoCuenta = "INGRESO" | "GASTO" | "COSTO";
 
 export const RESULTADO_CATEGORIAS = [
   "INGRESO_OPERACIONAL",
@@ -34,6 +35,12 @@ const TIPO_POR_CATEGORIA: CategoriaConTipo = {
   OTRO_GASTO: "GASTO",
   PARTICIPACION_TRABAJADORES: "GASTO",
   IMPUESTO_RENTA: "GASTO",
+};
+
+const CATEGORIA_BASE_POR_TIPO: Record<TipoResultadoCuenta, CategoriaEstadoResultados> = {
+  INGRESO: "INGRESO_OPERACIONAL",
+  COSTO: "COSTO_VENTAS",
+  GASTO: "GASTO_OPERACIONAL",
 };
 
 export type EstadoResultadosLinea = {
@@ -92,23 +99,26 @@ export class EstadoResultadosService {
       if (cuentasBalance.has(fila.cuentaId)) throw new Error(`La cuenta ${fila.codigo} está duplicada en el Balance de Comprobación.`);
       cuentasBalance.add(fila.cuentaId);
     }
-    const cuentas = await this.db.clasificacionEstadoResultados.findMany({
-      where: { activa: true, cuentaId: { in: balance.filas.map((fila) => fila.cuentaId) } },
-      select: { cuentaId: true, categoria: true },
-    });
-    const categorias = new Map(cuentas.map((cuenta) => [cuenta.cuentaId, cuenta.categoria as CategoriaEstadoResultados]));
+    const categorias = await this.categoriasDesdeConfiguracionDinamica(balance);
     const advertencias: string[] = [];
     const cuentasPendientes: CuentaPendienteEstadoResultados[] = [];
     const lineas = balance.filas.flatMap((fila) => {
-      const categoria = categorias.get(fila.cuentaId);
-      if (!categoria) {
-        if (["INGRESO", "GASTO", "COSTO"].includes(fila.tipoCuenta)) cuentasPendientes.push({ cuentaId: fila.cuentaId, codigo: fila.codigo, cuenta: fila.cuenta, tipo: fila.tipoCuenta, saldo: money(decimal(fila.deudor).minus(decimal(fila.acreedor))), motivo: "SIN_CLASIFICACION_ESTADO_RESULTADOS" });
-        return [];
+      if (!isTipoResultado(fila.tipoCuenta) || isZero(fila)) return [];
+      const categoriaConfigurada = categorias.get(fila.cuentaId);
+      const categoria = categoriaConfigurada || CATEGORIA_BASE_POR_TIPO[fila.tipoCuenta];
+      if (!categoriaConfigurada) {
+        cuentasPendientes.push({ cuentaId: fila.cuentaId, codigo: fila.codigo, cuenta: fila.cuenta, tipo: fila.tipoCuenta, saldo: money(netValue(fila, categoria)), motivo: "SIN_CLASIFICACION_ESTADO_RESULTADOS" });
       }
-      if (isZero(fila)) return [];
       if (fila.tipoCuenta !== TIPO_POR_CATEGORIA[categoria]) {
-        advertencias.push(`La cuenta ${fila.codigo} tiene una clasificación de resultados incompatible con su tipo contable.`);
-        return [];
+        advertencias.push(`La cuenta ${fila.codigo} tiene una clasificación de resultados incompatible con su tipo contable; se usó la categoría base por tipo para no perder el monto.`);
+        const categoriaBase = CATEGORIA_BASE_POR_TIPO[fila.tipoCuenta];
+        return [{
+          cuentaId: fila.cuentaId,
+          codigo: fila.codigo,
+          cuenta: fila.cuenta,
+          categoria: categoriaBase,
+          valor: money(netValue(fila, categoriaBase)),
+        }];
       }
       if (TIPO_POR_CATEGORIA[categoria] === "INGRESO" ? decimal(fila.deudor).greaterThan(MONEY_ZERO) : decimal(fila.acreedor).greaterThan(MONEY_ZERO)) advertencias.push(`La cuenta ${fila.codigo} presenta un saldo contrario a su naturaleza esperada.`);
       return [{
@@ -123,19 +133,18 @@ export class EstadoResultadosService {
     const totals = Object.fromEntries(RESULTADO_CATEGORIAS.map((categoria) => [categoria, MONEY_ZERO])) as Record<CategoriaEstadoResultados, typeof MONEY_ZERO>;
     for (const linea of lineas) totals[linea.categoria] = totals[linea.categoria].plus(decimal(linea.valor));
 
-    const costoDisponible = balance.filas.some((fila) => fila.tipoCuenta === "COSTO" && categorias.get(fila.cuentaId) === "COSTO_VENTAS");
-    const utilidadBrutaCalculada = totals.INGRESO_OPERACIONAL.minus(totals.COSTO_VENTAS);
+    const costoDisponible = lineas.some((linea) => linea.categoria === "COSTO_VENTAS");
+    const utilidadBrutaCalculada = totals.INGRESO_OPERACIONAL.plus(totals.OTRO_INGRESO).minus(totals.COSTO_VENTAS);
     const totalGastosOperacionales = totals.GASTO_OPERACIONAL.plus(totals.GASTO_ADMINISTRATIVO).plus(totals.GASTO_VENTAS);
     const utilidadOperacionalCalculada = utilidadBrutaCalculada.minus(totalGastosOperacionales);
-    const resultadoAntesParticipacionImpuestosCalculado = utilidadOperacionalCalculada.plus(totals.OTRO_INGRESO).minus(totals.GASTO_FINANCIERO).minus(totals.OTRO_GASTO);
+    const resultadoAntesParticipacionImpuestosCalculado = utilidadOperacionalCalculada.minus(totals.GASTO_FINANCIERO).minus(totals.OTRO_GASTO);
     const resultadoAntesImpuestoCalculado = resultadoAntesParticipacionImpuestosCalculado.minus(totals.PARTICIPACION_TRABAJADORES);
     const resultadoNetoCalculado = resultadoAntesImpuestoCalculado.minus(totals.IMPUESTO_RENTA);
-    const resultadoDeterminado = costoDisponible;
+    const resultadoDeterminado = true;
 
-    if (!costoDisponible) {
-      advertencias.push("No se identificaron cuentas de costo de ventas en el Balance de Comprobación del período. No es posible determinar la utilidad bruta ni el resultado del ejercicio sin inventar valores.");
+    if (cuentasPendientes.length) {
+      advertencias.push("Estado de Resultados con clasificación fina pendiente: las cuentas sin categoría de presentación configurada se incluyeron en el resultado usando su tipo contable base.");
     }
-    if (cuentasPendientes.length) advertencias.push("Estado de Resultados incompleto: existen cuentas pendientes de clasificación.");
     const secciones = Object.fromEntries(RESULTADO_CATEGORIAS.map((categoria) => [categoria, lineas.filter((linea) => linea.categoria === categoria)])) as Record<CategoriaEstadoResultados, EstadoResultadosLinea[]>;
 
     return {
@@ -170,6 +179,46 @@ export class EstadoResultadosService {
       advertencias,
     };
   }
+
+  private async categoriasDesdeConfiguracionDinamica(balance: BalanceComprobacionResponse) {
+    const categorias = new Map<string, CategoriaEstadoResultados>();
+    const filasResultado = balance.filas.filter((fila) => isTipoResultado(fila.tipoCuenta));
+    if (!filasResultado.length) return categorias;
+
+    const configuraciones = await this.db.configuracionCuentaContable.findMany({
+      where: { activa: true, cuentaId: { in: filasResultado.map((fila) => fila.cuentaId) } },
+      select: { cuentaId: true, clave: true, descripcion: true },
+    });
+    for (const configuracion of configuraciones) {
+      const categoria = categoriaDesdeTexto(configuracion.clave, configuracion.descripcion || "");
+      if (categoria) categorias.set(configuracion.cuentaId, categoria);
+    }
+
+    const reglas = await this.db.reglaClasificacionContable.findMany({
+      where: { activa: true },
+      select: { categoria: true, condiciones: true, descripcion: true },
+    });
+    for (const fila of filasResultado) {
+      if (categorias.has(fila.cuentaId)) continue;
+      const regla = reglas.find((item) => {
+        const categoria = categoriaDesdeTexto(item.categoria, item.descripcion || "");
+        return categoria && JSON.stringify(item.condiciones || {}).includes(fila.codigo);
+      });
+      const categoria = regla ? categoriaDesdeTexto(regla.categoria, regla.descripcion || "") : null;
+      if (categoria) categorias.set(fila.cuentaId, categoria);
+    }
+
+    return categorias;
+  }
+}
+
+function isTipoResultado(tipo: string): tipo is TipoResultadoCuenta {
+  return tipo === "INGRESO" || tipo === "GASTO" || tipo === "COSTO";
+}
+
+function categoriaDesdeTexto(...values: string[]) {
+  const text = values.join(" ").toUpperCase().replace(/[\s-]+/g, "_");
+  return RESULTADO_CATEGORIAS.find((categoria) => text.includes(categoria)) || null;
 }
 
 function isZero(fila: BalanceComprobacionRow) {

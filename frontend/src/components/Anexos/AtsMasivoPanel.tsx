@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { saveLastAtsContribuyente } from "../../utils/atsSession";
+import { clearLastAtsContribuyente, saveLastAtsContribuyente } from "../../utils/atsSession";
 import { authFetch } from "../../api/authApi";
 
 type Props = {
@@ -118,14 +118,14 @@ export default function AtsMasivoPanel({
 
       setResponse(data);
       setLoteActual(data.lote);
-      if (data.contribuyenteDetectado?.ruc && data.lote?.id) {
+      if (data.lote?.rucInformante && data.lote?.razonSocial && data.lote?.id) {
         saveLastAtsContribuyente({
-          ruc: data.contribuyenteDetectado.ruc,
-          razonSocial: data.contribuyenteDetectado.razonSocial,
+          ruc: data.lote.rucInformante,
+          razonSocial: data.lote.razonSocial,
           anio: Number(data.lote.anio),
           mes: data.lote.mes,
           loteId: data.lote.id,
-        });
+        }, rucAcceso);
       }
       setActiveStep(0);
     } catch (err: any) {
@@ -233,6 +233,7 @@ export default function AtsMasivoPanel({
               setArchivo(e.target.files?.[0] || null);
               setResponse(null);
               setLoteActual(null);
+              clearLastAtsContribuyente(rucAcceso);
               setActiveStep(0);
               setError("");
             }}

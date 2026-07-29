@@ -420,7 +420,7 @@ export default function Formulario103Wizard({ rucUsuario, razonSocial }: Props) 
     };
   }, [form]);
 
-  const atsContribuyente = getLastAtsContribuyenteForPeriod(anio, mes);
+  const atsContribuyente = getLastAtsContribuyenteForPeriod(anio, mes, rucUsuario);
   const rucDeclaracion = atsContribuyente?.ruc || rucUsuario;
   const razonSocialDeclaracion = atsContribuyente?.razonSocial || razonSocial || "";
   const rucFinal = periodoData?.ruc || rucDeclaracion;

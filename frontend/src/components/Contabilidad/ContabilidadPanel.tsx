@@ -7,7 +7,7 @@ import BalanceComprobacionTab from "./BalanceComprobacionTab";
 import EstadoResultadosTab from "./EstadoResultadosTab";
 import ExportarExcelTab from "./ExportarExcelTab";
 import { authFetch } from "../../api/authApi";
-import { getLastAtsContribuyente } from "../../utils/atsSession";
+import { clearLastAtsContribuyente, getLastAtsContribuyente } from "../../utils/atsSession";
 import {
   normalizeLibroDiarioResponse,
   type ContabilidadIssue,
@@ -42,6 +42,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
   const [showIncidenceDetail, setShowIncidenceDetail] = useState(false);
   const [activeView, setActiveView] = useState<"ats" | "diario" | "mayor" | "balance" | "resultados" | "exportar">("ats");
   const [dragOver, setDragOver] = useState(false);
+  const [exportAts, setExportAts] = useState(() => getLastAtsContribuyente(rucActivo));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const reviewRef = useRef<HTMLElement | null>(null);
 
@@ -63,6 +64,10 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
     return () => window.clearTimeout(timeout);
   }, [successNotice]);
 
+  useEffect(() => {
+    setExportAts(getLastAtsContribuyente(rucActivo));
+  }, [rucActivo]);
+
   async function cargarLibroDiario() {
     if (!archivo) {
       setError("Selecciona un archivo Excel ATS.");
@@ -74,6 +79,8 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
       setError("");
       setSuccessNotice("");
       setResponse(null);
+      clearLastAtsContribuyente(rucActivo);
+      setExportAts(null);
       setShowTechnicalDetail(false);
       setShowIncidenceDetail(false);
 
@@ -112,6 +119,8 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
     if (validationError) {
       setArchivo(null);
       setResponse(null);
+      clearLastAtsContribuyente(rucActivo);
+      setExportAts(null);
       setError(validationError);
       setSuccessNotice("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -120,6 +129,8 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
 
     setArchivo(file);
     setResponse(null);
+    clearLastAtsContribuyente(rucActivo);
+    setExportAts(null);
     setError("");
     setSuccessNotice("");
   }
@@ -127,6 +138,8 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
   function removeFile() {
     setArchivo(null);
     setResponse(null);
+    clearLastAtsContribuyente(rucActivo);
+    setExportAts(null);
     setError("");
     setSuccessNotice("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -184,7 +197,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
       )}
 
       {activeView === "resultados" && <EstadoResultadosTab rucActivo={rucActivo} preview={response} />}
-      {activeView === "exportar" && <ExportarExcelTab ats={getLastAtsContribuyente()} />}
+      {activeView === "exportar" && <ExportarExcelTab ats={exportAts} />}
 
       {activeView === "diario" && (
         response ? (

@@ -496,7 +496,7 @@ export default function Formulario104Wizard({ rucUsuario, razonSocial }: Props) 
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const atsContribuyente = periodicidad === "Mensual" ? getLastAtsContribuyenteForPeriod(anio, mes) : null;
+  const atsContribuyente = periodicidad === "Mensual" ? getLastAtsContribuyenteForPeriod(anio, mes, rucUsuario) : null;
   const rucDeclaracion = atsContribuyente?.ruc || rucUsuario;
   const razonSocialDeclaracion = atsContribuyente?.razonSocial || razonSocial || "";
 
