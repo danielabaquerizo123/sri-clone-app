@@ -139,6 +139,7 @@ model Contribuyente {
   jurisdiccion String?
 
   email               String?
+  sessionVersion      Int       @default(0)
   emailVerified       Boolean   @default(false)
   verificationToken   String?
   verificationExpires DateTime?

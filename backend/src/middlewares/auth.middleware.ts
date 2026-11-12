@@ -76,6 +76,7 @@ export const requireAuth = async (
         tipoContribuyente: true,
         activo: true,
         fechaExpiracion: true,
+        sessionVersion: true,
       },
     });
 
@@ -83,6 +84,10 @@ export const requireAuth = async (
       return res.status(401).json({
         message: "El contribuyente autenticado ya no existe.",
       });
+    }
+
+    if ((payload.sessionVersion ?? 0) !== contribuyente.sessionVersion) {
+      return res.status(401).json({ message: "La sesión ha expirado. Inicie sesión nuevamente." });
     }
 
     if (!contribuyente.activo) {

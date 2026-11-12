@@ -16,7 +16,11 @@ async function main() {
   console.log("Iniciando el sembrado de datos (Seed)...");
 
   const saltRounds = 10;
-  const hashClaveDemo = await bcrypt.hash("sripassword2026", saltRounds);
+  const seedPassword = process.env.SEED_PASSWORD;
+  if (!seedPassword || seedPassword.length < 16) {
+    throw new Error("Configure SEED_PASSWORD de forma privada con al menos 16 caracteres; nunca la versione.");
+  }
+  const hashClaveDemo = await bcrypt.hash(seedPassword, saltRounds);
   const fechaAccesoSeed = new Date();
   const adminIdentificacion = "1250531510";
   const adminIdentificacionAnterior = "1723456789001";

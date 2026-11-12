@@ -124,6 +124,7 @@ export const login = async (req: Request, res: Response) => {
 
     const token = jwt.sign(
       {
+        sessionVersion: contribuyente.sessionVersion,
         id: contribuyente.id,
         ruc: contribuyente.ruc,
         rol: contribuyente.rol,
