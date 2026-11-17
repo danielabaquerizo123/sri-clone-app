@@ -1,7 +1,9 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Camera, ChevronDown, LogOut, Trash2, User } from "lucide-react";
+import { Camera, ChevronDown, LogOut, Trash2, User, Menu } from "lucide-react";
+import { formatDiasAcceso } from "../../utils/acceso";
 import type { AccessInfo } from "../../utils/acceso";
 import type { OpcionesRuc } from "../../views/DashboardView";
+import brandSymbol from "../../assets/dashboard/brand-symbol.png";
 import GlobalSearch from "./GlobalSearch";
 import HeaderDropdownPortal from "./HeaderDropdownPortal";
 import LiveClock from "./LiveClock";
@@ -11,6 +13,8 @@ import ProfilePhotoDialog from "../Profile/ProfilePhotoDialog";
 import { getNavigationItems, getSectionTitleFromRegistry } from "./navigationRegistry";
 
 interface DashboardHeaderProps {
+  mobileNavigationOpen: boolean;
+  onOpenNavigation: () => void;
   activeTab: string;
   accessInfo: AccessInfo;
   activo: boolean;
@@ -31,6 +35,8 @@ interface DashboardHeaderProps {
 }
 
 export default function DashboardHeader({
+  mobileNavigationOpen,
+  onOpenNavigation,
   accessInfo,
   activo,
   activeTab,
@@ -70,24 +76,35 @@ export default function DashboardHeader({
   };
 
   return (
-    <header className="relative z-[var(--dashboard-z-header)] border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
-      <div className="flex min-h-[88px] items-center justify-between gap-3 px-5 py-4 lg:flex-nowrap xl:px-7">
-        <div className="min-w-[230px] shrink-0 lg:min-w-[260px]">
+    <header className="tributacion-header relative z-[var(--dashboard-z-header)] border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur">
+      <div className="tributacion-header-row flex min-h-[88px] items-center justify-between gap-3 px-5 py-4 lg:flex-nowrap xl:px-7">
+        <div className="tributacion-mobile-brand">
+          <button type="button" aria-label="Abrir navegación" aria-haspopup="dialog" aria-expanded={mobileNavigationOpen} aria-controls="tributacion-mobile-drawer" onClick={onOpenNavigation}><Menu size={22} /></button>
+          <span className="tributacion-brand-symbol"><img src={brandSymbol} alt="" /></span>
+          <span><strong>TRIBUTACIÓN</strong><small>— En línea —</small></span>
+        </div>
+        <div className="tributacion-greeting min-w-[230px] shrink-0 lg:min-w-[260px]">
           <h1 className="truncate text-2xl font-black leading-tight text-[#082b68]">
             {headerTitle}
-            {isInicio && <span className="ml-2" aria-hidden="true">👋</span>}
+            
           </h1>
           {isInicio && (
             <p className="mt-1 hidden text-sm font-semibold leading-5 text-slate-500 2xl:block">
-              Aqui tienes un resumen actualizado de tu informacion tributaria.
+              Bienvenido(a) a tu sistema de tributación en línea
             </p>
           )}
         </div>
 
         <GlobalSearch items={navigationItems} onNavigate={onNavigate} />
 
-        <div className="ml-auto flex shrink-0 items-center gap-3 lg:flex-nowrap">
+        <div className="tributacion-header-tools ml-auto flex shrink-0 items-center gap-3 lg:flex-nowrap">
           <LiveClock />
+          <div className="tributacion-license" data-state={accessInfo.estadoAcceso} title={accessInfo.fechaExpiracion ? `Expira el ${accessInfo.fechaExpiracion.toLocaleDateString("es-EC")}` : undefined}>
+            <i className="tributacion-mobile-license-dot" aria-hidden="true" />
+            <span className="tributacion-license-desktop-label">Licencia · {accessInfo.estadoAcceso.replace(/_/g, " ")}</span>
+            <span className="tributacion-mobile-license-label">Licencia {accessInfo.estadoAcceso === "activo" ? "activa" : accessInfo.estadoAcceso === "sin_vencimiento" ? "sin vencimiento" : accessInfo.estadoAcceso.replace(/_/g, " ")}</span>
+            <strong>{formatDiasAcceso(accessInfo)}<span className="tributacion-mobile-license-remaining">{accessInfo.diasRestantes != null && accessInfo.diasRestantes > 0 ? " restantes" : ""}</span></strong>
+          </div>
           <NotificationButton
             accessInfo={accessInfo}
             activo={activo}
@@ -96,7 +113,7 @@ export default function DashboardHeader({
 
           <div className="hidden h-10 w-px bg-slate-200 xl:block" />
 
-        <div ref={menuRef} className="relative flex h-12 max-w-[220px] shrink-0 items-center gap-2 rounded-2xl bg-white px-2 xl:max-w-[240px] 2xl:max-w-[280px]">
+        <div ref={menuRef} className="tributacion-user-menu relative flex h-12 max-w-[220px] shrink-0 items-center gap-2 rounded-2xl bg-white px-2 xl:max-w-[240px] 2xl:max-w-[280px]">
           <button
             type="button"
             aria-label="Abrir menú de perfil"
@@ -132,6 +149,7 @@ export default function DashboardHeader({
             anchorRef={menuRef}
             open={menuOpen}
             width={320}
+            className="tributacion-popup"
             onClose={() => setMenuOpen(false)}
           >
             <div role="menu" className="overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-2xl">
@@ -240,3 +258,4 @@ function MenuItem({
     </button>
   );
 }
+

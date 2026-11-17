@@ -1,0 +1,163 @@
+/* Internal modules only. Color declarations never change geometry or behavior.
+ * Accent inherits the approved dashboard token; fallback is its existing value.
+ * Official RUC preview and public/dashboard shell are excluded. */
+.internal-theme, .internal-workspace {
+ --internal-accent:var(--dashboard-purple,#7029e7);
+ --internal-ink:#303642; --internal-muted:#667085;
+ --internal-bg:#F7F8FC; --internal-border:#E6E9F0;
+ --internal-soft:color-mix(in srgb,var(--internal-accent) 7%,white);
+}
+.internal-workspace { background-color:var(--internal-bg); color:var(--internal-ink); }
+
+.internal-theme :is(
+ [class~="bg-[#003565]"],
+ [class~="bg-[#004fb3]"],
+ [class~="bg-[#005cff]"],
+ [class~="bg-[#0d55bd]"],
+ [class~="bg-[#0f66ff]"],
+ [class~="bg-[#2f83f4]"],
+ [class~="bg-blue-700"],
+ [class~="hover:bg-[#00284d]"]:hover,
+ [class~="hover:bg-[#004784]"]:hover,
+ [class~="hover:bg-[#004ad0]"]:hover,
+ [class~="hover:bg-[#0057e6]"]:hover,
+ [class~="hover:bg-blue-800"]:hover
+):where(:not(.internal-official, .internal-official *)) { background-color:var(--internal-accent); }
+
+.internal-theme :is(
+ [class~="bg-[#e5f0ff]"],
+ [class~="bg-[#eaf2ff]"],
+ [class~="bg-[#eaf3ff]"],
+ [class~="bg-[#edf3ff]"],
+ [class~="bg-[#eef3ff]"],
+ [class~="bg-[#eef6ff]"],
+ [class~="bg-[#f2f8ff]"],
+ [class~="bg-[#f3f8ff]"],
+ [class~="bg-[#f4f7fc]"],
+ [class~="bg-[#f4f7ff]"],
+ [class~="bg-[#f5fbff]"],
+ [class~="bg-[#f6f9fe]"],
+ [class~="bg-[#f7fbff]"],
+ [class~="bg-blue-100"],
+ [class~="bg-blue-50"],
+ [class~="bg-blue-50/70"],
+ [class~="hover:bg-[#f4f8ff]"]:hover,
+ [class~="hover:bg-[#fbfdff]"]:hover,
+ [class~="hover:bg-blue-100"]:hover,
+ [class~="hover:bg-blue-50"]:hover
+):where(:not(.internal-official, .internal-official *)) { background-color:var(--internal-bg); }
+
+.internal-theme :is(
+ [class~="border-[#003565]"],
+ [class~="border-[#0a5ac8]"],
+ [class~="border-[#0f66ff]"],
+ [class~="border-[#74a8ff]"],
+ [class~="focus:border-[#003565]"]:focus,
+ [class~="hover:border-[#0057e6]"]:hover,
+ [class~="hover:border-[#0f66ff]"]:hover,
+ [class~="hover:border-[#72a7ff]"]:hover,
+ [class~="hover:border-[#b8c6e4]"]:hover
+):where(:not(.internal-official, .internal-official *)) { border-color:var(--internal-accent); }
+
+.internal-theme :is(
+ [class~="border-[#a9ccff]"],
+ [class~="border-[#b7c7df]"],
+ [class~="border-[#b9d2ff]"],
+ [class~="border-[#bcd9ff]"],
+ [class~="border-[#d8e2f5]"],
+ [class~="border-[#dbe4f1]"],
+ [class~="border-[#dbe5f4]"],
+ [class~="border-blue-100"],
+ [class~="border-blue-200"],
+ [class~="border-gray-100"],
+ [class~="border-gray-200"],
+ [class~="border-gray-300"],
+ [class~="border-slate-100"],
+ [class~="border-slate-200"],
+ [class~="border-slate-300"]
+):where(:not(.internal-official, .internal-official *)) { border-color:var(--internal-border); }
+
+.internal-theme :is(
+ [class~="border-b-[#0f66ff]"]
+):where(:not(.internal-official, .internal-official *)) { border-bottom-color:var(--internal-accent); }
+
+.internal-theme :is(
+ [class~="border-t-[#0f66ff]"]
+):where(:not(.internal-official, .internal-official *)) { border-top-color:var(--internal-accent); }
+
+.internal-theme :is(
+ [class~="focus:ring-[#0077b6]/30"]:focus,
+ [class~="focus:ring-blue-100"]:focus,
+ [class~="focus:ring-blue-200"]:focus,
+ [class~="ring-blue-100"]
+):where(:not(.internal-official, .internal-official *)) { --tw-ring-color:color-mix(in srgb,var(--internal-accent) 25%,transparent); }
+
+.internal-theme :is(
+ [class~="hover:text-[#003565]"]:hover,
+ [class~="text-[#003565]"],
+ [class~="text-[#004fb3]"],
+ [class~="text-[#006aa6]"],
+ [class~="text-[#064fae]"],
+ [class~="text-[#07183d]"],
+ [class~="text-[#071f55]"],
+ [class~="text-[#0750b5]"],
+ [class~="text-[#08265f]"],
+ [class~="text-[#12306b]"],
+ [class~="text-[#162b5f]"],
+ [class~="text-[#173b8e]"],
+ [class~="text-[#1b376d]"],
+ [class~="text-[#243866]"],
+ [class~="text-[#31446d]"],
+ [class~="text-[#314779]"],
+ [class~="text-[#344a78]"],
+ [class~="text-[#38507c]"],
+ [class~="text-[#385283]"],
+ [class~="text-[#41527e]"],
+ [class~="text-blue-900"],
+ [class~="text-blue-950"]
+):where(:not(.internal-official, .internal-official *)) { color:var(--internal-ink); }
+
+.internal-theme :is(
+ [class~="text-[#005cff]"],
+ [class~="text-[#0f66d8]"],
+ [class~="text-[#0f66ff]"],
+ [class~="text-[#1872f2]"],
+ [class~="text-[#246bfe]"],
+ [class~="text-[#425783]"],
+ [class~="text-[#43577f]"],
+ [class~="text-[#446198]"],
+ [class~="text-[#506398]"],
+ [class~="text-[#536994]"],
+ [class~="text-[#596c9a]"],
+ [class~="text-[#5b6f9c]"],
+ [class~="text-[#62739b]"],
+ [class~="text-[#64769d]"],
+ [class~="text-[#7c2dff]"],
+ [class~="text-blue-100"],
+ [class~="text-blue-600"],
+ [class~="text-blue-700"]
+):where(:not(.internal-official, .internal-official *)) { color:var(--internal-muted); }
+
+/* Roles: neutral table bands and decorative panels; accent on controls only. */
+.internal-theme :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea):not(:disabled):not(.internal-official *) { background-color:#fff; border-color:var(--internal-border); }
+.internal-theme :is(input,select,textarea):disabled:not(.internal-official *) { background-color:#f1f2f5; color:var(--internal-muted); border-color:var(--internal-border); }
+.internal-theme :is(input,select,textarea):focus:not(.internal-official *) { border-color:var(--internal-accent); --tw-ring-color:color-mix(in srgb,var(--internal-accent) 25%,transparent); }
+.internal-theme :is(input[type="checkbox"],input[type="radio"]) { accent-color:var(--internal-accent); }
+.internal-theme .btn-main { background-color:var(--internal-accent); color:#fff; }
+.internal-theme .btn-secondary { background-color:var(--internal-bg); color:var(--internal-ink); }
+.internal-theme :is(h1,h2,h3,h4):not(.internal-official *) { color:var(--internal-ink); }
+.internal-theme.internal-theme :is(thead,thead tr,thead th):not(.internal-official *) { background-color:var(--internal-bg); color:var(--internal-ink); border-color:var(--internal-border); }
+.internal-theme :is(button,a,svg)[class*="text-blue"],
+.internal-theme :is(button,a,svg)[class*="text-[#0"],
+.internal-theme :is(button,a,svg)[class*="text-[#2"] { color:var(--internal-accent); }
+.internal-theme [class*="bg-gradient"][class*="from-[#"] { background-image:none; background-color:var(--internal-bg); color:var(--internal-ink); }
+.internal-theme [class*="bg-gradient"][class*="from-[#"] > [class*="text-white"] { color:var(--internal-muted); }
+.internal-theme [class*="bg-gradient"][class*="from-[#"] > svg { color:var(--internal-accent); }
+.internal-theme [class*="shadow-"][class*="rgba(15,102,255"] { --tw-shadow-color:#30364214; --tw-shadow:var(--tw-shadow-colored); }
+/* Active controls with pale backgrounds retain a restrained identity tint. */
+.internal-theme button[class*="bg-blue-50"],.internal-theme button[class*="bg-blue-100"] { background-color:var(--internal-soft); color:var(--internal-accent); }
+.internal-theme button:disabled { background-color:#f1f2f5; color:var(--internal-muted); }
+
+/* Informative identity icons and selected steps, without tinting body copy. */
+.internal-theme :is(svg,[class~="border-[#003565]"]):not(.internal-official *):is([class*="text-blue"],[class*="text-[#003565]"],[class*="text-[#006aa6]"]) { color:var(--internal-accent); }
+.internal-theme [class~="border-[#003565]"][class~="bg-blue-50"] { background-color:var(--internal-soft); }

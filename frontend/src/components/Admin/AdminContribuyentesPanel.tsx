@@ -1,9 +1,7 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ReactNode,
   type RefObject,
 } from "react";
 import {
@@ -12,14 +10,11 @@ import {
   Clock3,
   Database,
   Loader2,
-  MoreVertical,
-  Pencil,
   Power,
   RefreshCcw,
   RotateCcw,
   Search,
-  ShieldCheck,
-  Users,
+  Users, CalendarDays, ArrowRight, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { authFetch } from "../../api/authApi";
 import { formatDiasAcceso } from "../../utils/acceso";
@@ -64,12 +59,14 @@ type EstadoFiltro =
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 interface AdminContribuyentesPanelProps {
+  currentUserRuc: string;
   tableSectionRef?: RefObject<HTMLDivElement>;
   onAttentionCountChange?: (count: number) => void;
 }
 
 export default function AdminContribuyentesPanel({
   tableSectionRef,
+  currentUserRuc,
   onAttentionCountChange,
 }: AdminContribuyentesPanelProps) {
   const [contribuyentes, setContribuyentes] = useState<ContribuyenteAdmin[]>([]);
@@ -78,14 +75,16 @@ export default function AdminContribuyentesPanel({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [vigenciaTarget, setVigenciaTarget] =
     useState<ContribuyenteAdmin | null>(null);
-  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [accionId, setAccionId] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>("todos");
-  const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const [tipoFiltro, setTipoFiltro] = useState("todos");
+  const [orden, setOrden] = useState("registro");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
 
   const resumen = useMemo(
     () => ({
@@ -120,36 +119,24 @@ export default function AdminContribuyentesPanel({
         item.razonSocial.toLowerCase().includes(texto) ||
         (item.email || "").toLowerCase().includes(texto);
 
-      return coincideEstado && coincideTexto;
+      return coincideEstado && coincideTexto && (tipoFiltro === "todos" || item.tipoContribuyente === tipoFiltro);
+    }).sort((a, b) => {
+      if (orden === "nombre") return a.razonSocial.localeCompare(b.razonSocial, "es");
+      if (orden === "vencimiento") return (a.fechaExpiracion ? new Date(a.fechaExpiracion).getTime() : Infinity) - (b.fechaExpiracion ? new Date(b.fechaExpiracion).getTime() : Infinity);
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [busqueda, contribuyentes, estadoFiltro]);
+  }, [busqueda, contribuyentes, estadoFiltro, tipoFiltro, orden]);
+
+  useEffect(() => setPage(1), [busqueda, estadoFiltro, tipoFiltro, orden, pageSize]);
+  const totalPaginas = Math.max(1, Math.ceil(contribuyentesFiltrados.length / pageSize));
+  const paginaActual = Math.min(page, totalPaginas);
+  const paginaContribuyentes = contribuyentesFiltrados.slice((paginaActual - 1) * pageSize, paginaActual * pageSize);
 
   useEffect(() => {
     onAttentionCountChange?.(resumen.porVencer + resumen.vencidos);
   }, [onAttentionCountChange, resumen.porVencer, resumen.vencidos]);
 
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (
-        openActionMenuId &&
-        actionMenuRef.current &&
-        !actionMenuRef.current.contains(event.target as Node)
-      ) {
-        setOpenActionMenuId(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [openActionMenuId]);
-
-  const visibleIds = useMemo(
-    () => contribuyentesFiltrados.map((item) => item.id),
-    [contribuyentesFiltrados]
-  );
+  const visibleIds = paginaContribuyentes.filter(item => item.ruc !== currentUserRuc).map(item => item.id);
 
   const selectedContribuyentes = useMemo(
     () => contribuyentes.filter((item) => selectedIds.has(item.id)),
@@ -230,6 +217,7 @@ export default function AdminContribuyentesPanel({
     id: string,
     accion: "reactivar" | "desactivar"
   ) => {
+    if (accion === "desactivar" && contribuyentes.some(item => item.id === id && item.ruc === currentUserRuc)) return false;
     try {
       setAccionId(id);
       setMensaje("");
@@ -314,14 +302,14 @@ export default function AdminContribuyentesPanel({
   };
 
   const ejecutarAccionMasiva = async (accion: "reactivar" | "desactivar") => {
-    const seleccionados = selectedContribuyentes;
+    const seleccionados = selectedContribuyentes.filter(item => item.ruc !== currentUserRuc && (accion === "desactivar" ? item.activo : item.estadoAcceso !== "activo"));
     const cantidad = seleccionados.length;
 
     if (cantidad === 0) return;
 
     const verbo = accion === "reactivar" ? "reactivar" : "desactivar";
     const confirmado = window.confirm(
-      `¿Confirmas ${verbo} ${cantidad} contribuyente${cantidad === 1 ? "" : "s"}?`
+      `¿Confirmas ${verbo} ${cantidad} contribuyente${cantidad === 1 ? "" : "s"}${accion === "reactivar" ? " por 4 meses" : ""}?`
     );
 
     if (!confirmado) return;
@@ -361,445 +349,53 @@ export default function AdminContribuyentesPanel({
   };
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="rounded-2xl bg-blue-50 p-4 text-[#006aa6]">
-              <ShieldCheck size={28} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-[#003565]">
-                Administración de accesos
-              </h1>
-              <p className="text-sm font-semibold text-slate-500">
-                Vigencia, reactivación y desactivación de contribuyentes.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={cargarContribuyentes}
-            disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-[#003565] transition hover:bg-slate-50 disabled:opacity-60"
-          >
-            {loading ? (
-              <Loader2 className="animate-spin" size={16} />
-            ) : (
-              <RefreshCcw size={16} />
-            )}
-            Actualizar datos
-          </button>
+    <div className={`admin-panel ${selectedContribuyente ? "has-detail" : ""}`}>
+      <div className="admin-list">
+        <div className="admin-list-heading"><div className="admin-heading"><span className="admin-icon"><Users size={24} /></span><div><h2>Contribuyentes registrados</h2><p>Vigencia, reactivación y desactivación de accesos</p></div></div><button className="admin-button" onClick={cargarContribuyentes} disabled={loading || bulkLoading || !!accionId}>{loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}Actualizar datos</button></div>
+        {mensaje && <div className="admin-message" role="status">{mensaje}</div>}
+        <div className="admin-summaries">
+          {([
+            ["activo", "Activos", resumen.activos, <Users size={24} />, "purple"],
+            ["por_vencer", "Por vencer (≤ 15 días)", resumen.porVencer, <Clock3 size={24} />, "amber"],
+            ["vencido", "Vencidos", resumen.vencidos, <AlertTriangle size={24} />, "red"],
+            ["desactivado", "Desactivados", resumen.desactivados, <Ban size={24} />, "slate"],
+            ["todos", "Total registrados", resumen.total, <Database size={24} />, "purple"],
+          ] as const).map(([filter, label, value, icon, tone]) => <button key={filter} className={`admin-summary ${tone} ${estadoFiltro === filter ? "is-selected" : ""}`} aria-pressed={estadoFiltro === filter} onClick={() => setEstadoFiltro(filter)}><span className="admin-summary-icon">{icon}</span><span><strong>{value}</strong><span>{label} <ArrowRight size={13} /></span></span><ChevronRight size={16} /></button>)}
         </div>
-      </section>
-
-      {mensaje && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-700">
-          {mensaje}
+        <div className="admin-filters">
+          <label className="admin-search"><Search size={18} /><input aria-label="Buscar contribuyentes" placeholder="Buscar por nombre, RUC o correo..." value={busqueda} onChange={event => setBusqueda(event.target.value)} /></label>
+          <select aria-label="Filtrar por estado" value={estadoFiltro} onChange={event => setEstadoFiltro(event.target.value as EstadoFiltro)}><option value="todos">Todos los estados</option><option value="activo">Activos</option><option value="por_vencer">Por vencer</option><option value="vencido">Vencidos</option><option value="desactivado">Desactivados</option></select>
+          <select aria-label="Filtrar por tipo de contribuyente" value={tipoFiltro} onChange={event => setTipoFiltro(event.target.value)}><option value="todos">Todas las personas</option><option value="PERSONA_NATURAL">Persona natural</option><option value="SOCIEDAD">Sociedad</option></select>
+          <label className="admin-sort">Ordenar por<select aria-label="Ordenar contribuyentes" value={orden} onChange={event => setOrden(event.target.value)}><option value="registro">Registro (reciente)</option><option value="vencimiento">Vencimiento (pronto)</option><option value="nombre">Nombre</option></select></label>
         </div>
-      )}
-
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard
-          icon={<Users size={20} />}
-          label="Activos"
-          value={resumen.activos}
-          detail="Con acceso vigente"
-          tone="emerald"
-        />
-        <SummaryCard
-          icon={<Clock3 size={20} />}
-          label="Por vencer (15 días)"
-          value={resumen.porVencer}
-          detail="Requieren atención"
-          tone="amber"
-        />
-        <SummaryCard
-          icon={<AlertTriangle size={20} />}
-          label="Vencidos"
-          value={resumen.vencidos}
-          detail="Periodo finalizado"
-          tone="red"
-        />
-        <SummaryCard
-          icon={<Ban size={20} />}
-          label="Desactivados"
-          value={resumen.desactivados}
-          detail="Suspendidos"
-          tone="blue"
-        />
-        <SummaryCard
-          icon={<Database size={20} />}
-          label="Total registros"
-          value={resumen.total}
-          detail="Contribuyentes"
-          tone="slate"
-        />
-      </section>
-
-      <section
-        ref={tableSectionRef}
-        className={`grid scroll-mt-6 grid-cols-1 gap-6 ${
-          selectedContribuyente
-            ? "2xl:grid-cols-[minmax(0,1fr)_320px]"
-            : ""
-        }`}
-      >
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          {selectedIds.size > 0 && (
-            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 lg:flex-row lg:items-center lg:justify-between">
-              <p className="text-sm font-black text-[#003565]">
-                {selectedIds.size} contribuyente
-                {selectedIds.size === 1 ? "" : "s"} seleccionado
-                {selectedIds.size === 1 ? "" : "s"}
-              </p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => ejecutarAccionMasiva("desactivar")}
-                  disabled={bulkLoading}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:opacity-60"
-                >
-                  {bulkLoading ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <Power size={16} />
-                  )}
-                  Desactivar seleccionados
-                </button>
-                <button
-                  type="button"
-                  onClick={() => ejecutarAccionMasiva("reactivar")}
-                  disabled={bulkLoading}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
-                >
-                  {bulkLoading ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <RotateCcw size={16} />
-                  )}
-                  Reactivar seleccionados
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <div className="flex min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="flex items-center px-3 text-slate-400">
-                <Search size={18} />
-              </div>
-              <input
-                value={busqueda}
-                onChange={(event) => setBusqueda(event.target.value)}
-                placeholder="Buscar por RUC, nombre o email..."
-                className="w-full min-w-0 px-2 py-3 text-sm font-semibold outline-none"
-              />
-            </div>
-
-            <select
-              value={estadoFiltro}
-              onChange={(event) =>
-                setEstadoFiltro(event.target.value as EstadoFiltro)
-              }
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 outline-none"
-            >
-              <option value="todos">Todos</option>
-              <option value="activo">Activos</option>
-              <option value="por_vencer">Por vencer</option>
-              <option value="vencido">Vencidos</option>
-              <option value="desactivado">Desactivados</option>
-            </select>
-          </div>
-
-          {loading ? (
-            <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-5 text-sm font-black text-slate-600">
-              <Loader2 className="animate-spin" size={18} />
-              Cargando contribuyentes...
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="min-w-[1040px] w-full text-sm">
-                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="w-12 px-4 py-4">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        ref={(input) => {
-                          if (input) {
-                            input.indeterminate =
-                              selectedVisibleCount > 0 && !allVisibleSelected;
-                          }
-                        }}
-                        onChange={toggleAllVisible}
-                        className="h-4 w-4 rounded border-slate-300 text-[#003565]"
-                        aria-label="Seleccionar contribuyentes visibles"
-                      />
-                    </th>
-                    <th className="px-4 py-4">Usuario</th>
-                    <th className="px-4 py-4">Correo</th>
-                    <th className="px-4 py-4">Inicio</th>
-                    <th className="px-4 py-4">Vencimiento</th>
-                    <th className="px-4 py-4">Días de acceso restantes</th>
-                    <th className="px-4 py-4">Estado</th>
-                    <th className="px-4 py-4 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contribuyentesFiltrados.map((contribuyente) => {
-                    const selected = selectedContribuyente?.id === contribuyente.id;
-                    const estadoAcceso = contribuyente.estadoAcceso;
-
-                    return (
-                      <tr
-                        key={contribuyente.id}
-                        onClick={() => setSelectedContribuyente(contribuyente)}
-                        className={`cursor-pointer border-t transition ${
-                          selected
-                            ? "bg-blue-50/70"
-                            : "bg-white hover:bg-slate-50"
-                        }`}
-                      >
-                        <td className="px-4 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(contribuyente.id)}
-                            onClick={(event) => event.stopPropagation()}
-                            onChange={() => toggleSelected(contribuyente.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-[#003565]"
-                            aria-label={`Seleccionar ${contribuyente.razonSocial}`}
-                          />
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="font-black text-slate-700">
-                            {contribuyente.razonSocial}
-                          </p>
-                          <p className="font-mono text-xs font-bold text-slate-500">
-                            {contribuyente.ruc}
-                          </p>
-                          <p className="text-xs font-semibold text-slate-400">
-                            {formatTipoContribuyente(
-                              contribuyente.tipoContribuyente
-                            )}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4 font-semibold text-slate-600">
-                          {contribuyente.email || "-"}
-                        </td>
-                        <td className="px-4 py-4 font-semibold text-slate-600">
-                          {formatDate(
-                            contribuyente.fechaInicioAcceso ||
-                              contribuyente.fechaRegistro ||
-                              contribuyente.createdAt
-                          )}
-                        </td>
-                        <td className="px-4 py-4 font-semibold text-slate-600">
-                          {formatDate(
-                            contribuyente.fechaFinAcceso ||
-                              contribuyente.fechaExpiracion
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          <DiasAccesoBadge contribuyente={contribuyente} />
-                        </td>
-                        <td className="px-4 py-4">
-                          <EstadoBadge
-                            estado={
-                              isPorVencer(contribuyente)
-                                ? "por_vencer"
-                                : estadoAcceso
-                            }
-                          />
-                        </td>
-                        <td className="px-4 py-4">
-                          <div
-                            ref={
-                              openActionMenuId === contribuyente.id
-                                ? actionMenuRef
-                                : undefined
-                            }
-                            className="relative flex justify-end"
-                          >
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setOpenActionMenuId((current) =>
-                                  current === contribuyente.id
-                                    ? null
-                                    : contribuyente.id
-                                );
-                              }}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-[#003565]"
-                              aria-label={`Abrir acciones de ${contribuyente.razonSocial}`}
-                            >
-                              <MoreVertical size={18} />
-                            </button>
-
-                            {openActionMenuId === contribuyente.id && (
-                              <div
-                                onClick={(event) => event.stopPropagation()}
-                                className="absolute right-0 top-11 z-20 w-52 rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-xl"
-                              >
-                                {estadoAcceso !== "activo" && (
-                                  <ActionMenuItem
-                                    icon={
-                                      accionId === contribuyente.id ? (
-                                        <Loader2
-                                          className="animate-spin"
-                                          size={15}
-                                        />
-                                      ) : (
-                                        <RotateCcw size={15} />
-                                      )
-                                    }
-                                    label="Reactivar"
-                                    tone="emerald"
-                                    disabled={accionId === contribuyente.id}
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      reactivarIndividual(contribuyente);
-                                    }}
-                                  />
-                                )}
-
-                                <ActionMenuItem
-                                  icon={<Pencil size={15} />}
-                                  label="Editar vigencia"
-                                  tone="blue"
-                                  disabled={accionId === contribuyente.id}
-                                  onClick={() => {
-                                    setOpenActionMenuId(null);
-                                    setVigenciaTarget(contribuyente);
-                                  }}
-                                />
-
-                                {estadoAcceso !== "desactivado" && (
-                                  <ActionMenuItem
-                                    icon={<Power size={15} />}
-                                    label="Desactivar"
-                                    tone="red"
-                                    disabled={accionId === contribuyente.id}
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      ejecutarAccion(
-                                        contribuyente.id,
-                                        "desactivar"
-                                      );
-                                    }}
-                                  />
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {contribuyentesFiltrados.length === 0 && (
-                <p className="p-5 text-sm font-semibold text-slate-500">
-                  No hay contribuyentes que coincidan con los filtros.
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              Mostrando {contribuyentesFiltrados.length} de{" "}
-              {contribuyentes.length} registros
-            </p>
-          </div>
+        {selectedIds.size > 0 && <div className="admin-bulk"><strong>{selectedIds.size} seleccionados</strong>
+          {selectedContribuyentes.some(item => item.activo && item.ruc !== currentUserRuc) && <button className="admin-button danger" disabled={bulkLoading || !!accionId} onClick={() => ejecutarAccionMasiva("desactivar")}><Power size={16} />Desactivar</button>}
+          {selectedContribuyentes.some(item => item.estadoAcceso !== "activo" && item.ruc !== currentUserRuc) && <button className="admin-button" disabled={bulkLoading || !!accionId} onClick={() => ejecutarAccionMasiva("reactivar")}><RotateCcw size={16} />Reactivar (4 meses)</button>}
+          {bulkLoading && <Loader2 className="animate-spin" size={18} />}
+          <button className="admin-clear" disabled={bulkLoading} onClick={() => setSelectedIds(new Set())}><X size={16} />Limpiar selección</button>
+        </div>}
+        <div ref={tableSectionRef} className="admin-table-scroll" role="region" aria-label="Tabla de contribuyentes" tabIndex={0}>
+          {loading ? <div className="admin-loading" role="status"><Loader2 className="animate-spin" size={20} />Cargando contribuyentes...</div> : <table className="admin-table"><thead><tr>
+            <th><input type="checkbox" aria-label="Seleccionar contribuyentes visibles" checked={allVisibleSelected} disabled={bulkLoading} ref={input => { if (input) input.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected; }} onChange={toggleAllVisible} /></th>
+            <th>Contribuyente</th><th>RUC</th><th>Correo electrónico</th><th>Inicio</th><th>Vencimiento</th><th>Días restantes</th><th>Estado</th><th>Acciones</th>
+          </tr></thead><tbody>{paginaContribuyentes.map(contribuyente => <tr key={contribuyente.id} className={selectedContribuyente?.id === contribuyente.id ? "is-selected" : ""} onClick={() => setSelectedContribuyente(contribuyente)}>
+            <td><input type="checkbox" aria-label={`Seleccionar ${contribuyente.razonSocial}`} checked={selectedIds.has(contribuyente.id)} disabled={bulkLoading || contribuyente.ruc === currentUserRuc} onClick={event => event.stopPropagation()} onChange={() => toggleSelected(contribuyente.id)} /></td>
+            <td><button className="admin-person" aria-label={`Ver detalle de ${contribuyente.razonSocial}`} onClick={() => setSelectedContribuyente(contribuyente)}><span className="admin-avatar soft">{contribuyente.razonSocial.split(" ").filter(Boolean).slice(0, 2).map(word => word[0]).join("")}</span><span><strong>{contribuyente.razonSocial}</strong><small>{formatTipoContribuyente(contribuyente.tipoContribuyente)}</small></span></button></td>
+            <td>{contribuyente.ruc}</td><td className="admin-email">{contribuyente.email || "—"}</td>
+            <td>{formatDate(contribuyente.fechaInicioAcceso || contribuyente.fechaRegistro || contribuyente.createdAt)}</td><td>{formatDate(contribuyente.fechaFinAcceso || contribuyente.fechaExpiracion)}</td>
+            <td><DiasAccesoBadge contribuyente={contribuyente} />{contribuyente.porcentajeRestante != null && <progress className={`admin-access-progress ${getDiasAccesoTone(contribuyente)}`} max={100} value={Math.max(0, Math.min(100, contribuyente.porcentajeRestante))} aria-label="Porcentaje de vigencia restante" />}</td>
+            <td><EstadoBadge estado={contribuyente.estadoAcceso} /></td>
+            <td><div className="admin-row-actions" onClick={event => event.stopPropagation()}>
+              <button className="admin-button icon-only" title="Editar vigencia" aria-label={`Editar vigencia de ${contribuyente.razonSocial}`} disabled={bulkLoading || !!accionId} onClick={() => setVigenciaTarget(contribuyente)}><CalendarDays size={17} /></button>
+              <button className={`admin-button icon-only ${contribuyente.activo ? "danger" : "success"}`} title={contribuyente.ruc === currentUserRuc ? "No puedes desactivar tu propia cuenta" : contribuyente.activo ? "Desactivar" : "Activar (renueva por 4 meses)"} aria-label={`${contribuyente.activo ? "Desactivar" : "Activar"} a ${contribuyente.razonSocial}`} disabled={bulkLoading || !!accionId || contribuyente.ruc === currentUserRuc} onClick={() => { if (contribuyente.activo) { if (window.confirm(`¿Desactivar el acceso de ${contribuyente.razonSocial}?`)) ejecutarAccion(contribuyente.id, "desactivar"); } else reactivarIndividual(contribuyente); }}>{accionId === contribuyente.id ? <Loader2 className="animate-spin" size={17} /> : contribuyente.activo ? <Ban size={17} /> : <Power size={17} />}</button>
+            </div></td>
+          </tr>)}</tbody></table>}
+          {!loading && contribuyentesFiltrados.length === 0 && <p className="admin-empty">No hay contribuyentes que coincidan con los filtros.</p>}
         </div>
-
-        {selectedContribuyente && (
-          <ContribuyenteDetallePanel
-            contribuyente={selectedContribuyente}
-            onClose={() => setSelectedContribuyente(null)}
-          />
-        )}
-      </section>
-
-      <EditarVigenciaModal
-        contribuyente={vigenciaTarget}
-        loading={!!vigenciaTarget && accionId === vigenciaTarget.id}
-        onCancel={() => setVigenciaTarget(null)}
-        onConfirm={confirmarEdicionVigencia}
-      />
-    </div>
-  );
-}
-
-function ActionMenuItem({
-  disabled,
-  icon,
-  label,
-  onClick,
-  tone,
-}: {
-  disabled?: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-  tone: "blue" | "emerald" | "red";
-}) {
-  const tones = {
-    blue: "text-[#006aa6] hover:bg-blue-50",
-    emerald: "text-emerald-700 hover:bg-emerald-50",
-    red: "text-red-700 hover:bg-red-50",
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${tones[tone]}`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function SummaryCard({
-  icon,
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: number;
-  detail: string;
-  tone: "emerald" | "amber" | "red" | "blue" | "slate";
-}) {
-  const tones = {
-    emerald: "bg-emerald-50 text-emerald-700",
-    amber: "bg-amber-50 text-amber-700",
-    red: "bg-red-50 text-red-700",
-    blue: "bg-blue-50 text-[#006aa6]",
-    slate: "bg-slate-100 text-slate-700",
-  };
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center gap-3">
-        <div className={`rounded-xl p-3 ${tones[tone]}`}>{icon}</div>
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            {label}
-          </p>
-          <p className="text-3xl font-black text-[#003565]">{value}</p>
-        </div>
+        <div className="admin-pagination"><p>Mostrando {contribuyentesFiltrados.length ? (paginaActual - 1) * pageSize + 1 : 0} - {Math.min(paginaActual * pageSize, contribuyentesFiltrados.length)} de {contribuyentesFiltrados.length} contribuyentes</p><div><button className="admin-button icon-only" aria-label="Página anterior" disabled={paginaActual <= 1} onClick={() => setPage(paginaActual - 1)}><ChevronLeft size={17} /></button><span aria-live="polite">{paginaActual} / {totalPaginas}</span><button className="admin-button icon-only" aria-label="Página siguiente" disabled={paginaActual >= totalPaginas} onClick={() => setPage(paginaActual + 1)}><ChevronRight size={17} /></button><select aria-label="Registros por página" value={pageSize} onChange={event => setPageSize(Number(event.target.value))}><option value={6}>6 por página</option><option value={12}>12 por página</option><option value={24}>24 por página</option></select></div></div>
       </div>
-      <p className="text-xs font-semibold text-slate-500">{detail}</p>
+      {selectedContribuyente && <ContribuyenteDetallePanel contribuyente={contribuyentes.find(item => item.id === selectedContribuyente.id) || selectedContribuyente} onClose={() => setSelectedContribuyente(null)} />}
+      <EditarVigenciaModal contribuyente={vigenciaTarget} loading={!!vigenciaTarget && accionId === vigenciaTarget.id} onCancel={() => setVigenciaTarget(null)} onConfirm={confirmarEdicionVigencia} />
     </div>
   );
 }
@@ -876,7 +472,7 @@ function formatDate(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("es-EC");
+  return date.toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Guayaquil" });
 }
 
 function formatTipoContribuyente(value: ContribuyenteAdmin["tipoContribuyente"]) {

@@ -1,140 +1,35 @@
 import { CalendarDays, Clock3, Mail, UserRound, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import type { ContribuyenteAdmin } from "./AdminContribuyentesPanel";
 import { formatDiasAcceso } from "../../utils/acceso";
 
-interface ContribuyenteDetallePanelProps {
-  contribuyente: ContribuyenteAdmin;
-  onClose: () => void;
-}
+interface ContribuyenteDetallePanelProps { contribuyente: ContribuyenteAdmin; onClose: () => void; }
 
-export default function ContribuyenteDetallePanel({
-  contribuyente,
-  onClose,
-}: ContribuyenteDetallePanelProps) {
-  const estadoAcceso = contribuyente.estadoAcceso;
-
+export default function ContribuyenteDetallePanel({ contribuyente, onClose }: ContribuyenteDetallePanelProps) {
+  const panel = useRef<HTMLElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    panel.current?.focus({ preventScroll: true });
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") close.current(); };
+    window.addEventListener("keydown", escape);
+    return () => { window.removeEventListener("keydown", escape); previous?.focus({ preventScroll: true }); };
+  }, []);
+  const states = { activo: "Activo", expira_hoy: "Expira hoy", vencido: "Vencido", desactivado: "Desactivado", sin_vencimiento: "Sin vencimiento" };
   return (
-    <aside className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-[#003565]"
-        aria-label="Cerrar detalle del contribuyente"
-      >
-        <X size={18} />
-      </button>
-
-      <div className="mb-6 flex flex-col items-center text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#003565] text-lg font-black text-white">
-          {getInitials(contribuyente.razonSocial)}
-        </div>
-        <h2 className="text-lg font-black text-[#003565]">
-          {contribuyente.razonSocial}
-        </h2>
-        <div className="mt-3">
-          <EstadoBadge estado={estadoAcceso} />
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <DetailItem
-          icon={<UserRound size={17} />}
-          label="RUC"
-          value={contribuyente.ruc}
-        />
-        <DetailItem
-          icon={<Mail size={17} />}
-          label="Email"
-          value={contribuyente.email || "-"}
-        />
-        <DetailItem
-          icon={<CalendarDays size={17} />}
-          label="Fecha de registro"
-          value={formatDate(
-            contribuyente.fechaInicioAcceso ||
-              contribuyente.fechaRegistro ||
-              contribuyente.createdAt
-          )}
-        />
-        <DetailItem
-          icon={<CalendarDays size={17} />}
-          label="Fecha de expiración"
-          value={formatDate(
-            contribuyente.fechaFinAcceso || contribuyente.fechaExpiracion
-          )}
-        />
-        <DetailItem
-          icon={<Clock3 size={17} />}
-          label="Días restantes"
-          value={formatDiasAcceso(contribuyente)}
-        />
-      </div>
+    <aside ref={panel} tabIndex={-1} className="admin-detail" aria-labelledby="admin-detail-title">
+      <div className="admin-detail-title"><h2 id="admin-detail-title">Detalle del contribuyente</h2><button className="admin-button icon-only" aria-label="Cerrar detalle del contribuyente" onClick={onClose}><X size={18} /></button></div>
+      <div className="admin-detail-person"><span className="admin-avatar soft">{contribuyente.razonSocial.split(" ").filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase()}</span><div><h3>{contribuyente.razonSocial}</h3><p>{contribuyente.tipoContribuyente === "PERSONA_NATURAL" ? "PERSONA NATURAL" : "SOCIEDAD"}</p><span className={`admin-status ${contribuyente.estadoAcceso}`}>{states[contribuyente.estadoAcceso]}</span></div></div>
+      <h3 className="admin-detail-section">Información</h3>
+      <dl className="admin-detail-card"><Detail icon={<UserRound size={17} />} label="RUC" value={contribuyente.ruc} /><Detail icon={<Mail size={17} />} label="Correo" value={contribuyente.email || "No registrado"} /></dl>
+      <div className="admin-detail-card"><h3><CalendarDays size={18} />Vigencia del acceso</h3><dl><Detail label="Fecha inicio" value={formatDate(contribuyente.fechaInicioAcceso || contribuyente.fechaRegistro || contribuyente.createdAt)} /><Detail label="Fecha fin" value={formatDate(contribuyente.fechaFinAcceso || contribuyente.fechaExpiracion)} /><Detail icon={<Clock3 size={17} />} label="Días restantes" value={formatDiasAcceso(contribuyente)} /></dl>
+      {contribuyente.porcentajeRestante != null && <progress className="admin-access-progress" max={100} value={Math.max(0, Math.min(100, contribuyente.porcentajeRestante))} aria-label="Porcentaje de vigencia restante" />}</div>
     </aside>
   );
 }
-
-function DetailItem({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-      <div className="mb-2 flex items-center gap-2 text-slate-400">
-        {icon}
-        <p className="text-[10px] font-black uppercase tracking-wide">
-          {label}
-        </p>
-      </div>
-      <p className="break-words text-sm font-black text-slate-700">{value}</p>
-    </div>
-  );
-}
-
-function EstadoBadge({ estado }: { estado: ContribuyenteAdmin["estadoAcceso"] }) {
-  const className =
-    estado === "activo"
-      ? "bg-emerald-50 text-emerald-700"
-      : estado === "expira_hoy"
-      ? "bg-red-50 text-red-700"
-      : estado === "vencido"
-      ? "bg-red-50 text-red-700"
-      : estado === "sin_vencimiento"
-      ? "bg-blue-50 text-blue-700"
-      : "bg-red-50 text-red-700";
-
-  const labels = {
-    activo: "activo",
-    expira_hoy: "expira hoy",
-    vencido: "vencido",
-    desactivado: "desactivado",
-    sin_vencimiento: "sin vencimiento",
-  };
-
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${className}`}>
-      {labels[estado]}
-    </span>
-  );
-}
-
+function Detail({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) { return <div className="admin-detail-row"><dt>{icon}{label}</dt><dd>{value}</dd></div>; }
 function formatDate(value?: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("es-EC");
-}
-
-function getInitials(value: string) {
-  return value
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+  if (!value || Number.isNaN(new Date(value).getTime())) return "—";
+  return new Date(value).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Guayaquil" });
 }

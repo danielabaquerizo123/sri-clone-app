@@ -1,5 +1,5 @@
 import { CalendarDays, Loader2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContribuyenteAdmin } from "./AdminContribuyentesPanel";
 
 interface EditarVigenciaModalProps {
@@ -24,6 +24,28 @@ export default function EditarVigenciaModal({
   onCancel,
   onConfirm,
 }: EditarVigenciaModalProps) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  useEffect(() => {
+    if (!contribuyente) return;
+    const previous = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loadingRef.current) cancelRef.current();
+      if (event.key !== "Tab") return;
+      const elements = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]') || []);
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", keydown);
+    return () => { window.removeEventListener("keydown", keydown); previous?.focus(); };
+  }, [contribuyente]);
   const [fechaExpiracion, setFechaExpiracion] = useState(getDefaultDateValue);
 
   useEffect(() => {
@@ -51,14 +73,14 @@ export default function EditarVigenciaModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
-      <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+    <div className="admin-vigencia-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+      <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="admin-vigencia-title" className="admin-vigencia-dialog w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-slate-400">
               Editar vigencia
             </p>
-            <h2 className="mt-1 text-xl font-black text-[#003565]">
+            <h2 id="admin-vigencia-title" className="mt-1 text-xl font-black text-[#003565]">
               {contribuyente.razonSocial}
             </h2>
             <p className="mt-1 font-mono text-xs font-semibold text-slate-500">
@@ -85,7 +107,7 @@ export default function EditarVigenciaModal({
           </p>
         </div>
 
-        <label className="text-xs font-black uppercase tracking-wide text-slate-500">
+        <label htmlFor="admin-expiration" className="text-xs font-black uppercase tracking-wide text-slate-500">
           Fecha de fin
         </label>
         <div className="mt-2 flex overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -93,6 +115,7 @@ export default function EditarVigenciaModal({
             <CalendarDays size={18} />
           </div>
           <input
+            id="admin-expiration"
             type="date"
             value={fechaExpiracion}
             min={minDate}

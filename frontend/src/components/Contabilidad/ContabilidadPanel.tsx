@@ -162,7 +162,7 @@ export default function ContabilidadPanel({ rucActivo }: Props) {
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[1500px] flex-1 flex-col px-3 lg:px-0">
+    <div className="internal-theme mx-auto flex min-h-full w-full max-w-[1500px] flex-1 flex-col px-3 lg:px-0">
       <div className="flex-1 space-y-4">
       <section className="flex flex-wrap gap-2 pt-1">
         <button type="button" onClick={() => setActiveView("ats")} className={`inline-flex h-12 items-center gap-2 rounded-t-xl rounded-b-md border px-5 text-sm font-black shadow-sm transition ${activeView === "ats" ? "border-slate-200 border-b-[#0f66ff] bg-white text-[#005cff] shadow-[0_14px_30px_rgba(15,23,42,0.08)]" : "border-transparent bg-transparent text-[#344a78] hover:bg-white/70"}`}>

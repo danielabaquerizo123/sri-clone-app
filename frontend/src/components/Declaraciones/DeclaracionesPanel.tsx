@@ -260,7 +260,7 @@ export default function DeclaracionesPanel({ rucUsuario, activeView, razonSocial
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="internal-theme max-w-7xl mx-auto space-y-6">
       <section className="bg-white rounded-[2rem] border shadow-sm p-7">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-slate-100 text-slate-700 rounded-2xl">

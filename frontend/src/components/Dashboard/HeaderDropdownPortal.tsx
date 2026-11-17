@@ -18,7 +18,7 @@ export default function HeaderDropdownPortal({
   width = 360,
   onClose,
 }: HeaderDropdownPortalProps) {
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState({ top: 0, left: 0, width });
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
@@ -30,14 +30,21 @@ export default function HeaderDropdownPortal({
 
       const rect = anchor.getBoundingClientRect();
       const margin = 12;
+      const viewportWidth = document.documentElement.clientWidth;
+      const availableWidth = Math.min(width, viewportWidth - margin * 2);
+      const dropdownHeight = Math.min(
+        dropdownRef.current?.getBoundingClientRect().height || 360,
+        window.innerHeight - margin * 2
+      );
       const left = Math.max(
         margin,
-        Math.min(window.innerWidth - width - margin, rect.right - width)
+        Math.min(viewportWidth - availableWidth - margin, rect.right - availableWidth)
       );
 
       setPosition({
-        top: rect.bottom + 10,
+        top: Math.max(margin, Math.min(rect.bottom + 10, window.innerHeight - dropdownHeight - margin)),
         left,
+        width: availableWidth,
       });
     };
 
@@ -83,7 +90,7 @@ export default function HeaderDropdownPortal({
     <div
       ref={dropdownRef}
       className={`fixed z-[var(--dashboard-z-dropdown)] ${className}`}
-      style={{ top: position.top, left: position.left, width }}
+      style={{ top: position.top, left: position.left, width: position.width, maxHeight: `calc(100dvh - ${position.top + 12}px)`, overflowY: "auto" }}
     >
       {children}
     </div>,

@@ -18,6 +18,9 @@ import AnexosPanel from "../components/Anexos/AnexosPanel";
 import ContabilidadPanel from "../components/Contabilidad/ContabilidadPanel";
 import DashboardHeader from "../components/Dashboard/DashboardHeader";
 import DashboardHome from "../components/Dashboard/DashboardHome";
+import DashboardProfileSummary from "../components/Dashboard/DashboardProfileSummary";
+import "../components/Dashboard/dashboard.css";
+import "../internal-colors.css";
 import DashboardSidebar from "../components/Dashboard/DashboardSidebar";
 import { authFetch } from "../api/authApi";
 import { crearResumenAccesoDesdeBackend } from "../utils/acceso";
@@ -126,6 +129,8 @@ export default function DashboardView({
   onLogout,
 }: DashboardViewProps) {
   const [activeTab, setActiveTab] = useState("inicio");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [data, setData] = useState<ContribuyenteData | null>(null);
   const [form, setForm] = useState<Partial<ContribuyenteData>>({});
   const [opcionesRuc, setOpcionesRuc] = useState<OpcionesRuc | null>(null);
@@ -393,8 +398,10 @@ export default function DashboardView({
   const displayRazonSocial = razonSocialUsuario || rucUsuario;
 
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden bg-[#eef4fb] text-slate-800 lg:h-screen lg:flex-row">
+    <div className={`tributacion-dashboard ${activeTab === "inicio" ? "tributacion-dashboard-home" : ""} flex min-h-screen flex-col overflow-hidden bg-[#eef4fb] text-slate-800 lg:h-screen lg:flex-row`}>
       <DashboardSidebar
+        mobileOpen={mobileNavigationOpen}
+        onMobileOpenChange={setMobileNavigationOpen}
         activeTab={activeTab}
         accessInfo={accessInfo}
         data={data}
@@ -405,6 +412,8 @@ export default function DashboardView({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <DashboardHeader
+          mobileNavigationOpen={mobileNavigationOpen}
+          onOpenNavigation={() => setMobileNavigationOpen(true)}
           activeTab={activeTab}
           accessInfo={accessInfo}
           activo={data.activo}
@@ -418,13 +427,14 @@ export default function DashboardView({
           photoLoading={profilePhotoLoading}
           photoError={profilePhotoError}
           onNavigate={setActiveTab}
-          onViewProfile={() => setActiveTab("inicio")}
+          onViewProfile={() => { setActiveTab("inicio"); setProfileOpen(true); }}
           onUploadProfilePhoto={subirFotoPerfil}
           onDeleteProfilePhoto={eliminarFotoPerfil}
           onLogout={onLogout}
         />
 
-        <main className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] lg:p-5 2xl:p-6 ${activeTab === "contabilidad" ? "pb-0 lg:pb-0 2xl:pb-0" : ""}`}>
+        <DashboardProfileSummary open={profileOpen} data={data} accessInfo={accessInfo} obligaciones={obligacionesList} onClose={() => setProfileOpen(false)} onRefresh={cargarDatos} />
+        <main className={`${activeTab === "inicio" ? "tributacion-home-main" : "internal-workspace"} min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] lg:p-5 2xl:p-6 ${activeTab === "contabilidad" ? "pb-0 lg:pb-0 2xl:pb-0" : ""}`}>
           {(error || success) && (
             <div className="mx-auto mb-4 w-full max-w-[1800px]">
               {error && <Alert type="error" text={error} />}
@@ -559,7 +569,7 @@ export default function DashboardView({
           {activeTab === "ruc_reimpresion" && (
             <Page title="Reimpresión RUC" subtitle="Revisa los datos antes de descargar el certificado PDF." icon={<Printer />}>
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="xl:col-span-2 bg-white rounded-[2rem] border shadow-sm p-8">
+                <div className="internal-official xl:col-span-2 bg-white rounded-[2rem] border shadow-sm p-8">
                   <div className="flex items-center justify-between border-b pb-5 mb-6">
                     <div>
                       <h2 className="font-black text-2xl text-[#003565]">Certificado RUC</h2>
@@ -629,7 +639,7 @@ export default function DashboardView({
 
 function Page({ title, subtitle, icon, children }: { title: string; subtitle: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="internal-theme max-w-7xl mx-auto space-y-6">
       <div className="bg-white rounded-[2rem] border shadow-sm p-7 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-blue-50 text-[#006aa6] rounded-2xl">{icon}</div>

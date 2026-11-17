@@ -44,6 +44,7 @@ export default function App() {
 
   // 1. ESTO ES NUEVO: Verifica si ya habías iniciado sesión antes (para que no te saque al presionar F5)
   useEffect(() => {
+    if (window.location.pathname === "/reset-password") return;
     const user = sessionStorage.getItem("sri_user");
     const token = sessionStorage.getItem("sri_token");
 
